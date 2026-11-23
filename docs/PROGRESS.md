@@ -98,13 +98,16 @@ All seven packages, including the real desktop and worker, passed `cargo check -
 
 ### M9 · Packaging
 
-- [x] Internal macOS app and DMG include the worker and Metal library. `bash scripts/build_macos_app.sh` built both arm64 executables with a 14.0 minimum deployment target. `codesign --verify --deep --strict` and `hdiutil verify` passed. Both executables link only to system libraries. The 62,814,640-byte DMG has SHA-256 `b5ec79c6ab2ca06ca8b45d53cdab8f18eba3485577b5885732f0723769b5c1be`.
-- [ ] Installed app completes setup and playback on a clean account.
+- [x] Internal macOS app and DMG include the worker and Metal library. `bash scripts/build_macos_app.sh` built both arm64 executables with a 14.0 minimum deployment target. `codesign --verify --deep --strict` and `hdiutil verify` passed. Both executables link only to system libraries. The 62,842,296-byte DMG has SHA-256 `dd7ef53a2da80f28708fd72e2416f6cb4cb39dc3713dddec287a69fdc7d3ecc3`.
+- [x] The installed application completed its 3.67 GB setup in a fresh macOS app profile and played media with generated bilingual subtitles.
+- [ ] Repeat under a separate macOS login. The fresh-profile test used isolated preferences, data and model directories under the existing login.
 - [ ] NSIS installer passes on Windows. The x64 packaging script passed PowerShell parsing. A manual Windows-hosted workflow builds and uploads the installer and can run the SAPI fixture matrix. No native Windows run has been observed.
 
 An independent release CLI run used the exact sidecar in the installed app while macOS denied off-machine connections and access to the developer build directory. On the 20-minute fixture, all nine checks passed with 359 cues in 68.4 s, a 94 ms maximum onset error and a 47 ms cached reopen. ASR reached 9.56× real time, below the 15× performance goal. Mean translation latency was 113 ms per utterance. [Release offline measurements](../tests/results/2026-11-23-darwin-release-long_en.json).
 
-The lead mounted the DMG read-only, copied the app to a separate Applications folder, detached the image, and launched that copy with an empty preferences, model and media profile. The first-launch dialog offered 3.67 GB. Setup is downloading the pinned components through the installed app.
+The lead mounted the DMG read-only, copied the app to a separate Applications folder, detached it, and launched the installed executable with empty preferences, cache and component directories. The first-launch dialog offered 3.67 GB. During setup the app quit with 267,043,606 bytes of the translation model downloaded. The final installed build resumed that file and verified all five required components. It started its bundled ASR worker and the newly downloaded llama runtime, then rendered six Japanese lines with six English translations. [First-launch setup](screenshots/installed/setup.png) · [Installed bilingual player](screenshots/installed/playback.png).
+
+The installed app also opened a new Japanese/English dual-track MKV with off-machine network, developer build and pre-existing model access blocked by macOS. Each track produced six correctly identified utterances in its own cache. Switching back displayed all six Japanese cues in 492 ms without rewriting the prepared video. The track-cache regression test checks capability changes and eviction.
 
 ## Lane reports
 

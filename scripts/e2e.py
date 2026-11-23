@@ -182,6 +182,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--cli", required=True, type=Path)
     parser.add_argument("--ffmpeg", required=True, type=Path)
+    parser.add_argument("--report", type=Path, help="Use a separate result file for this build")
     parser.add_argument("fixtures", nargs="*")
     args = parser.parse_args()
     date = datetime.date.today().isoformat()
@@ -191,7 +192,7 @@ def main():
         if unknown:
             parser.error("Unknown fixtures: " + ", ".join(sorted(unknown)))
         report += "-" + "-".join(args.fixtures)
-    result_file = ROOT / "tests/results" / f"{report}.json"
+    result_file = args.report or ROOT / "tests/results" / f"{report}.json"
     result_file.parent.mkdir(parents=True, exist_ok=True)
     results = {}
     with tempfile.TemporaryDirectory(prefix="hlp-e2e-") as td:
