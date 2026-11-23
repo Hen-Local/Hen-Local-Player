@@ -1,0 +1,58 @@
+{
+  "source": "20-minute English fixture looped to two hours",
+  "durationSeconds": 7200.029875,
+  "wallSeconds": 535.884,
+  "cachedSeconds": 0.216,
+  "summary": {
+    "asrRequests": 2154,
+    "asrRtf": 7.321234703063965,
+    "confidence": 1.0,
+    "detected": "en",
+    "done": 2154,
+    "event": "summary",
+    "failed": 0,
+    "msPerTranslation": 185.72933959960938,
+    "noSpeech": 0,
+    "outputs": [
+      "two-hour.en.srt",
+      "two-hour.zh.srt",
+      "two-hour.en-zh.srt",
+      "two-hour.en.vtt",
+      "two-hour.zh.vtt",
+      "two-hour.en-zh.vtt",
+      "two-hour.en.ass",
+      "two-hour.zh.ass",
+      "two-hour.en-zh.ass"
+    ],
+    "translated": 2154,
+    "translationRequests": 2154,
+    "utterances": 2154,
+    "wallSeconds": 535.747013917
+  },
+  "cachedSummary": {
+    "asrRequests": 0,
+    "asrRtf": 0.0,
+    "confidence": 1.0,
+    "detected": "en",
+    "done": 2154,
+    "event": "summary",
+    "failed": 0,
+    "msPerTranslation": 0.0,
+    "noSpeech": 0,
+    "outputs": [
+      "two-hour.en.srt",
+      "two-hour.zh.srt",
+      "two-hour.en-zh.srt",
+      "two-hour.en.vtt",
+      "two-hour.zh.vtt",
+      "two-hour.en-zh.vtt",
+      "two-hour.en.ass",
+      "two-hour.zh.ass",
+      "two-hour.en-zh.ass"
+    ],
+    "translated": 2154,
+    "translationRequests": 0,
+    "utterances": 2154,
+    "wallSeconds": 0.176776167
+  }
+}

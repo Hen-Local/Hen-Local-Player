@@ -2,7 +2,7 @@
 
 A checked item has been exercised. Worktree branches and tags are local until publication is requested.
 
-The lead merged phase 2 in order (A, C, B, D, E), verified the CLI slice on macOS, then merged F followed by G. The final tree passed Rust formatting, 37 regular Rust tests, the Svelte check with zero warnings, the production UI build and the seven-package Windows x64 cross-check.
+The lead merged phase 2 in order (A, C, B, D, E), verified the CLI slice on macOS, then merged F followed by G. The final tree passed Rust formatting, 38 regular Rust tests, the Svelte check with zero warnings, the production UI build and the seven-package Windows x64 cross-check.
 
 ## Foundation and lane evidence
 
@@ -100,18 +100,24 @@ All seven packages, including the real desktop and worker, passed `cargo check -
 
 ### M9 · Packaging
 
-- [x] Internal macOS app and DMG include the worker and Metal library. `bash scripts/build_macos_app.sh` built both arm64 executables with a 14.0 minimum deployment target. `codesign --verify --deep --strict` and `hdiutil verify` passed. Both executables link only to system libraries. The 62,842,296-byte DMG has SHA-256 `dd7ef53a2da80f28708fd72e2416f6cb4cb39dc3713dddec287a69fdc7d3ecc3`.
+- [x] Internal macOS app and DMG include the worker and Metal library. `bash scripts/build_macos_app.sh` built both arm64 executables with a 14.0 minimum deployment target. `codesign --verify --deep --strict` and `hdiutil verify` passed. Both executables link only to system libraries. The 62,844,795-byte DMG has SHA-256 `a9c379d0d1cfdf5b224040a7dcbdfe8c83794216f33f3b29db949882639cfec5`.
 - [x] The installed application completed its 3.67 GB setup in a fresh macOS app profile and played media with generated bilingual subtitles.
 - [ ] Repeat under a separate macOS login. The fresh-profile test used isolated preferences, data and model directories under the existing login.
 - [ ] NSIS installer passes on Windows. The x64 packaging script passed PowerShell parsing. A manual Windows-hosted workflow builds and uploads the installer and can run the SAPI fixture matrix. No native Windows run has been observed.
 
 An independent release CLI run used the exact sidecar in the installed app while macOS denied off-machine connections and access to the developer build directory. On the 20-minute fixture, all nine checks passed with 359 cues in 68.4 s, a 94 ms maximum onset error and a 47 ms cached reopen. ASR reached 9.56× real time, below the 15× performance goal. Mean translation latency was 113 ms per utterance. [Release offline measurements](../tests/results/2026-11-23-darwin-release-long_en.json).
 
-The lead mounted the DMG read-only, copied the app to a separate Applications folder, detached it, and launched the installed executable with empty preferences, cache and component directories. The first-launch dialog offered 3.67 GB. During setup the app quit with 267,043,606 bytes of the translation model downloaded. The final installed build resumed that file and verified all five required components. It started its bundled ASR worker and the newly downloaded llama runtime, then rendered six Japanese lines with six English translations. [First-launch setup](screenshots/installed/setup.png) · [Installed bilingual player](screenshots/installed/playback.png).
+The lead mounted the DMG read-only, copied the app to a separate Applications folder, detached it, and launched the installed executable with empty preferences, cache and component directories. The first-launch dialog offered 3.67 GB. During setup the app quit with 267,043,606 bytes of the translation model downloaded. The installed update resumed that file and verified all five required components. It started its bundled ASR worker and the newly downloaded llama runtime, then rendered six Japanese lines with six English translations. [First-launch setup](screenshots/installed/setup.png) · [Installed bilingual player](screenshots/installed/playback.png).
 
 The installed app also opened a new Japanese/English dual-track MKV with off-machine network, developer build and pre-existing model access blocked by macOS. Each track produced six correctly identified utterances in its own cache. Switching back displayed all six Japanese cues in 492 ms without rewriting the prepared video. The track-cache regression test checks capability changes and eviction.
 
-The final release CLI repeated the full fixture matrix under the same network and filesystem restrictions, using the worker copied from the DMG and the models downloaded during setup. All 81 checks across nine fixtures passed. The 20-minute file produced 359 bilingual cues in 70.07 seconds and reopened in 74 ms. The highest character error across fixtures was 2.86%, and the largest onset error was 216 ms. [Full offline release results](../tests/results/2026-11-23-darwin-release.json).
+The final release CLI repeated the full fixture matrix under the same network and filesystem restrictions, using the worker copied from the DMG and the models downloaded during setup. All 81 checks across nine fixtures passed. The 20-minute file produced 359 bilingual cues in 62.38 seconds and reopened in 46 ms. The highest character error across fixtures was 2.86%, and the largest onset error was 216 ms. [Full offline release results](../tests/results/2026-11-23-darwin-release.json).
+
+The production frontend rendered three distinct subtitle overlays and streamed six transcript rows during a ten-second playback sample in headless Chrome. The animation clock averaged 60.0 fps across 601 intervals, with a 16.8 ms maximum interval. Both the native app and a separate WKWebView timing host reported their documents hidden and suspended animation callbacks during the frame-rate test. The native player passed the playback and overlay checks in M6, but a native frame-rate measurement remains open. [Browser frame timings](../tests/results/2026-11-23-darwin-chrome-frames.json).
+
+An offline release run on a two-hour file made by looping the English fixture produced 2,154 English/Chinese cues in 8 minutes 56 seconds, inside the 15-minute target. Reopening took 216 ms and made zero inference requests. ASR averaged 7.32× with translation running. In a separate warm worker run, 54.05 seconds of speech took 4.27 seconds with translation idle (12.65×), below the 15× ASR target. [Two-hour results](../tests/results/2026-11-23-darwin-release-two-hours.json) · [Warm ASR timings](../tests/results/2026-11-23-darwin-release-warm-asr.json).
+
+The Mac player now defers background translation while playback has available, unrecognized speech in the lookahead and measured ASR throughput is below 8×. The current subtitle and the next two seconds retain translation priority. The scheduler regression covers cold startup, seeking, recovery, extraction and lookahead boundaries. After this change the lead mounted the rebuilt DMG, verified that both installed executables and the Metal library matched the distribution byte for byte, and opened the Japanese fixture in the installed app with an empty project cache and external network access blocked. It generated all six original lines and English translations.
 
 ## Lane reports
 

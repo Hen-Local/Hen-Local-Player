@@ -11,20 +11,20 @@
       "playbackPlan": true,
       "exports": true
     },
-    "wallSeconds": 2.016,
-    "cachedSeconds": 0.028,
+    "wallSeconds": 1.667,
+    "cachedSeconds": 0.025,
     "cer": 0.0286,
     "maxOnsetErrorMs": 37,
     "cues": 6,
     "summary": {
       "asrRequests": 6,
-      "asrRtf": 9.071379661560059,
+      "asrRtf": 9.183757781982422,
       "confidence": 1.0,
       "detected": "ja",
       "done": 6,
       "event": "summary",
       "failed": 0,
-      "msPerTranslation": 230.1666717529297,
+      "msPerTranslation": 159.1666717529297,
       "noSpeech": 0,
       "outputs": [
         "fixture_ja.ja.srt",
@@ -40,7 +40,7 @@
       "translated": 6,
       "translationRequests": 6,
       "utterances": 6,
-      "wallSeconds": 1.957067167
+      "wallSeconds": 1.613018542
     }
   },
   "fr": {
@@ -55,20 +55,20 @@
       "playbackPlan": true,
       "exports": true
     },
-    "wallSeconds": 1.814,
-    "cachedSeconds": 0.027,
+    "wallSeconds": 1.693,
+    "cachedSeconds": 0.025,
     "cer": 0.0,
     "maxOnsetErrorMs": 99,
     "cues": 6,
     "summary": {
       "asrRequests": 6,
-      "asrRtf": 6.705882549285889,
+      "asrRtf": 7.195266246795654,
       "confidence": 1.0,
       "detected": "fr",
       "done": 6,
       "event": "summary",
       "failed": 0,
-      "msPerTranslation": 182.5,
+      "msPerTranslation": 171.1666717529297,
       "noSpeech": 0,
       "outputs": [
         "fixture_fr.fr.srt",
@@ -84,7 +84,7 @@
       "translated": 6,
       "translationRequests": 6,
       "utterances": 6,
-      "wallSeconds": 1.760186708
+      "wallSeconds": 1.643279917
     }
   },
   "es": {
@@ -99,20 +99,20 @@
       "playbackPlan": true,
       "exports": true
     },
-    "wallSeconds": 1.718,
-    "cachedSeconds": 0.029,
+    "wallSeconds": 1.62,
+    "cachedSeconds": 0.028,
     "cer": 0.0,
     "maxOnsetErrorMs": 61,
     "cues": 6,
     "summary": {
       "asrRequests": 6,
-      "asrRtf": 5.8294572830200195,
+      "asrRtf": 6.185058116912842,
       "confidence": 1.0,
       "detected": "es",
       "done": 6,
       "event": "summary",
       "failed": 0,
-      "msPerTranslation": 186.3333282470703,
+      "msPerTranslation": 163.3333282470703,
       "noSpeech": 0,
       "outputs": [
         "fixture_es.es.srt",
@@ -128,7 +128,7 @@
       "translated": 6,
       "translationRequests": 6,
       "utterances": 6,
-      "wallSeconds": 1.666454667
+      "wallSeconds": 1.571107042
     }
   },
   "de": {
@@ -143,20 +143,20 @@
       "playbackPlan": true,
       "exports": true
     },
-    "wallSeconds": 1.716,
-    "cachedSeconds": 0.026,
+    "wallSeconds": 1.596,
+    "cachedSeconds": 0.025,
     "cer": 0.0,
     "maxOnsetErrorMs": 216,
     "cues": 6,
     "summary": {
       "asrRequests": 6,
-      "asrRtf": 6.537410736083984,
+      "asrRtf": 7.0710768699646,
       "confidence": 1.0,
       "detected": "de",
       "done": 6,
       "event": "summary",
       "failed": 0,
-      "msPerTranslation": 174.3333282470703,
+      "msPerTranslation": 162.3333282470703,
       "noSpeech": 0,
       "outputs": [
         "fixture_de.de.srt",
@@ -172,7 +172,7 @@
       "translated": 6,
       "translationRequests": 6,
       "utterances": 6,
-      "wallSeconds": 1.666476584
+      "wallSeconds": 1.549700334
     }
   },
   "zh": {
@@ -187,14 +187,14 @@
       "playbackPlan": true,
       "exports": true
     },
-    "wallSeconds": 1.32,
-    "cachedSeconds": 0.025,
+    "wallSeconds": 1.217,
+    "cachedSeconds": 0.023,
     "cer": 0.0,
     "maxOnsetErrorMs": 39,
     "cues": 6,
     "summary": {
       "asrRequests": 6,
-      "asrRtf": 9.703396797180176,
+      "asrRtf": 10.551351547241211,
       "confidence": 1.0,
       "detected": "zh",
       "done": 6,
@@ -210,7 +210,7 @@
       "translated": 0,
       "translationRequests": 0,
       "utterances": 6,
-      "wallSeconds": 1.267738333
+      "wallSeconds": 1.166781375
     }
   },
   "ko_51": {
@@ -225,20 +225,20 @@
       "playbackPlan": true,
       "exports": true
     },
-    "wallSeconds": 2.01,
-    "cachedSeconds": 0.03,
+    "wallSeconds": 1.836,
+    "cachedSeconds": 0.028,
     "cer": 0.0,
     "maxOnsetErrorMs": 20,
     "cues": 6,
     "summary": {
       "asrRequests": 6,
-      "asrRtf": 7.1052632331848145,
+      "asrRtf": 7.802528381347656,
       "confidence": 1.0,
       "detected": "ko",
       "done": 6,
       "event": "summary",
       "failed": 0,
-      "msPerTranslation": 190.1666717529297,
+      "msPerTranslation": 162.8333282470703,
       "noSpeech": 0,
       "outputs": [
         "fixture_ko_51.ko.srt",
@@ -254,7 +254,7 @@
       "translated": 6,
       "translationRequests": 6,
       "utterances": 6,
-      "wallSeconds": 1.9555200419999998
+      "wallSeconds": 1.7872139169999999
     }
   },
   "en": {
@@ -269,20 +269,20 @@
       "playbackPlan": true,
       "exports": true
     },
-    "wallSeconds": 1.676,
-    "cachedSeconds": 0.018,
+    "wallSeconds": 1.568,
+    "cachedSeconds": 0.016,
     "cer": 0.0281,
     "maxOnsetErrorMs": 27,
     "cues": 6,
     "summary": {
       "asrRequests": 6,
-      "asrRtf": 7.132275104522705,
+      "asrRtf": 7.621201515197754,
       "confidence": 1.0,
       "detected": "en",
       "done": 6,
       "event": "summary",
       "failed": 0,
-      "msPerTranslation": 174.5,
+      "msPerTranslation": 167.0,
       "noSpeech": 0,
       "outputs": [
         "fixture_en.en.srt",
@@ -298,7 +298,7 @@
       "translated": 6,
       "translationRequests": 6,
       "utterances": 6,
-      "wallSeconds": 1.6267660419999999
+      "wallSeconds": 1.521837208
     }
   },
   "music": {
@@ -313,8 +313,8 @@
       "playbackPlan": true,
       "exports": true
     },
-    "wallSeconds": 0.117,
-    "cachedSeconds": 0.021,
+    "wallSeconds": 0.078,
+    "cachedSeconds": 0.019,
     "cer": 0.0,
     "maxOnsetErrorMs": 0,
     "cues": 0,
@@ -342,7 +342,7 @@
       "translated": 0,
       "translationRequests": 0,
       "utterances": 0,
-      "wallSeconds": 0.10705575
+      "wallSeconds": 0.069698167
     }
   },
   "long_en": {
@@ -357,20 +357,20 @@
       "playbackPlan": true,
       "exports": true
     },
-    "wallSeconds": 70.067,
-    "cachedSeconds": 0.074,
+    "wallSeconds": 62.381,
+    "cachedSeconds": 0.046,
     "cer": 0.0156,
     "maxOnsetErrorMs": 94,
     "cues": 359,
     "summary": {
       "asrRequests": 359,
-      "asrRtf": 9.320857048034668,
+      "asrRtf": 10.469486236572266,
       "confidence": 1.0,
       "detected": "en",
       "done": 359,
       "event": "summary",
       "failed": 0,
-      "msPerTranslation": 122.54874420166016,
+      "msPerTranslation": 107.33425903320312,
       "noSpeech": 0,
       "outputs": [
         "fixture_long_en.en.srt",
@@ -386,7 +386,7 @@
       "translated": 359,
       "translationRequests": 359,
       "utterances": 359,
-      "wallSeconds": 69.98713575
+      "wallSeconds": 62.323942166
     }
   }
 }

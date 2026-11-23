@@ -1,0 +1,11 @@
+{
+  "worker": "Installed Qwen3-ASR-1.7B-8bit, forced English",
+  "input": "30 consecutive VAD utterances from the two-hour fixture, after two warm-up utterances",
+  "translationConcurrent": false,
+  "utterances": 30,
+  "totalAudioMs": 54048,
+  "totalInferenceMs": 4271,
+  "speechSecondsPerWallSecond": 12.655,
+  "medianUtteranceMs": 1792.0,
+  "medianInferenceMs": 143.0
+}

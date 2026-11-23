@@ -1,0 +1,13 @@
+{
+  "engine": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/157.0.0.0 Safari/537.36",
+  "source": "Release UI with streamed demo cues in headless Chrome",
+  "frames": 601,
+  "elapsedMs": 10016.3,
+  "fps": 60.002,
+  "p95IntervalMs": 16.7,
+  "maxIntervalMs": 16.8,
+  "visibleSubtitleFrames": 404,
+  "distinctOverlays": 3,
+  "transcriptRows": 6,
+  "playedSeconds": 9.988
+}
