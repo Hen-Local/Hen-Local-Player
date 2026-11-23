@@ -36,9 +36,11 @@ Lead verified the merged result with six offline installer tests, the shared Car
 
 ### M4 · ASR worker
 
-- [ ] Japanese auto and forced inference pass on real speech.
-- [ ] Tokenizer and protocol checks pass.
-- [ ] A killed worker is restarted.
+- [x] Japanese auto and forced inference pass on real speech.
+- [x] Tokenizer and protocol checks pass.
+- [x] A killed worker is restarted.
+
+Lead built the macOS 14 native libraries from verified sources, reran worker unit tests, the shared Rust/UI checks and the real kill/reload regression (4.59 s). A separate five-request JSONL run returned the expected first fixture sentence in both automatic and forced Japanese modes. [Lane D evidence](progress/d-asr.md).
 
 ### M5 · Pipeline and CLI
 

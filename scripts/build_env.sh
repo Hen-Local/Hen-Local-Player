@@ -9,21 +9,11 @@ if [[ "$(uname -s)" == Darwin ]]; then
     export DEVELOPER_DIR=/Library/Developer/CommandLineTools
   fi
 fi
-# Build dependency pinned by Hen-Local-Translator/.github/workflows/release.yml.
-if [[ "$(uname -s)" == Darwin && -z "${MLX_PREBUILT_PATH:-}" ]]; then
-  mlx_dir="$CARGO_TARGET_DIR/mlx-prebuilt-v0.1.0-macos-arm64"
-  if [[ ! -s "$mlx_dir/libmlx.a" || ! -s "$mlx_dir/mlx.metallib" ]]; then
-    mkdir -p "$CARGO_TARGET_DIR"
-    mlx_tmp="$(mktemp -d "$CARGO_TARGET_DIR/.mlx-XXXXXX")"
-    (
-      set -e
-      trap 'rm -rf "$mlx_tmp"' EXIT
-      curl -fsSL --retry 3 -o "$mlx_tmp/mlx.tgz" https://github.com/OminiX-ai/OminiX-MLX/releases/download/mlx-prebuilt-v0.1.0/mlx-prebuilt-v0.1.0-macos-arm64.tar.gz
-      [[ "$(wc -c < "$mlx_tmp/mlx.tgz" | tr -d ' ')" == 38962928 ]]
-      (cd "$mlx_tmp" && echo '8be50f294fee2ee55400ec802bfb7bcd1d1d95c74bc2c84a45d94e685c77aed5  mlx.tgz' | shasum -a 256 -c -)
-      tar -xzf "$mlx_tmp/mlx.tgz" -C "$mlx_tmp"
-      mv "$mlx_tmp/mlx-prebuilt-v0.1.0-macos-arm64" "$mlx_dir"
-    ) || exit 1
+if [[ "$(uname -s)" == Darwin ]]; then
+  export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-14.0}"
+  if [[ -z "${MLX_PREBUILT_PATH:-}" ]]; then
+    mlx_helper="$(cd "$(dirname "${BASH_SOURCE[0]:-scripts/build_env.sh}")/.." && pwd)/vendor/qwen3-asr-mlx/tools/prepare_mlx.py"
+    MLX_PREBUILT_PATH="$(python3 "$mlx_helper")" || exit 1
+    export MLX_PREBUILT_PATH
   fi
-  export MLX_PREBUILT_PATH="$mlx_dir"
 fi
