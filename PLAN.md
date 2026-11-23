@@ -12,7 +12,7 @@
 
 ## 0. Read this first (rules for the implementing agent)
 
-1. **Build in milestone order (section 9)**, or, when several agents are available, in the parallel phases of section 9.1. Either way, the headless CLI vertical slice (M5) must pass before the UI is connected to the real backend (M6). Building the UI against the mock backend earlier is fine. The CLI and the app share one pipeline library, so a passing CLI shows the subtitle engine works.
+1. **Build in milestone order (section 9)**, or, when several agents are available, in the parallel phases of section 9.1. If you were asked to implement the whole plan, you are the **lead agent** of section 9.1 and own everything through M9, including reviewing and merging subagents' work. Either way, the headless CLI vertical slice (M5) must pass before the UI is connected to the real backend (M6). Building the UI against the mock backend earlier is fine. The CLI and the app share one pipeline library, so a passing CLI shows the subtitle engine works.
 2. **Copy, don't depend.** Reuse code from the existing translator at
    `/Users/zenghaochen/WORKING/Hen Local/Hen-Local-Translator` by copying the relevant files into this repo with a header comment naming the source file. Do not add path or git dependencies on that repo.
 3. **Keep the Cargo target directory out of any path that contains a space.** This repo lives under `.../Hen Local/...`. MLX 0.30.1 generates invalid Metal JIT sources when the target path contains spaces. Every build script must set `CARGO_TARGET_DIR` (default `${TMPDIR}/hen-local-player-target` on macOS, `C:\hlp-target` on Windows) and refuse to run if it contains a space. The translator's `scripts/run_translator_desktop.sh` shows the pattern.
@@ -773,12 +773,18 @@ Stop rule: if a milestone is blocked by something outside the repo (for example,
 
 The default is one agent working through M0–M9 in order, and it needs nothing from this section. If several coding agents are available, split the work into the five phases below. The time saved comes from phase 2; phases 1, 3 and 5 stay single-agent because they set or join the pieces everyone else builds on.
 
+**The lead agent runs the whole plan.** One agent, the lead, is responsible for M0 through M9 from start to finish:
+- It does phases 1, 3 and 5 itself.
+- For phases 2 and 4 it starts one subagent per lane, each in its own git worktree, using the message in 9.1.7. If its tooling can't run subagents, it does the lanes itself one after another, still following each lane's ownership rules.
+- It does the reviewer's job between phases: it reads each lane's diff and evidence, runs the pre-merge checks, merges in the order below, applies or rejects contract change requests, creates the tags, and keeps `docs/PROGRESS.md` current.
+- It asks the human only when it is truly blocked: for a YouTube URL to test M7, for a Windows PC for lane G (9.1.5), or for a problem with no workable workaround. Everything else follows the stop rule above: record it and continue.
+
 ```
-Phase 1  foundation + frozen contracts (1 agent)                → human merges, tag contracts-v1
-Phase 2  lanes A | B | C | D | E in parallel (up to 5 agents)    → human merges in order A, C, B, D, E
-Phase 3  integration = M5 (1 agent)                             → human merges, tag slice-v1
-Phase 4  lane F (Mac app + URLs) | lane G (Windows PC)           → human merges F, then G
-Phase 5  packaging = M9 (1 agent)
+Phase 1  foundation + frozen contracts (lead)                    → lead merges, tags contracts-v1
+Phase 2  lanes A | B | C | D | E in parallel (up to 5 subagents) → lead merges in order A, C, B, D, E
+Phase 3  integration = M5 (lead)                                 → lead merges, tags slice-v1
+Phase 4  lane F (Mac app + URLs) | lane G (Windows PC)           → lead merges F, then G
+Phase 5  packaging = M9 (lead)
 ```
 
 #### 9.1.1 Ground rules for every lane
@@ -786,15 +792,15 @@ Phase 5  packaging = M9 (1 agent)
   `git worktree add "../Hen-Local-Player-lane-a" -b lane-a contracts-v1`
 - **Use a separate `CARGO_TARGET_DIR` per worktree**, with no spaces: `$TMPDIR/hlp-target-<lane>` on macOS, `C:\hlp-target-<lane>` on Windows. A shared target directory makes parallel builds wait on Cargo's lock and rebuild each other's changes.
 - **Edit only the paths your lane owns** (tables below). Everything else is read-only for you.
-- **Contract files are frozen during phase 2** (9.1.2 lists them). If you need a contract change, don't make it. Write a "Contract change request" (what, why, which lanes it affects) at the top of your progress file, and continue with a local workaround such as a private adapter. The human or the phase 3 agent applies approved changes on `main`, and other lanes rebase.
+- **Contract files are frozen during phase 2** (9.1.2 lists them). If you need a contract change, don't make it. Write a "Contract change request" (what, why, which lanes it affects) at the top of your progress file, and continue with a local workaround such as a private adapter. The lead agent decides on the request, applies approved changes on `main`, and tells the affected lanes to rebase.
 - **No new dependencies in phase 2.** Phase 1 declares all of them. If one is truly missing, file a change request instead of editing `Cargo.toml` or `Cargo.lock`.
 - **Build only your own crates** with `-p`, never `--workspace`. Only lane D builds `hlp-asr-worker`, and therefore MLX.
 - **Don't modify `~/.OminiX`.** Other lanes read models from it. Lane C runs download tests under a temporary root via `HLP_OMINIX_ROOT`.
 - **Only lane D runs model inference in phase 2**, so agents don't compete for the GPU. In phases 3 and 4, run model-heavy tests one at a time.
-- **Progress files:** each lane writes only `docs/progress/<lane>.md` (acceptance checkboxes, evidence, change requests, blockers). The phase 1 and phase 3 agents own `docs/PROGRESS.md`, which links to the lane files.
-- **Before handing back:** rebase on `main`, run your lane's tests, run `cargo check -p hlp-core -p hlp-media -p hlp-models -p hlp-pipeline -p hlp-cli -p henlocal-player` and `npm --prefix app/ui run check`, then stop for review. The human merges branches in the order shown above.
+- **Progress files:** each lane writes only `docs/progress/<lane>.md` (acceptance checkboxes, evidence, change requests, blockers). The lead agent owns `docs/PROGRESS.md`, which links to the lane files.
+- **Before handing back:** rebase on `main`, run your lane's tests, run `cargo check -p hlp-core -p hlp-media -p hlp-models -p hlp-pipeline -p hlp-cli -p henlocal-player` and `npm --prefix app/ui run check`, then report to the lead and stop. The lead reviews the lane, reruns these checks on the merged result, and merges branches in the order shown above.
 
-#### 9.1.2 Phase 1: foundation and contract freeze (1 agent, branch `foundation`)
+#### 9.1.2 Phase 1: foundation and contract freeze (the lead, branch `foundation`)
 Everything in M0, plus:
 1. **Every dependency declared up front.** `[workspace.dependencies]` lists every external crate from section 4 with versions, and each crate's `Cargo.toml` already lists the dependencies it will need (`workspace = true`). Copy `vendor/qwen3-asr-mlx` **unpatched** (section 5.4, steps 1–2), wire it into `hlp-asr-worker`, and add `sherpa-onnx` to the crates that use it, so `Cargo.lock` is complete. Commit `Cargo.lock`.
 2. **Contract files, complete and compiling.** Types, serde derives and doc comments must be final; logic bodies may be `todo!()` unless marked "implemented".
@@ -823,8 +829,8 @@ Exit criteria: M0 acceptance passes; the `cargo check` command from 9.1.1 passes
 
 Merge order at the end of phase 2 is **A, C, B, D, E**, each rebased on the previous merge. A goes first because the other lanes' code starts calling real `hlp-core` logic once it lands.
 
-#### 9.1.4 Phase 3: integration (1 agent, branch `integration`)
-M5: the rest of `hlp-pipeline`, plus `cmd/subtitle.rs` and `cmd/langs.rs`. This agent may edit any crate to fix integration problems, applies any approved contract change requests, and owns `docs/PROGRESS.md`. Exit: section 8.3 passes on macOS. Then merge and tag `slice-v1`.
+#### 9.1.4 Phase 3: integration (the lead, branch `integration`)
+M5: the rest of `hlp-pipeline`, plus `cmd/subtitle.rs` and `cmd/langs.rs`. The lead may edit any crate here to fix integration problems. Exit: section 8.3 passes on macOS. Then merge and tag `slice-v1`.
 
 #### 9.1.5 Phase 4: two lanes (each branches from `slice-v1`)
 
@@ -835,15 +841,17 @@ M5: the rest of `hlp-pipeline`, plus `cmd/subtitle.rs` and `cmd/langs.rs`. This 
 
 Merge F first, then G. Keep G's fixes to shared code (for example `CREATE_NO_WINDOW` in `hlp-media`) inside `#[cfg(windows)]` blocks so they don't conflict with F.
 
-#### 9.1.6 Phase 5: packaging (1 agent)
-M9 on `main`, after F and G are merged.
+**Lane G needs a Windows PC, which an agent on the Mac doesn't have.** The lead (or its lane G subagent) writes lane G's code on the Mac and checks what it can there with `rustup target add x86_64-pc-windows-msvc` and `cargo check --target x86_64-pc-windows-msvc -p <crate>` (some native build scripts may not cross-check; note which). It then writes the remaining Windows steps (build, fixtures, section 8.3, smoke test) at the top of `docs/progress/g-windows.md` and asks the human to run an agent on a Windows PC with the 9.1.7 message for lane G. The lead doesn't wait for this: it continues with phase 5 for macOS.
 
-#### 9.1.7 Kickoff message for each lane agent
+#### 9.1.6 Phase 5: packaging (the lead)
+M9 on `main` after F is merged. The macOS packaging doesn't wait for lane G; the Windows installer part of M9 is done once lane G has merged.
+
+#### 9.1.7 Kickoff message for each lane agent (the lead sends this)
 ```text
-Read PLAN.md, especially sections 0 and 9.1. You are lane <X> (<name>) in phase <N>.
+Read PLAN.md, especially sections 0 and 9.1. You are lane <X> (<name>) in phase <N>, working for the lead agent.
 Work in the worktree <path> on branch <branch>, with CARGO_TARGET_DIR=<dir>.
 Edit only the paths your lane owns. Don't change contract files or dependencies; if you need to, write a contract change request in docs/progress/<lane>.md instead.
-Record acceptance evidence in docs/progress/<lane>.md. When your "done when" checks pass, rebase on main, run the pre-merge checks in 9.1.1, and stop for review.
+Record acceptance evidence in docs/progress/<lane>.md. When your "done when" checks pass, rebase on main, run the pre-merge checks in 9.1.1, report to the lead, and stop.
 ```
 
 ---
