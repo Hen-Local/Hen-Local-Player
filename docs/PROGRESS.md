@@ -16,7 +16,7 @@ Evidence on Apple Silicon, 2026-11-23. `cargo test -p hlp-core` passed 3 foundat
 
 ### M1 · Core logic
 
-- [ ] Core unit and property tests from §8.1 pass.
+- [x] Core unit and property tests from §8.1 pass. Lead reran the shared six-package Rust check, UI check and 18 core tests on the merge result. Golden exports and 256 randomized timeline cases passed. [Lane A evidence](progress/a-core.md).
 
 ### M2 · Media
 
