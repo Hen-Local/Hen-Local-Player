@@ -9,3 +9,10 @@ Setup is independent of player sessions. Model and tool paths use `HLP_OMINIX_RO
 ## Build observations
 
 The pinned upstream MLX release includes libmlx.a, libmlxc.a, libgguflib.a and mlx.metallib. The translator release workflow supplies the SHA-256 for the build archive. A Command Line Tools installation can supply clang on hosts where full Xcode is unavailable. The installed Homebrew FFmpeg on the development Mac omits libvpx. The fixture generator accepts an encoder-capable FFmpeg via HLP_FFMPEG.
+
+## Verification notes
+
+- sherpa-onnx 2.0.3 exposes `OfflineModelConfig::qwen3_asr` with convolutional frontend, encoder, decoder and tokenizer paths. The Rust VAD API gives the global segment start in samples and sample count through `start()` and `n()`.
+- The local Qwen3-ASR generation config lists EOS IDs 151643 and 151645. The tokenizer config includes the added token `<asr_text>`.
+- The Section 8.3 example using FFmpeg's null muxer fails even for a valid, single-cue SRT with “Output file does not contain any stream.” Explicitly mapping the subtitle stream and decoding to WebVTT verifies parsing and produces the expected cue. The E2E oracle uses `-map 0:s:0 -c:s webvtt -f webvtt -` for nonempty exports.
+- The GGUF's pinned LICENSE.txt declares Apache-2.0, and yt-dlp's packaged binary includes GPL components. See [the license inventory](LICENSES.md).
