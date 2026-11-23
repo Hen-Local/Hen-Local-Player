@@ -126,6 +126,7 @@ export default {
   tracks: 'channels',
   subtitleScale: 'Subtitle size',
   selectFile: 'Select a video or audio file',
+  paused: 'Paused',
   errors: 'Processing error',
   downloadOne: 'Download component',
   quick: 'Playback',

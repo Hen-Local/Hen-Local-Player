@@ -35,6 +35,28 @@
       "icons/128x128.png",
       "icons/icon.icns",
       "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "mp4",
+          "mkv",
+          "mov",
+          "m4v",
+          "webm",
+          "avi",
+          "ts",
+          "flv",
+          "wmv",
+          "mp3",
+          "m4a",
+          "wav",
+          "flac",
+          "ogg"
+        ],
+        "name": "Media file",
+        "role": "Viewer"
+      }
     ]
   }
 }

@@ -1,4 +1,9 @@
 import type { Caps, MediaOpened, PlaybackPrep, CueBatch, PipelineStatus, LanguageEvent, ComponentStatus, ErrorEvent, DownloadProgress, Settings, UrlInfo, RecentItem, SubtitleVariant, SubtitleFormat } from './types'
+import { invoke } from '@tauri-apps/api/core'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
+import { getCurrentWebview } from '@tauri-apps/api/webview'
+import { getCurrentWindow } from '@tauri-apps/api/window'
+import { open, save } from '@tauri-apps/plugin-dialog'
 export interface Commands {
   set_playback_capabilities: [ { caps: Caps }, void ]
   open_media: [ { path: string }, void ]
@@ -32,6 +37,7 @@ export interface Events {
   'pipeline://language': LanguageEvent
   'setup://progress': ComponentStatus
   'download://progress': DownloadProgress
+  'app://menu': 'open' | 'url' | 'export'
   'app://error': ErrorEvent
 }
 export interface Backend {
@@ -43,10 +49,20 @@ export interface Backend {
   onDrop(receive: (path: string) => void): Promise<() => void>
 }
 export class TauriBackend implements Backend {
-  async call<K extends keyof Commands>(command: K, args?: Commands[K][0]): Promise<Commands[K][1]> {throw Error('Desktop commands are under construction')}
-  async listen<K extends keyof Events>(event: K, receive: (payload: Events[K]) => void) {return () => {}}
-  async openFile() {return null}
-  async saveFile(defaultPath: string) {return null}
-  async fullscreen(enabled: boolean) {}
-  async onDrop(receive: (path:string) => void) {return () => {}}
+  call<K extends keyof Commands>(command: K, args?: Commands[K][0]): Promise<Commands[K][1]> {
+    return invoke(command, args)
+  }
+  listen<K extends keyof Events>(event: K, receive: (payload: Events[K]) => void): Promise<UnlistenFn> {
+    return listen<Events[K]>(event, ({ payload }) => receive(payload))
+  }
+  openFile() {
+    return open({ multiple: false, directory: false, filters: [{ name: 'Media', extensions: ['mp4','mkv','mov','m4v','webm','avi','ts','flv','wmv','mp3','m4a','wav','flac','ogg','ogv'] }, { name: 'All files', extensions: ['*'] }] })
+  }
+  saveFile(defaultPath: string) { return save({ defaultPath }) }
+  fullscreen(enabled: boolean) { return getCurrentWindow().setFullscreen(enabled) }
+  onDrop(receive: (path:string) => void) {
+    return getCurrentWebview().onDragDropEvent(({ payload }) => {
+      if (payload.type === 'drop' && payload.paths.length) receive(payload.paths[0])
+    })
+  }
 }

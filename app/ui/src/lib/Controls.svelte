@@ -26,7 +26,7 @@
   >
     <div class="rail">
       <i class="buffered" style:width={pct(buffered) + '%'}></i>
-      <i class="extracted" style:width={pct(p.status?.extractedUntilMs ?? 0) + '%'}></i>
+      <i class="extracted" style:width={(p.status?.vadComplete ? 100 : pct(p.status?.extractedUntilMs ?? 0)) + '%'}></i>
       {#each p.status?.asrPendingSpans ?? [] as span}<i
           class="asr-hole"
           style:left={pct(span[0]) + '%'}

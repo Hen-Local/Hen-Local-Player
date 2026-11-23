@@ -127,6 +127,7 @@ export default {
   tracks: '声道',
   subtitleScale: '字幕大小',
   selectFile: '选择视频或音频文件',
+  paused: '已暂停',
   errors: '处理错误',
   downloadOne: '下载组件',
   quick: '播放',

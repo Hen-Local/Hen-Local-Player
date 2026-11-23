@@ -53,7 +53,7 @@
         <span class="dot"></span>
         {status.stage === 'complete'
           ? p.t('complete')
-          : status.stage === 'needs-setup'
+          : status.stage === 'error' ? p.t('errors') : status.stage === 'paused' ? p.t('paused') : status.stage === 'needs-setup'
             ? p.t('needsSetup')
             : p.t('processing')}
         <span class="spacer"></span>
@@ -62,7 +62,7 @@
       <div class="micro-rail"><i style:width={p.progress * 100 + '%'}></i></div>
       <small>
         {p.t('audio')}
-        {Math.min(100, Math.round((status.extractedUntilMs / (p.duration || 1)) * 100))}% · {p.t(
+        {status.vadComplete ? 100 : Math.min(100, Math.round((status.extractedUntilMs / (p.duration || 1)) * 100))}% · {p.t(
           'asr',
         )}
         {Math.round(p.progress * 100)}%{#if p.settings.targetLanguage !== 'none'}
@@ -113,11 +113,11 @@
     {#if !p.cues.length && !pending.length}<p class="empty-note subtle">
         {status?.stage === 'complete' ? p.t('noSpeech') : p.t('waiting')}
       </p>{/if}
-    {#if status?.uttFailed}<button
+    {#if status && (status.uttFailed > 0 || status.stage === 'error')}<button
         class="retry"
         onclick={() => p.act(() => backend.call('retry_failed'))}
       >
-        {p.t('retryFailed')} ({status.uttFailed})
+        {p.t('retryFailed')}{status.uttFailed ? ' (' + status.uttFailed + ')' : ''}
       </button>{/if}
   </div>
   <div class="panel-footer">
