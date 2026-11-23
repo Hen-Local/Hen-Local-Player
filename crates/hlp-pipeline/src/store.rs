@@ -68,6 +68,21 @@ pub struct Playback {
     pub plan: PlaybackPlan,
     pub playable_path: Option<PathBuf>,
 }
+#[derive(Serialize, Deserialize)]
+pub(crate) struct Prepared {
+    pub caps: Caps,
+    pub plan: PlaybackPlan,
+}
+pub(crate) fn prepared_playback(track: &Path, file: &Path, caps: &Caps) -> Option<Playback> {
+    let saved: Prepared = read(&track.join("playback.json"))?;
+    (saved.caps == *caps && saved.plan != PlaybackPlan::Direct && file.is_file()).then(|| {
+        Playback {
+            plan: saved.plan,
+            playable_path: Some(file.to_owned()),
+        }
+    })
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Project {
@@ -246,6 +261,29 @@ pub fn evict(root: &Path, current: &str, limit: u64) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn restores_prepared_tracks_and_respects_changed_capabilities_or_eviction() {
+        let temp = tempfile::tempdir().unwrap();
+        let track = temp.path().join("track-1");
+        let file = temp.path().join("playable-1.mp4");
+        let caps = Caps::from([("video/webm".into(), "probably".into())]);
+        write_json(
+            &track.join("playback.json"),
+            &Prepared {
+                caps: caps.clone(),
+                plan: PlaybackPlan::Transcode,
+            },
+        )
+        .unwrap();
+        atomic_write(&file, b"prepared").unwrap();
+        assert_eq!(
+            prepared_playback(&track, &file, &caps).unwrap().plan,
+            PlaybackPlan::Transcode
+        );
+        assert!(prepared_playback(&track, &file, &Caps::new()).is_none());
+        fs::remove_file(&file).unwrap();
+        assert!(prepared_playback(&track, &file, &caps).is_none());
+    }
     #[test]
     fn eviction_removes_playable_files_first_and_respects_open_sessions() {
         let temp = tempfile::tempdir().unwrap();

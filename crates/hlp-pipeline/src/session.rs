@@ -39,6 +39,17 @@ impl Context {
     fn dir(&self) -> PathBuf {
         self.root.join("media").join(&self.project.fingerprint)
     }
+    fn prepared_path(&self) -> PathBuf {
+        let extension = if self.project.probe.video.is_none() {
+            "m4a"
+        } else {
+            "mp4"
+        };
+        self.dir().join(format!(
+            "playable-{}.{extension}",
+            self.project.audio_track_order
+        ))
+    }
     fn error(&self, code: &str, message: String, recoverable: bool) {
         self.events.error(ErrorEvent {
             session_id: Some(self.id.clone()),
@@ -104,15 +115,7 @@ struct Running {
 impl Running {
     fn prepare(&mut self, ctx: &Context) {
         let plan = ctx.project.playback.plan.clone();
-        let output = ctx.dir().join(format!(
-            "playable-{}.{}",
-            ctx.project.audio_track_order,
-            if ctx.project.probe.video.is_none() {
-                "m4a"
-            } else {
-                "mp4"
-            }
-        ));
+        let output = ctx.prepared_path();
         let (tx, tools, path, info, caps, order, cancel) = (
             self.tx.clone(),
             ctx.tools.clone(),
@@ -383,6 +386,15 @@ pub(super) async fn serve(ctx: &mut Context, mut requests: mpsc::Receiver<Reques
             .dir()
             .join(format!("track-{}", ctx.project.audio_track_order));
         let mut timeline = Timeline::load(track, &ctx.settings, &ctx.id)?;
+        // A different track or an earlier decoder fallback may already have produced
+        // a complete playable for this exact WebView capability set.
+        if let Some(prepared) =
+            store::prepared_playback(&timeline.track, &ctx.prepared_path(), &ctx.caps)
+        {
+            ctx.project.playback = prepared;
+        } else if timeline.track.join("playback.json").is_file() {
+            ctx.project.playback.playable_path = None;
+        }
         let (tx, work) = mpsc::unbounded_channel();
         let mut run = Running {
             tx,
@@ -631,6 +643,13 @@ fn apply_work(ctx: &mut Context, t: &mut Timeline, run: &mut Running, event: Wor
             let (url, error) = match result {
                 Ok(p) => {
                     ctx.project.playback.playable_path = Some(p.clone());
+                    store::write_json(
+                        &t.track.join("playback.json"),
+                        &store::Prepared {
+                            caps: ctx.caps.clone(),
+                            plan: ctx.project.playback.plan.clone(),
+                        },
+                    )?;
                     (Some(ctx.shared.server.register(&p)?), None)
                 }
                 Err(e) => {
