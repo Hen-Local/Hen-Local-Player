@@ -1,13 +1,17 @@
-$ErrorActionPreference = "Stop"
-Set-Location "$PSScriptRoot/.."
-if (!$env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR = "C:\hlp-target" }
-if ($env:CARGO_TARGET_DIR.Contains(" ")) { throw "Choose a CARGO_TARGET_DIR without spaces." }
-cargo build --locked -p hlp-asr-worker -p hlp-cli
-if ($LASTEXITCODE) { exit $LASTEXITCODE }
-Set-Location app
-if (!(Test-Path ui/node_modules/.bin/tauri.cmd)) {
-  npm --prefix ui ci
-  if ($LASTEXITCODE) { exit $LASTEXITCODE }
+# Adapted from Hen-Local-Translator/scripts/run_translator_desktop.sh.
+$ErrorActionPreference = 'Stop'
+. "$PSScriptRoot/build_env.ps1"
+Push-Location $repoDirectory
+try {
+    cargo build --locked -p hlp-asr-worker -p hlp-cli
+    if ($LASTEXITCODE) { throw "Cargo build failed ($LASTEXITCODE)." }
+    Set-Location app
+    if (!(Test-Path -LiteralPath 'ui/node_modules/.bin/tauri.cmd')) {
+        npm.cmd --prefix ui ci
+        if ($LASTEXITCODE) { throw "npm ci failed ($LASTEXITCODE)." }
+    }
+    & './ui/node_modules/.bin/tauri.cmd' dev
+    if ($LASTEXITCODE) { throw "Tauri dev failed ($LASTEXITCODE)." }
+} finally {
+    Pop-Location
 }
-& ui/node_modules/.bin/tauri.cmd dev
-exit $LASTEXITCODE

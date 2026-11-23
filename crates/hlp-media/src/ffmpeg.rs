@@ -182,15 +182,28 @@ fn encoders(tools: &Tools) -> Result<Vec<&'static str>> {
     let output = process::command(&tools.ffmpeg)
         .args(["-nostdin", "-hide_banner", "-encoders"])
         .output()?;
+    ensure!(
+        output.status.success(),
+        "Could not list Windows FFmpeg encoders"
+    );
     let listing = String::from_utf8_lossy(&output.stdout);
-    let available: Vec<_> = ["h264_nvenc", "h264_qsv", "h264_amf", "h264_mf", "libx264"]
-        .into_iter()
-        .filter(|name| {
-            listing
-                .lines()
-                .any(|line| line.split_whitespace().nth(1) == Some(*name))
-        })
-        .collect();
+    // The managed LGPL build includes OpenH264, but omits GPL-only libx264.
+    // Retain a CPU fallback when hardware and Media Foundation cannot initialize.
+    let available: Vec<_> = [
+        "h264_nvenc",
+        "h264_qsv",
+        "h264_amf",
+        "h264_mf",
+        "libx264",
+        "libopenh264",
+    ]
+    .into_iter()
+    .filter(|name| {
+        listing
+            .lines()
+            .any(|line| line.split_whitespace().nth(1) == Some(*name))
+    })
+    .collect();
     ensure!(
         !available.is_empty(),
         "No H.264 encoder available in FFmpeg"
