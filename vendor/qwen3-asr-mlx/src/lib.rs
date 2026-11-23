@@ -30,7 +30,7 @@ pub mod qwen;
 pub use audio::{AudioConfig, MelFrontend};
 pub use error::Error;
 pub use mlx_rs_core::{ConcatKeyValueCache, KVCache};
-pub use model::{Qwen3ASR, Qwen3ASRConfig, SamplingConfig};
+pub use model::{AsrOutput, Qwen3ASR, Qwen3ASRConfig, SamplingConfig};
 
 /// Environment variable name for model path.
 pub const MODEL_PATH_ENV: &str = "QWEN3_ASR_MODEL_PATH";

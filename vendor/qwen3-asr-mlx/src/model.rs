@@ -165,6 +165,11 @@ impl Default for SamplingConfig {
     }
 }
 
+/// Unparsed model generation, including the language header in automatic mode.
+pub struct AsrOutput {
+    pub raw: String,
+}
+
 /// Qwen3-ASR model.
 #[derive(ModuleParameters)]
 pub struct Qwen3ASR {
@@ -536,72 +541,49 @@ impl Qwen3ASR {
         Ok(model)
     }
 
-    /// Load tokenizer from model directory.
-    ///
-    /// Tries `tokenizer.json` first. If missing, builds from `vocab.json` +
-    /// `merges.txt` + special tokens from `tokenizer_config.json`, then caches
-    /// the result as `tokenizer.json` for subsequent loads.
+    /// Existing translator installs may cache a tokenizer that marks every added
+    /// token special. Reconstruct those caches in memory from the model files.
     fn load_tokenizer(model_dir: &Path) -> Result<Option<tokenizers::Tokenizer>> {
+        use tokenizers::{
+            models::bpe::BPE, pre_tokenizers::byte_level::ByteLevel, AddedToken, Tokenizer,
+        };
+        let tokenizer_error = |e: tokenizers::Error| Error::Tokenizer(e.to_string());
         let tokenizer_path = model_dir.join("tokenizer.json");
-        if tokenizer_path.exists() {
-            let tokenizer = tokenizers::Tokenizer::from_file(&tokenizer_path)
-                .map_err(|e| Error::Tokenizer(e.to_string()))?;
-            return Ok(Some(tokenizer));
-        }
-
-        // Build from vocab.json + merges.txt
-        let vocab_path = model_dir.join("vocab.json");
-        let merges_path = model_dir.join("merges.txt");
-        if !vocab_path.exists() || !merges_path.exists() {
-            eprintln!("Warning: no tokenizer found at {}", model_dir.display());
-            return Ok(None);
-        }
-
-        use tokenizers::models::bpe::BPE;
-        let bpe = BPE::from_file(
-            &vocab_path.to_string_lossy(),
-            &merges_path.to_string_lossy(),
-        )
-        .build()
-        .map_err(|e| Error::Tokenizer(e.to_string()))?;
-        let mut tokenizer = tokenizers::Tokenizer::new(bpe);
-
-        // ByteLevel decoder for proper CJK/Unicode handling
-        let byte_level = tokenizers::pre_tokenizers::byte_level::ByteLevel::new(true, true, true);
-        tokenizer.with_decoder(Some(byte_level));
-
-        // Load special tokens from tokenizer_config.json
-        let config_path = model_dir.join("tokenizer_config.json");
-        if config_path.exists() {
-            let config_str = std::fs::read_to_string(&config_path)?;
-            let config: serde_json::Value = serde_json::from_str(&config_str)?;
-            if let Some(added_tokens) = config
-                .get("added_tokens_decoder")
-                .and_then(|v| v.as_object())
-            {
-                let special_tokens: Vec<_> = added_tokens
-                    .values()
-                    .filter_map(|info| {
-                        info.get("content")
-                            .and_then(|v| v.as_str())
-                            .map(|content| tokenizers::AddedToken::from(content, true))
-                    })
-                    .collect();
-                if !special_tokens.is_empty() {
-                    eprintln!(
-                        "Adding {} special tokens from tokenizer_config.json",
-                        special_tokens.len()
-                    );
-                    tokenizer.add_special_tokens(&special_tokens);
-                }
+        if tokenizer_path.is_file() {
+            let tokenizer = Tokenizer::from_file(tokenizer_path).map_err(tokenizer_error)?;
+            let marker = tokenizer.token_to_id("<asr_text>");
+            if marker.is_some_and(|id| {
+                tokenizer.decode(&[id], true).ok().as_deref() == Some("<asr_text>")
+            }) {
+                return Ok(Some(tokenizer));
             }
         }
 
-        // Cache for next time
-        if let Err(e) = tokenizer.save(&tokenizer_path, false) {
-            eprintln!("Warning: could not cache tokenizer.json: {}", e);
+        let vocab = model_dir.join("vocab.json");
+        let merges = model_dir.join("merges.txt");
+        let model = BPE::from_file(&vocab.to_string_lossy(), &merges.to_string_lossy())
+            .build()
+            .map_err(tokenizer_error)?;
+        let mut tokenizer = Tokenizer::new(model);
+        let byte_level = ByteLevel::new(false, true, true);
+        tokenizer.with_pre_tokenizer(Some(byte_level));
+        tokenizer.with_decoder(Some(byte_level));
+        #[derive(serde::Deserialize)]
+        struct Config {
+            added_tokens_decoder: std::collections::BTreeMap<u32, AddedToken>,
         }
-
+        let config: Config =
+            serde_json::from_slice(&std::fs::read(model_dir.join("tokenizer_config.json"))?)?;
+        let tokens: Vec<_> = config.added_tokens_decoder.values().cloned().collect();
+        tokenizer.add_tokens(&tokens);
+        for (expected_id, token) in config.added_tokens_decoder {
+            if tokenizer.token_to_id(&token.content) != Some(expected_id) {
+                return Err(Error::Tokenizer(format!(
+                    "Token ID mismatch for {}",
+                    token.content
+                )));
+            }
+        }
         Ok(Some(tokenizer))
     }
 
@@ -745,6 +727,17 @@ impl Qwen3ASR {
         language: &str,
         config: &SamplingConfig,
     ) -> Result<String> {
+        Ok(self.transcribe_raw(samples, Some(language), config)?.raw)
+    }
+
+    /// Recognize a single utterance. An omitted language asks the model to
+    /// generate its own language header before the transcript.
+    pub fn transcribe_raw(
+        &mut self,
+        samples: &[f32],
+        language: Option<&str>,
+        config: &SamplingConfig,
+    ) -> Result<AsrOutput> {
         // 1. Compute mel spectrogram
         let mel = self.mel_frontend.compute_mel_spectrogram(samples)?;
         eval([&mel])?;
@@ -769,21 +762,25 @@ impl Qwen3ASR {
         eval([&inputs_embeds])?;
 
         // 5. Autoregressive generation
-        self.generate(&inputs_embeds, config)
+        Ok(AsrOutput {
+            raw: self.generate(&inputs_embeds, config)?,
+        })
     }
 
     /// Build prompt token IDs.
-    fn build_prompt(&self, num_audio_tokens: i32, language: &str) -> Result<Array> {
+    fn build_prompt(&self, num_audio_tokens: i32, language: Option<&str>) -> Result<Array> {
         let tokenizer = self
             .tokenizer
             .as_ref()
             .ok_or_else(|| Error::Tokenizer("Tokenizer not loaded".to_string()))?;
 
-        let prompt = format!(
-            "<|im_start|>system\n<|im_end|>\n<|im_start|>user\n<|audio_start|>{}<|audio_end|><|im_end|>\n<|im_start|>assistant\nlanguage {}<asr_text>",
+        let mut prompt = format!(
+            "<|im_start|>system\n<|im_end|>\n<|im_start|>user\n<|audio_start|>{}<|audio_end|><|im_end|>\n<|im_start|>assistant\n",
             "<|audio_pad|>".repeat(num_audio_tokens as usize),
-            language,
         );
+        if let Some(language) = language {
+            prompt.push_str(&format!("language {language}<asr_text>"));
+        }
 
         let encoding = tokenizer
             .encode(prompt.as_str(), false)
@@ -927,5 +924,31 @@ impl Qwen3ASR {
                 .collect::<Vec<_>>()
                 .join(" "))
         }
+    }
+}
+
+#[cfg(test)]
+mod player_tests {
+    use super::*;
+    #[test]
+    #[ignore = "requires installed Qwen3-ASR model files"]
+    fn tokenizer_round_trip_and_eos() {
+        let dir = std::env::var_os("HLP_ASR_MODEL_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(crate::default_model_path);
+        let tokenizer = Qwen3ASR::load_tokenizer(&dir).unwrap().unwrap();
+        let input = "language English<asr_text>Hi";
+        let encoded = tokenizer.encode(input, false).unwrap();
+        assert!(encoded.get_ids().contains(&151704));
+        assert_eq!(tokenizer.decode(encoded.get_ids(), true).unwrap(), input);
+        let generation: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(dir.join("generation_config.json")).unwrap())
+                .unwrap();
+        let mut expected: Vec<i32> =
+            serde_json::from_value(generation["eos_token_id"].clone()).unwrap();
+        let mut actual = Qwen3ASR::parse_eos_tokens(&dir);
+        expected.sort();
+        actual.sort();
+        assert_eq!(actual, expected);
     }
 }
