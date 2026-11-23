@@ -6,7 +6,7 @@
 - [ ] Generate the SAPI media matrix, pass every §8.3 check, and record the CPU model, thread count, ASR speed and translation latency.
 - [ ] After lane F merges, rebase this lane on main and run the native WebView2 smoke test.
 
-Use a Windows 10/11 x64 PC with Rust 1.92 MSVC, VS 2022 C++ Build Tools, Node 20.19+, Python 3, WebView2 and an enabled English desktop SAPI voice. In the lane G worktree, run the following in PowerShell. Keep the branch and report the results to the lead before merging.
+The project owner confirmed a Windows PC is currently unavailable. When one becomes available, use a Windows 10/11 x64 PC with Rust 1.92 MSVC, VS 2022 C++ Build Tools, Node 20.19+, Python 3, WebView2 and an enabled English desktop SAPI voice. In the lane G worktree, run the following in PowerShell. Keep the branch and report the results to the lead before merging.
 
 ```powershell
 $env:CARGO_TARGET_DIR = 'C:\hlp-target-g'
@@ -33,6 +33,28 @@ In WebView2, open and play the generated MP4. Check spoken language and bilingua
 - [x] Confirmed the exact Rust configuration field is `model_config.qwen3_asr`. The pinned native implementation reads `max_new_tokens` and `temperature` per stream. It also recognizes a stream-level language hint and generally strips the language scaffold from the returned text. The player intentionally uses automatic recognition on Windows, as specified. [Rust API](https://docs.rs/sherpa-onnx/2.0.3/sherpa_onnx/struct.OfflineQwen3ASRModelConfig.html), [versioned native decoder](https://github.com/k2-fsa/sherpa-onnx/blob/v2.0.3/sherpa-onnx/csrc/offline-recognizer-qwen3-asr-impl.cc), [upstream example](https://github.com/k2-fsa/sherpa-onnx/blob/v2.0.3/rust-api-examples/examples/qwen3_asr.rs).
 - [x] Confirmed the actual Windows x64 Sherpa static archive contains `/FAILIFMISMATCH:"RuntimeLibrary=MT_StaticRelease"` and `/DEFAULTLIB:"libcpmt"`. The repository config selects `+crt-static` for this target. Actual Windows link and execution are outstanding.
 - [x] Inspected the pinned model archive and Windows FFmpeg configuration. The Windows media encoder chain tries NVENC, Quick Sync, AMF, Media Foundation and libx264 if available. The managed LGPL build disables libx264 and includes OpenH264, which now supplies the final CPU fallback. The fixture generator also supports its software HEVC encoder, Kvazaar. [Pin and build flags](c-models.md#ffmpeg-audit-evidence).
-- [x] Ran `rustup target add x86_64-pc-windows-msvc` and `cargo check --locked --target x86_64-pc-windows-msvc -p hlp-core -p hlp-asr-worker` with the real Windows Sherpa archive. Both packages passed. A cross-check of the remaining packages reached the native `ring` build, where this Mac lacks the MSVC C headers (`assert.h`). The complete six-package check and Svelte check passed on macOS. The regular core, media and installer suites passed.
+- [x] Ran `rustup target add x86_64-pc-windows-msvc` and `cargo check --locked --target x86_64-pc-windows-msvc -p hlp-core -p hlp-asr-worker` with the real Windows Sherpa archive. Both packages passed. The initial cross-check of the remaining packages reached the native `ring` build, where Apple Clang lacked Windows headers. The portable toolchain check below subsequently passed for the entire workspace. The shared six-package check and Svelte check passed on macOS. The regular core, media and installer suites passed.
 - [x] PowerShell 7.5.4 parsed all four scripts. Exercised tool discovery and rejection of a target directory containing spaces. Ran the PowerShell fixture generator with a recorded English sentence provider standing in for Windows SAPI on this Mac. FFmpeg produced all nine media/truth pairs. FFprobe verified H.264/AAC, H.264/AC-3, VP9/Opus, MPEG-4/MP3, HEVC/AAC, six-channel H.264/AAC, AAC audio, the tone-only file, and a 1,200.088 s loop with 360 sentence onsets. This exercised the PowerShell media and truth generation. Native SAPI, MSVC linkage, Windows latency, WebView2 and playback remain the PC checks above.
 - [x] Loaded the exact pinned Windows-model assets into the lane's unmodified Sherpa backend compiled for the Apple Silicon host as a standalone CPU smoke. A 2.547 s fixture returned “Today, the sky is clear and blue.” in 0.339 s of decoding. This checks the native model/decoder interface. The Windows CPU measurement remains outstanding.
+
+
+## Complete Windows-target compile check on macOS
+
+The portable LLVM-MinGW UCRT macOS universal toolchain, release `20261117`, supplied real Windows headers, Clang, the COFF librarian, the resource compiler and LLD. The 125,197,636-byte upstream archive matched SHA-256 `98d340bbb8d46b09ad6886ffba88bd9d5415e131c316de48e6bd7647377446aa`. All tools were unpacked privately. [Upstream release](https://github.com/mstorsjo/llvm-mingw/releases/tag/20261117).
+
+From lane G, with `tool` pointing to the extracted toolchain, the following cross-check passed for all seven explicit packages in 17.01 s. Rust checked the real `x86_64-pc-windows-msvc` code paths, including WebView2. The native C dependencies compiled as x64 Windows COFF with MinGW-w64 headers, and Tauri built the 37,504-byte application resource library.
+
+```sh
+export CARGO_TARGET_DIR="${TMPDIR%/}/hlp-target-g"
+source scripts/build_env.sh
+export CC_x86_64_pc_windows_msvc="$tool/bin/x86_64-w64-mingw32-clang"
+export CXX_x86_64_pc_windows_msvc="$tool/bin/x86_64-w64-mingw32-clang++"
+export CFLAGS_x86_64_pc_windows_msvc="--target=x86_64-w64-windows-gnu"
+export CXXFLAGS_x86_64_pc_windows_msvc="$CFLAGS_x86_64_pc_windows_msvc"
+export AR_x86_64_pc_windows_msvc="$tool/bin/llvm-lib"
+export RC_x86_64_pc_windows_msvc="$tool/bin/llvm-rc"
+export CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER="$tool/bin/lld-link"
+cargo check --locked --target x86_64-pc-windows-msvc -p hlp-core -p hlp-media -p hlp-models -p hlp-pipeline -p hlp-cli -p henlocal-player -p hlp-asr-worker
+```
+
+A separate `cargo build --locked --target x86_64-pc-windows-msvc -p hlp-asr-worker` reached the final linker. LLD reported missing Microsoft SDK import libraries including `kernel32.lib` and missing static Microsoft runtime libraries `libcpmt.lib` and `LIBCMT.lib`. The Sherpa Windows archive explicitly requests that runtime. The cross-check verifies types, dependencies and resources. A runnable MSVC executable and installer still require those Microsoft libraries, followed by native execution.
