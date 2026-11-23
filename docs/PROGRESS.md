@@ -56,6 +56,8 @@ Lead built the macOS 14 native libraries from verified sources, reran worker uni
 
 ### M6 · Desktop player
 
+Mock UI reviewed and merged after D. The six-package check, Svelte check and production build passed on the merged tree. Eight screenshots and three browser smoke runs cover the mock flows. Native acceptance remains below. [Lane E evidence](progress/e-ui.md).
+
 - [ ] Empty state shows the drop zone and the recent list. Dropping a file plays it within 1 s (Direct).
 - [ ] The language badge shows "Japanese 9x %" within 15 s, and subtitles appear and stay in sync during playback.
 - [ ] Original / Translation / Both / Off switch instantly. Changing the target to English shows "translating…" coverage, then English text.

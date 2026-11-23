@@ -1,4 +1,14 @@
-# e-ui
+# Lane E · Browser player
 
-- [ ] Mock player implements the §8.4 states and keyboard controls.
-- [ ] Browser screenshots and a clean UI check are recorded.
+- [x] The mock player implements the player, transcript, language and subtitle controls, setup, settings, recents, export and URL dialogs in §5.9. The desktop backend contract remains at its foundation revision.
+- [x] On Apple Silicon macOS, `npm --prefix app/ui ci`, `npm --prefix app/ui run check` and `npm --prefix app/ui run build` passed after rebasing on `main` at `ca09b00`. Svelte reported zero errors and zero warnings.
+- [x] With a separate no-space target, `cargo check --locked -p hlp-core -p hlp-media -p hlp-models -p hlp-pipeline -p hlp-cli -p henlocal-player` passed on the rebased branch.
+- [x] `npm --prefix app/ui run dev -- --port 1475` served the app to Chrome. Browser checks used the generated local demo, real HTML video playback, a file chooser, a file drop, keyboard input and actual browser download events. The mock provides canned speech and translation events.
+- [x] Dropping the Japanese MP4 reached playing in 349 ms. The sample streamed six cues and showed “Auto · Japanese 96%”. Selecting Chinese produced both subtitle lines with a clear gap above the visible controls. Off removed the overlay. Clicking a row and pressing period sought to the next cue. Fullscreen kept subtitles and controls, and Escape restored the layout.
+- [x] Opening the French MKV in the mock displayed preparation progress before playback. Changing and restoring its spoken language marked visible lines stale and replaced them. “Finish first” deferred export until the completion event. Reopening the file immediately restored all six cues.
+- [x] Opening the real 20-minute English fixture in Chrome and seeking to 15:00 produced a **mock** cue there in 583 ms. This measures seek prioritization and rendering with canned results. Desktop engine timing is measured in M5/M6.
+- [x] Export produced a browser SRT download. Chinese interface selection, optional URL-tool setup, URL preview, progress and cancellation worked. The mobile layout fit a 375 px viewport. The file, language, seek and dialog sequence produced zero page or resource errors.
+- [x] Browser keyboard checks exercised Space, ArrowRight, the speed brackets, T, F, Escape, S, Control+L and Control+E. The browser runs used temporary Playwright Core scripts outside the repository (`smoke.cjs`, `more.cjs`, `shortcuts.cjs`) against the dev URL. No browser testing package was added to the app.
+- [x] Eight screenshots at 1280×760 capture [empty](../screenshots/mock/empty.png), [player](../screenshots/mock/player.png), [fullscreen](../screenshots/mock/fullscreen.png), [preparation](../screenshots/mock/preparing.png), [export](../screenshots/mock/export.png), [setup](../screenshots/mock/setup.png), [Chinese settings](../screenshots/mock/settings-zh.png) and [URL preview](../screenshots/mock/url.png).
+
+The browser sample has prerecorded Japanese text and canned English and Chinese translations. The desktop build selects TauriBackend through the same interface. Lane F owns the native commands, window fullscreen, setup downloads and real URL flow.
