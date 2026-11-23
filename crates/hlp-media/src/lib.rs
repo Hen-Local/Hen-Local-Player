@@ -1,7 +1,19 @@
-//! Tool-backed media I/O. No inference is performed here.
-use hlp_core::types::*;
-use std::path::{Path, PathBuf};
-use tokio_util::sync::CancellationToken;
+//! Tool-backed media I/O. Run synchronous probing and preparation on a blocking thread.
+mod capabilities;
+mod downloader;
+mod ffmpeg;
+mod probe;
+mod process;
+mod server;
+
+pub use capabilities::{decide, default_caps};
+pub use downloader::Downloader;
+pub use ffmpeg::{extract_audio, prepare_playback};
+pub use probe::probe;
+pub use server::MediaServer;
+
+use std::{env, path::PathBuf};
+
 #[derive(Clone)]
 pub struct Tools {
     pub ffmpeg: PathBuf,
@@ -9,57 +21,32 @@ pub struct Tools {
     pub yt_dlp: PathBuf,
     pub deno: PathBuf,
 }
+
 impl Tools {
     pub fn resolve() -> Self {
-        todo!()
+        Self {
+            ffmpeg: resolve("ffmpeg", "HLP_FFMPEG"),
+            ffprobe: resolve("ffprobe", "HLP_FFPROBE"),
+            yt_dlp: resolve("yt-dlp", "HLP_YTDLP"),
+            deno: resolve("deno", "HLP_DENO"),
+        }
     }
 }
-pub fn probe(tools: &Tools, path: &Path) -> anyhow::Result<MediaInfo> {
-    todo!()
-}
-pub fn default_caps(webview: &str) -> Caps {
-    todo!()
-}
-pub fn decide(info: &MediaInfo, caps: &Caps, selected_audio: usize) -> PlaybackPlan {
-    todo!()
-}
-/// Writes complete PCM frames to disk before invoking the callback with samples and extracted milliseconds.
-pub fn extract_audio(
-    tools: &Tools,
-    input: &Path,
-    track: &AudioStream,
-    dialogue_focus: bool,
-    pcm: &Path,
-    on_frame: impl FnMut(&[f32], Ms) -> anyhow::Result<()>,
-    cancel: CancellationToken,
-) -> anyhow::Result<u64> {
-    todo!()
-}
-pub fn prepare_playback(
-    tools: &Tools,
-    input: &Path,
-    info: &MediaInfo,
-    caps: &Caps,
-    track: usize,
-    plan: &PlaybackPlan,
-    output: &Path,
-    progress: impl FnMut(f32),
-    cancel: CancellationToken,
-) -> anyhow::Result<PathBuf> {
-    todo!()
-}
-#[derive(Clone)]
-pub struct MediaServer;
-impl MediaServer {
-    pub async fn start() -> anyhow::Result<Self> {
-        todo!()
+
+fn resolve(name: &str, variable: &str) -> PathBuf {
+    if let Some(path) = env::var_os(variable).filter(|v| !v.is_empty()) {
+        return PathBuf::from(path);
     }
-    pub fn register(&self, path: &Path) -> anyhow::Result<String> {
-        todo!()
+    let managed = hlp_models::tool_path(name);
+    if managed.is_file() || env::var_os("HLP_ALLOW_SYSTEM_TOOLS").as_deref() != Some("1".as_ref()) {
+        return managed;
     }
-    pub fn unregister(&self, url: &str) {
-        todo!()
-    }
+    let binary = format!("{name}{}", env::consts::EXE_SUFFIX);
+    env::var_os("PATH")
+        .and_then(|path| {
+            env::split_paths(&path)
+                .map(|dir| dir.join(&binary))
+                .find(|file| file.is_file())
+        })
+        .unwrap_or(managed)
 }
-mod downloader;
-pub use downloader::Downloader;
