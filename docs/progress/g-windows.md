@@ -4,9 +4,9 @@
 
 - [ ] Build and link the worker, CLI and desktop shell with the Windows x64 MSVC toolchain.
 - [ ] Generate the SAPI media matrix, pass every §8.3 check, and record the CPU model, thread count, ASR speed and translation latency.
-- [ ] After lane F merges, rebase this lane on main and run the native WebView2 smoke test.
+- [ ] Run the native WebView2 smoke test on the integrated desktop player.
 
-The project owner confirmed a Windows PC is currently unavailable. When one becomes available, use a Windows 10/11 x64 PC with Rust 1.92 MSVC, VS 2022 C++ Build Tools, Node 20.19+, Python 3, WebView2 and an enabled English desktop SAPI voice. In the lane G worktree, run the following in PowerShell. Keep the branch and report the results to the lead before merging.
+The project owner confirmed a Windows PC is currently unavailable. Lanes F and G have both merged locally. Use the integrated `main` checkout for the native tests. To transfer it to a Windows PC, copy `dist/hen-local-player-windows.bundle`, run `git clone -b main hen-local-player-windows.bundle Hen-Local-Player`, and enter the cloned directory in PowerShell. The build needs Windows 10/11 x64, Rust 1.92 MSVC, VS 2022 C++ Build Tools, Node 20.19+, Python 3, WebView2 and an enabled English desktop SAPI voice.
 
 ```powershell
 $env:CARGO_TARGET_DIR = 'C:\hlp-target-g'
@@ -22,6 +22,8 @@ npm.cmd --prefix app/ui run check
 cargo check --locked -p hlp-core -p hlp-media -p hlp-models -p hlp-pipeline -p hlp-cli -p henlocal-player
 .\scripts\dev.ps1
 ```
+
+After verifying playback, close the development app and run `.\scripts\build_windows.ps1`. Install the resulting `dist\Hen-Local-Player-0.1.0-windows-x64-setup.exe` in a clean account, complete setup, and repeat playback and export from the installed copy. Record the installer hash and the native results here.
 
 The fixture generator identifies the actual voice used for each of the seven language slots. On an English-only PC, it uses English for every slot and retains the nine-container coverage. It derives sentence onsets from the trimmed 16 kHz PCM sample counts. The oracle reads each file’s actual spoken language from its truth file. The full report goes to `tests/results/<date>-windows.json`. Record `summary.asrRtf` (audio seconds processed per wall second), `msPerTranslation` and the cached-run time. The Windows ASR goal is 2× real time.
 

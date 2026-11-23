@@ -2,6 +2,8 @@
 
 A checked item has been exercised. Worktree branches and tags are local until publication is requested.
 
+The lead merged phase 2 in order (A, C, B, D, E), verified the CLI slice on macOS, then merged F followed by G. The final tree passed Rust formatting, 37 regular Rust tests, the Svelte check with zero warnings, the production UI build and the seven-package Windows x64 cross-check.
+
 ## Foundation and lane evidence
 
 ### M0 · Workspace
@@ -108,6 +110,8 @@ An independent release CLI run used the exact sidecar in the installed app while
 The lead mounted the DMG read-only, copied the app to a separate Applications folder, detached it, and launched the installed executable with empty preferences, cache and component directories. The first-launch dialog offered 3.67 GB. During setup the app quit with 267,043,606 bytes of the translation model downloaded. The final installed build resumed that file and verified all five required components. It started its bundled ASR worker and the newly downloaded llama runtime, then rendered six Japanese lines with six English translations. [First-launch setup](screenshots/installed/setup.png) · [Installed bilingual player](screenshots/installed/playback.png).
 
 The installed app also opened a new Japanese/English dual-track MKV with off-machine network, developer build and pre-existing model access blocked by macOS. Each track produced six correctly identified utterances in its own cache. Switching back displayed all six Japanese cues in 492 ms without rewriting the prepared video. The track-cache regression test checks capability changes and eviction.
+
+The final release CLI repeated the full fixture matrix under the same network and filesystem restrictions, using the worker copied from the DMG and the models downloaded during setup. All 81 checks across nine fixtures passed. The 20-minute file produced 359 bilingual cues in 70.07 seconds and reopened in 74 ms. The highest character error across fixtures was 2.86%, and the largest onset error was 216 ms. [Full offline release results](../tests/results/2026-11-23-darwin-release.json).
 
 ## Lane reports
 
