@@ -12,14 +12,14 @@
 
 ## 0. Read this first (rules for the implementing agent)
 
-1. **Build in milestone order (section 9).** The headless CLI vertical slice (M5) must pass before you start on the UI (M6). The CLI and the app share one pipeline library, so a passing CLI shows the subtitle engine works.
+1. **Build in milestone order (section 9)**, or, when several agents are available, in the parallel phases of section 9.1. Either way, the headless CLI vertical slice (M5) must pass before the UI is connected to the real backend (M6). Building the UI against the mock backend earlier is fine. The CLI and the app share one pipeline library, so a passing CLI shows the subtitle engine works.
 2. **Copy, don't depend.** Reuse code from the existing translator at
    `/Users/zenghaochen/WORKING/Hen Local/Hen-Local-Translator` by copying the relevant files into this repo with a header comment naming the source file. Do not add path or git dependencies on that repo.
 3. **Keep the Cargo target directory out of any path that contains a space.** This repo lives under `.../Hen Local/...`. MLX 0.30.1 generates invalid Metal JIT sources when the target path contains spaces. Every build script must set `CARGO_TARGET_DIR` (default `${TMPDIR}/hen-local-player-target` on macOS, `C:\hlp-target` on Windows) and refuse to run if it contains a space. The translator's `scripts/run_translator_desktop.sh` shows the pattern.
 4. **Pin every download** with exact URL, byte size and SHA-256. Never ship a "latest" URL in the manifest; the only exception is the explicit "Update yt-dlp" action (section 5.2.8). Where this plan says `TBD-SHA`, download the file once, compute the hash, and commit it.
 5. **Work offline after setup.** Network access is allowed only for (a) first-run model and tool downloads, and (b) user-requested URL downloads.
 6. **Items marked `VERIFY`** are facts this plan could not confirm. Check them against the real crate or docs before building on them, and record what you found in `docs/ARCHITECTURE.md`.
-7. Keep `docs/PROGRESS.md` updated, with one checkbox per milestone acceptance item and the evidence (command plus output summary). A later agent resumes from that file.
+7. Keep `docs/PROGRESS.md` updated, with one checkbox per milestone acceptance item and the evidence (command plus output summary). A later agent resumes from that file. In parallel mode, each lane writes only its own `docs/progress/<lane>.md` (section 9.1.1).
 8. Never print anything other than protocol JSON to the ASR worker's **stdout**. Logs go to stderr.
 
 ---
@@ -179,7 +179,7 @@ Hen-Local-Player/
 │  ├─ e2e.sh / e2e.ps1           # run hlp-cli on fixtures and assert (section 8.3)
 │  └─ build_macos_app.sh         # M9
 ├─ tests/fixtures/               # generated, gitignored
-└─ docs/{ARCHITECTURE.md, PROGRESS.md, LICENSES.md}
+└─ docs/{ARCHITECTURE.md, PROGRESS.md, progress/<lane>.md, LICENSES.md}
 ```
 
 Workspace notes:
@@ -406,6 +406,7 @@ Behavior:
   - Tools: the binary exists and `--version` exits with 0.
 - `download(ids, progress_cb, cancel_token)`: resumable `.part` with HTTP `Range`, SHA-256 verification, atomic rename, ≤4 attempts with backoff, HF → ModelScope fallback for HF repos (copied logic), a lock file so two processes don't download the same component. Extract archives: `.tar.gz` (flate2 + tar), `.tar.bz2` (bzip2 + tar), `.zip` (zip; preserve the executable bit on macOS).
 - On macOS, remove `com.apple.quarantine` from extracted tool binaries if present (`xattr -d`). Ignore failures.
+- `HLP_OMINIX_ROOT` replaces `~/.OminiX` in every model and tool path. Tests use it to download into a temporary root without touching the real models.
 - Exposed to the UI by `get_setup_status`, `start_setup` and `cancel_setup`, and to the CLI by `hlp-cli setup`.
 
 ---
@@ -559,13 +560,14 @@ hlp-cli langs                                # ASR languages and translation tar
 ```
 - `subtitle` runs a Session with the playhead fixed at 0 and `process_whole=true`, and waits until every utterance is final and all translations are done. It writes `<stem>.<src>.srt`, `<stem>.<tgt>.srt` and `<stem>.<src>-<tgt>.ass` (plus VTT if requested), then prints a summary: detected language and confidence, utterance counts, ASR real-time factor, mean translation ms, wall time, and output paths.
 - Exit codes: 0 OK, 2 setup missing, 3 media error, 4 engine error.
+- One file per subcommand under `src/cmd/` (`probe.rs`, `setup.rs`, `status.rs`, `subtitle.rs`, `langs.rs`); `main.rs` only parses arguments and dispatches.
 
 ---
 
 ### 5.8 Tauri app backend (`app/`)
 - `tauri.conf.json`:
   - `productName "Hen Local Player"`, `identifier "com.henlocal.player"`, window `main` 1280×760 (min 900×560), `title "Hen Local Player"`, `backgroundColor "#000000"`, `dragDropEnabled: true`.
-  - `bundle.externalBin: ["binaries/hlp-asr-worker"]`; `scripts/dev.sh` copies the built worker to `app/binaries/hlp-asr-worker-<target-triple>` (required by Tauri's sidecar naming).
+  - Put `bundle.externalBin: ["binaries/hlp-asr-worker"]` in a separate `tauri.bundle.conf.json` used only for packaging (`tauri build --config tauri.bundle.conf.json`, as the translator does). `tauri-build` fails at compile time when a listed sidecar file is missing, so keeping it out of the main config lets `cargo check -p henlocal-player` work without building the worker. The packaging script copies the built worker to `app/binaries/hlp-asr-worker-<target-triple>` (Tauri's sidecar naming). In development, the worker is found next to the app binary in the same `CARGO_TARGET_DIR`.
   - macOS `minimumSystemVersion "14.0"`.
   - `bundle.fileAssociations` for mp4, mkv, mov, m4v, webm, avi, ts, flv, wmv, mp3, m4a, wav, flac, ogg (stretch goal; also handle `RunEvent::Opened { urls }` on macOS and argv on Windows).
   - CSP: `default-src 'self'; media-src 'self' http://127.0.0.1:*; img-src 'self' data: blob: http://127.0.0.1:* https:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost`.
@@ -598,7 +600,7 @@ hlp-cli langs                                # ASR languages and translation tar
 ```
 
 #### 5.9.2 Components (`src/lib/`)
-- `backend.ts`: the `Backend` interface, with `TauriBackend` (invoke/listen) and **`MockBackend`**. `MockBackend` plays `public/demo/demo.mp4` and streams canned cues over time to simulate processing. It is selected when `!('__TAURI_INTERNALS__' in window)`, so `npm run dev` works in a normal browser for UI development and screenshots.
+- `backend.ts`: the `Backend` interface and `TauriBackend` (invoke/listen). `mock.ts`: **`MockBackend`**, which plays `public/demo/demo.mp4` and streams canned cues over time to simulate processing. It is selected when `!('__TAURI_INTERNALS__' in window)`, so `npm run dev` works in a normal browser for UI development and screenshots.
 - `stores.svelte.ts`: session state, the sorted `cues` array plus an `id → index` map, status, settings, setup status.
 - `Player.svelte`: `<video preload="auto" playsinline>` with no native controls and `object-fit: contain`. It reports the playhead to the backend at ≤4 Hz while playing and immediately on `seeked`, `pause` and `play`, plus `error` events through `report_playback_error`.
 - `SubtitleOverlay.svelte`:
@@ -765,7 +767,84 @@ Print the real-time factor and timings, and save the summary to `tests/results/<
 | **M8** | Windows | Sherpa backend (section 5.5), Windows manifest entries, the `dev.ps1` flow, encoder fallback, WebView2 caps | Section 8.3 on Windows with SAPI fixtures; section 8.4 smoke test (open, play, subtitles, export, URL); speeds recorded |
 | **M9** | Packaging (should-have) | macOS `.app`/`.dmg` (unsigned internal build) with the worker sidecar and the `mlx.metallib` layout from the translator's `build_macos_app.sh`; Windows NSIS installer via `tauri build` | The installed app runs the flows on a clean user account (models are downloaded through setup) |
 
-Stop rule: if a milestone is blocked by something outside the repo (for example, a VERIFY item proves false), record it in `docs/PROGRESS.md` with the evidence and the chosen workaround, then continue.
+Stop rule: if a milestone is blocked by something outside the repo (for example, a VERIFY item proves false), record it in `docs/PROGRESS.md` (in parallel mode, your lane's progress file) with the evidence and the chosen workaround, then continue.
+
+### 9.1 Running several agents in parallel (optional)
+
+The default is one agent working through M0–M9 in order, and it needs nothing from this section. If several coding agents are available, split the work into the five phases below. The time saved comes from phase 2; phases 1, 3 and 5 stay single-agent because they set or join the pieces everyone else builds on.
+
+```
+Phase 1  foundation + frozen contracts (1 agent)                → human merges, tag contracts-v1
+Phase 2  lanes A | B | C | D | E in parallel (up to 5 agents)    → human merges in order A, C, B, D, E
+Phase 3  integration = M5 (1 agent)                             → human merges, tag slice-v1
+Phase 4  lane F (Mac app + URLs) | lane G (Windows PC)           → human merges F, then G
+Phase 5  packaging = M9 (1 agent)
+```
+
+#### 9.1.1 Ground rules for every lane
+- **One git worktree and one branch per lane**, created from the phase's starting tag, for example:
+  `git worktree add "../Hen-Local-Player-lane-a" -b lane-a contracts-v1`
+- **Use a separate `CARGO_TARGET_DIR` per worktree**, with no spaces: `$TMPDIR/hlp-target-<lane>` on macOS, `C:\hlp-target-<lane>` on Windows. A shared target directory makes parallel builds wait on Cargo's lock and rebuild each other's changes.
+- **Edit only the paths your lane owns** (tables below). Everything else is read-only for you.
+- **Contract files are frozen during phase 2** (9.1.2 lists them). If you need a contract change, don't make it. Write a "Contract change request" (what, why, which lanes it affects) at the top of your progress file, and continue with a local workaround such as a private adapter. The human or the phase 3 agent applies approved changes on `main`, and other lanes rebase.
+- **No new dependencies in phase 2.** Phase 1 declares all of them. If one is truly missing, file a change request instead of editing `Cargo.toml` or `Cargo.lock`.
+- **Build only your own crates** with `-p`, never `--workspace`. Only lane D builds `hlp-asr-worker`, and therefore MLX.
+- **Don't modify `~/.OminiX`.** Other lanes read models from it. Lane C runs download tests under a temporary root via `HLP_OMINIX_ROOT`.
+- **Only lane D runs model inference in phase 2**, so agents don't compete for the GPU. In phases 3 and 4, run model-heavy tests one at a time.
+- **Progress files:** each lane writes only `docs/progress/<lane>.md` (acceptance checkboxes, evidence, change requests, blockers). The phase 1 and phase 3 agents own `docs/PROGRESS.md`, which links to the lane files.
+- **Before handing back:** rebase on `main`, run your lane's tests, run `cargo check -p hlp-core -p hlp-media -p hlp-models -p hlp-pipeline -p hlp-cli -p henlocal-player` and `npm --prefix app/ui run check`, then stop for review. The human merges branches in the order shown above.
+
+#### 9.1.2 Phase 1: foundation and contract freeze (1 agent, branch `foundation`)
+Everything in M0, plus:
+1. **Every dependency declared up front.** `[workspace.dependencies]` lists every external crate from section 4 with versions, and each crate's `Cargo.toml` already lists the dependencies it will need (`workspace = true`). Copy `vendor/qwen3-asr-mlx` **unpatched** (section 5.4, steps 1–2), wire it into `hlp-asr-worker`, and add `sherpa-onnx` to the crates that use it, so `Cargo.lock` is complete. Commit `Cargo.lock`.
+2. **Contract files, complete and compiling.** Types, serde derives and doc comments must be final; logic bodies may be `todo!()` unless marked "implemented".
+   - `crates/hlp-core/src/types.rs`: the section 5.1.1 types plus `MediaInfo`, `AudioStream`, `VideoStream`, `PlaybackPlan`, `Caps`, `UrlInfo`, `ComponentStatus`, `SessionCommand`.
+   - `crates/hlp-core/src/asr_protocol.rs`: the section 5.5 requests and responses, **implemented**, with JSON round-trip tests (lane D and phase 3 both rely on it).
+   - `crates/hlp-core/src/events.rs`: the `PipelineEvents` trait and every payload in section 5.6.6.
+   - `crates/hlp-core/src/settings.rs`: the section 6 struct with defaults, **implemented**.
+   - `crates/hlp-core/src/pcm.rs`: `read_pcm` (section 5.2.6), **implemented** and tested, because several lanes need it.
+   - Public signatures with `todo!()` bodies in `hlp-core` (lang, prompts, asr_text, cues, subs, schedule, fingerprint), `hlp-media` (`Tools`, `probe`, `decide`, `extract_audio`, `prepare_playback`, `MediaServer`, `Downloader`), `hlp-models` (`status`, `download`, path functions) and `hlp-pipeline` (`Session::open`, `SessionHandle`, `SharedEngines`, `AsrClient`, `Translator`).
+   - `app/ui/src/lib/types.ts`: TypeScript mirrors of every UI-facing payload, using the same camelCase field names as the Rust serde output. `app/ui/src/lib/backend.ts`: the `Backend` interface and a `TauriBackend` stub. `app/ui/src/lib/mock.ts`: a `MockBackend` skeleton.
+   - `crates/hlp-cli/src/main.rs` with clap dispatch to one stub file per subcommand (`cmd/probe.rs`, `cmd/setup.rs`, `cmd/status.rs`, `cmd/subtitle.rs`, `cmd/langs.rs`), so no two lanes edit the same CLI file.
+3. **Test media:** a working `scripts/make_test_media.sh` (section 8.2), including `app/ui/public/demo/demo.mp4`, so every lane has fixtures from the start.
+4. **Docs:** `docs/ARCHITECTURE.md` summarizing the contracts, and `docs/progress/{a-core,b-media,c-models,d-asr,e-ui}.md`, each starting with its lane's "done when" checklist from 9.1.3.
+
+Exit criteria: M0 acceptance passes; the `cargo check` command from 9.1.1 passes; `cargo build -p hlp-asr-worker` succeeds on macOS (this builds MLX once); the protocol, settings and PCM tests pass. Then merge to `main` and tag `contracts-v1`.
+
+#### 9.1.3 Phase 2: parallel lanes (each branches from `contracts-v1`)
+
+| Lane | Work | Owns (may edit) | Done when |
+| --- | --- | --- | --- |
+| **A: core** | M1: fill in every `hlp-core` body from section 5.1 | `crates/hlp-core/**`: may fill bodies and add private items, but may not change public signatures or the contract files | Section 8.1 `hlp-core` tests pass |
+| **B: media** | M2, plus the downloader backend from section 5.2.8 (no UI) | `crates/hlp-media/**`, `crates/hlp-cli/src/cmd/probe.rs` | M2 acceptance passes, and the downloader unit tests (progress parser, cancel cleanup) pass. Until lane C's managed installs exist, use the `HLP_FFMPEG`, `HLP_FFPROBE`, `HLP_YTDLP` and `HLP_DENO` overrides |
+| **C: models** | M3 | `crates/hlp-models/**`, `crates/hlp-cli/src/cmd/{setup,status}.rs` | M3 acceptance passes, with download tests under `HLP_OMINIX_ROOT=<temp dir>`; checks against the real `~/.OminiX` are read-only |
+| **D: ASR** | M4: patch the vendored crate (section 5.4, steps 3–5), build the macOS worker and `AsrClient` | `vendor/qwen3-asr-mlx/**`, `crates/hlp-asr-worker/**`, `crates/hlp-pipeline/src/asr_client.rs` | M4 acceptance passes, using the models already in `~/.OminiX/models` |
+| **E: UI** (optional) | The UI half of M6 against `MockBackend` only: every component in section 5.9, shortcuts, the fullscreen class, i18n | `app/ui/**` except `types.ts` and `backend.ts` | `npm run dev` in an ordinary browser shows the section 8.4 states with mock data; `npm run check` passes; screenshots are in `docs/screenshots/mock/` |
+
+Merge order at the end of phase 2 is **A, C, B, D, E**, each rebased on the previous merge. A goes first because the other lanes' code starts calling real `hlp-core` logic once it lands.
+
+#### 9.1.4 Phase 3: integration (1 agent, branch `integration`)
+M5: the rest of `hlp-pipeline`, plus `cmd/subtitle.rs` and `cmd/langs.rs`. This agent may edit any crate to fix integration problems, applies any approved contract change requests, and owns `docs/PROGRESS.md`. Exit: section 8.3 passes on macOS. Then merge and tag `slice-v1`.
+
+#### 9.1.5 Phase 4: two lanes (each branches from `slice-v1`)
+
+| Lane | Work | Owns (may edit) | Done when |
+| --- | --- | --- | --- |
+| **F: app** (Mac) | The rest of M6: the Tauri backend (section 5.8), the real `TauriBackend`, pre-warm, setup screen and export wiring. Then M7: the URL dialog, lazy yt-dlp and Deno setup, and "Update yt-dlp" | `app/**`, `crates/hlp-media/src/download*.rs` | M6 and M7 acceptance pass |
+| **G: Windows** (Windows PC) | The M8 engine work: the sherpa backend in the worker, Windows manifest entries, `dev.ps1`, `make_test_media.ps1`, `e2e.ps1`, the encoder fallback chain | `crates/hlp-asr-worker/src/backend/windows.rs`, Windows-only (`#[cfg(windows)]`) code in other crates, `scripts/*.ps1` | Section 8.3 passes on Windows. After F merges, rebase and run the section 8.4 smoke test on Windows |
+
+Merge F first, then G. Keep G's fixes to shared code (for example `CREATE_NO_WINDOW` in `hlp-media`) inside `#[cfg(windows)]` blocks so they don't conflict with F.
+
+#### 9.1.6 Phase 5: packaging (1 agent)
+M9 on `main`, after F and G are merged.
+
+#### 9.1.7 Kickoff message for each lane agent
+```text
+Read PLAN.md, especially sections 0 and 9.1. You are lane <X> (<name>) in phase <N>.
+Work in the worktree <path> on branch <branch>, with CARGO_TARGET_DIR=<dir>.
+Edit only the paths your lane owns. Don't change contract files or dependencies; if you need to, write a contract change request in docs/progress/<lane>.md instead.
+Record acceptance evidence in docs/progress/<lane>.md. When your "done when" checks pass, rebase on main, run the pre-merge checks in 9.1.1, and stop for review.
+```
 
 ---
 
