@@ -44,17 +44,19 @@ Lead built the macOS 14 native libraries from verified sources, reran worker uni
 
 ### M5 · Pipeline and CLI
 
-The real local pipeline and headless exports are integrated. The first eight fixtures passed every applicable §8.3 check in an isolated cache, including the Korean centre-channel and English audio-only files. Japanese produced six bilingual cues with 2.86% normalized character error, 37 ms maximum onset error and a 0.14 s cached run with zero model requests. The 20-minute run is in progress.
+On 2026-11-23, `bash scripts/e2e.sh` passed all nine fixtures on the M4 Pro using installed local models. Normalized character error ranged from 0% to 2.86%. The largest onset error was 216 ms. The 20-minute file produced 359 cues in 109.8 seconds and reopened in 0.529 seconds. Every second run reported zero ASR and translation requests. [Machine-readable results](../tests/results/2026-11-23-darwin.json).
 
-- [ ] Detected languages match truth.
-- [ ] Normalized character error rate ≤ 15%.
-- [ ] Every truth onset has a cue within 600 ms.
-- [ ] Cue intervals are positive and non-overlapping.
-- [ ] Translations present and same-language translation skipped.
-- [ ] SRT, VTT and ASS parse.
-- [ ] Music yields zero cues.
-- [ ] Cached runs finish within two seconds.
-- [ ] Direct, Remux and Transcode plans match fixture expectations.
+The six-package Rust check, Svelte check, core, media, installer and pipeline tests passed. Dedicated regressions cover stale source overrides, a split language vote and safe cache eviction. The CLI returned exit 2 for missing setup, 3 for a missing file, and 4 for an unavailable worker. All 45 languages appeared in `hlp-cli langs`.
+
+- [x] Detected languages match truth.
+- [x] Normalized character error rate ≤ 15%.
+- [x] Every truth onset has a cue within 600 ms.
+- [x] Cue intervals are positive and non-overlapping.
+- [x] Translations present and same-language translation skipped.
+- [x] SRT, VTT and ASS parse.
+- [x] Music yields zero cues.
+- [x] Cached runs finish within two seconds.
+- [x] Direct, Remux and Transcode plans match fixture expectations.
 
 ### M6 · Desktop player
 
