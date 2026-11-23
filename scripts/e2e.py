@@ -185,7 +185,13 @@ def main():
     parser.add_argument("fixtures", nargs="*")
     args = parser.parse_args()
     date = datetime.date.today().isoformat()
-    result_file = ROOT / "tests/results" / f"{date}-{platform.system().lower()}.json"
+    report = f"{date}-{platform.system().lower()}"
+    if args.fixtures:
+        unknown = set(args.fixtures) - MEDIA.keys()
+        if unknown:
+            parser.error("Unknown fixtures: " + ", ".join(sorted(unknown)))
+        report += "-" + "-".join(args.fixtures)
+    result_file = ROOT / "tests/results" / f"{report}.json"
     result_file.parent.mkdir(parents=True, exist_ok=True)
     results = {}
     with tempfile.TemporaryDirectory(prefix="hlp-e2e-") as td:
