@@ -20,9 +20,11 @@ Evidence on Apple Silicon, 2026-11-23. `cargo test -p hlp-core` passed 3 foundat
 
 ### M2 · Media
 
-- [ ] Probe and playback decisions match the fixtures.
-- [ ] Ten-minute extraction meets the sample-count tolerance.
-- [ ] Byte ranges, download progress and cancellation tests pass.
+- [x] Probe and playback decisions match the fixtures.
+- [x] Ten-minute extraction meets the sample-count tolerance.
+- [x] Byte ranges, download progress and cancellation tests pass.
+
+Lead reran the shared checks, seven regular media tests and both fixture-backed tests after rebasing B on C. The 600-second extraction produced exactly 9,600,000 samples. Both prepared videos parsed and the loopback yt-dlp download matched the original. [Lane B evidence](progress/b-media.md).
 
 ### M3 · Models and setup
 
