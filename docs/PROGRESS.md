@@ -26,9 +26,11 @@ Evidence on Apple Silicon, 2026-11-23. `cargo test -p hlp-core` passed 3 foundat
 
 ### M3 · Models and setup
 
-- [ ] Existing ASR, GGUF and llama runtime are ready.
-- [ ] Verify managed Silero and FFmpeg installs under a temporary root.
-- [ ] Interrupted downloads resume and manifest pins pass validation.
+- [x] Existing ASR, GGUF and llama runtime are ready.
+- [x] Verify managed Silero and FFmpeg installs under a temporary root.
+- [x] Interrupted downloads resume and manifest pins pass validation.
+
+Lead verified the merged result with six offline installer tests, the shared Cargo and UI checks, and a separate temporary installation. `hlp-cli status` recognized both ASR models, the GGUF and llama.cpp. `hlp-cli setup --yes` fetched only Silero (643,854 bytes) and FFmpeg/FFprobe (57,152,216 bytes). A second status reported both Ready with URL tools still optional. [Lane C evidence](progress/c-models.md).
 
 ### M4 · ASR worker
 
