@@ -58,3 +58,7 @@ cargo check --locked --target x86_64-pc-windows-msvc -p hlp-core -p hlp-media -p
 ```
 
 A separate `cargo build --locked --target x86_64-pc-windows-msvc -p hlp-asr-worker` reached the final linker. LLD reported missing Microsoft SDK import libraries including `kernel32.lib` and missing static Microsoft runtime libraries `libcpmt.lib` and `LIBCMT.lib`. The Sherpa Windows archive explicitly requests that runtime. The cross-check verifies types, dependencies and resources. A runnable MSVC executable and installer still require those Microsoft libraries, followed by native execution.
+
+## Checks after the macOS desktop lane merged
+
+Rebased on the merged desktop player at `5efcd74`. The seven-package Windows x64 compile check above included the real Tauri commands, pre-warm, URL and player integration and passed in 2.18 s. The shared six-package macOS Cargo check passed in 1.83 s. Regular core, media, installer, pipeline and CLI tests reported 34 passed, 0 failed, 5 explicitly ignored. `cargo fmt --all --check` and `git diff --check` passed. After `npm --prefix app/ui ci`, Svelte reported 0 errors and 0 warnings and Vite built the production UI. Windows runtime, throughput and installed-app checks remain pending in the handoff.
