@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+fs2.workspace = true
 hlp-core.workspace = true
 hlp-media.workspace = true
 hlp-models.workspace = true

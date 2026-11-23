@@ -44,6 +44,8 @@ Lead built the macOS 14 native libraries from verified sources, reran worker uni
 
 ### M5 · Pipeline and CLI
 
+The real local pipeline and headless exports are integrated. The first eight fixtures passed every applicable §8.3 check in an isolated cache, including the Korean centre-channel and English audio-only files. Japanese produced six bilingual cues with 2.86% normalized character error, 37 ms maximum onset error and a 0.14 s cached run with zero model requests. The 20-minute run is in progress.
+
 - [ ] Detected languages match truth.
 - [ ] Normalized character error rate ≤ 15%.
 - [ ] Every truth onset has a cue within 600 ms.
