@@ -4,7 +4,7 @@
 - [x] Tokenizer round-trip, generation stop IDs, PCM padding and JSONL error recovery.
 - [x] Automatic restart after a deliberately killed worker.
 - [x] The native MLX libraries compile and link with the macOS 14.4 Command Line Tools SDK.
-- [ ] Post-rebase lane tests and the shared Rust/UI checks.
+- [x] Post-rebase lane tests and the shared Rust/UI checks.
 
 ## Evidence on the development Mac
 
@@ -19,3 +19,10 @@ Use the no-space lane target, `DEVELOPER_DIR=/Library/Developer/CommandLineTools
 The pinned OminiX prebuilt C++ archive targets macOS 15 and references symbols missing from the development Mac's standalone SDK 14.4. A minimal executable with a dead-stripped engine linked during M0. A worker that actually loaded the model failed to link. Rebuilding the pinned MLX 0.30.1 source at deployment target 14.0 and using the same version's official macOS 14 Metal kernels resolved it. Standalone Command Line Tools also lack the offline Metal compiler used by upstream to expand headers for runtime compilation. The helper expands those headers from the same verified source tree. The native build helper, archive pins and patch notes are under `vendor/qwen3-asr-mlx`. The helper installs once per target directory and accepts a normal Command Line Tools SDK.
 
 Lane G owns the Windows backend implementation. Its platform interface is in `crates/hlp-asr-worker/src/backend/windows.rs`.
+
+
+## Post-rebase checks
+
+Rebased on main at `77a9f5e`. `python3 vendor/qwen3-asr-mlx/tools/prepare_mlx.py` built from freshly downloaded and verified inputs. Using its returned directory as `MLX_PREBUILT_PATH`, the worker built successfully. `cargo test --locked -p hlp-asr-worker` passed 2/2, the ignored tokenizer/EOS test passed 1/1, and the ignored kill/restart/recognition test passed 1/1 in 4.44 seconds.
+
+`cargo check --locked -p hlp-core -p hlp-media -p hlp-models -p hlp-pipeline -p hlp-cli -p henlocal-player` passed. `npm --prefix app/ui ci` and `npm --prefix app/ui run check` succeeded with zero Svelte errors or warnings. The macOS 14 deployment target and matching kernels were verified on this development Mac running macOS 27. An actual Sonoma device has not been exercised.
