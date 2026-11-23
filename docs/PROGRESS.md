@@ -62,7 +62,9 @@ On the long fixture, ASR processed speech at 6.0× real time in the developer bu
 
 Phase 4 started from `slice-v1` (`3e7522d`). Lane F owns the native desktop and URL work in `codex/lane-f`. Lane G owns the Windows port in `codex/lane-g`. Both use independent worktrees and build directories.
 
-Mock UI reviewed and merged after D. The six-package check, Svelte check and production build passed on the merged tree. Eight screenshots and three browser smoke runs cover the mock flows. Native acceptance remains below. [Lane E evidence](progress/e-ui.md).
+Mock UI reviewed and merged after D. The six-package check, Svelte check and production build passed on the merged tree. Eight screenshots and three browser smoke runs cover the mock flows. Native acceptance is tracked below. [Lane E evidence](progress/e-ui.md).
+
+Lane F measured a real external AppKit file drop in WKWebView. The file opened at 199 ms and the video emitted `playing` at 287 ms. The lead visually verified the real bilingual overlay and highlighted transcript in the native capture. Full acceptance and screenshot paths follow lane review.
 
 - [ ] Empty state shows the drop zone and the recent list. Dropping a file plays it within 1 s (Direct).
 - [ ] The language badge shows "Japanese 9x %" within 15 s, and subtitles appear and stay in sync during playback.
