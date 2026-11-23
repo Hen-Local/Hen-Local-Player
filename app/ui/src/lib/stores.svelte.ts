@@ -220,6 +220,11 @@ class PlayerState {
         )
       }),
       this.listen('download://progress', (e) => (this.download = e)),
+      this.listen('app://menu', (action) => {
+        if (this.dialog) return
+        if (action === 'open') void this.choose()
+        else if (action === 'url' || this.media) this.dialog = action
+      }),
       this.listen('app://error', (e) => {
         if (!e.sessionId || this.own(e.sessionId)) this.message(e.message)
       }),

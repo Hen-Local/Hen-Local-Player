@@ -35,6 +35,7 @@
     error = ''
     try {
       await backend.call('start_setup', { includeUrlTools: include, ids })
+      p.components = await backend.call('get_setup_status')
     } catch (e) {
       error = String(e)
     } finally {
