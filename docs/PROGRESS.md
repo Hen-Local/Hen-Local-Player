@@ -64,33 +64,33 @@ Phase 4 started from `slice-v1` (`3e7522d`). Lane F owns the native desktop and 
 
 Mock UI reviewed and merged after D. The six-package check, Svelte check and production build passed on the merged tree. Eight screenshots and three browser smoke runs cover the mock flows. Native acceptance is tracked below. [Lane E evidence](progress/e-ui.md).
 
-Lane F measured a real external AppKit file drop in WKWebView. The file opened at 199 ms and the video emitted `playing` at 287 ms. The lead visually verified the real bilingual overlay and highlighted transcript in the native capture. Full acceptance and screenshot paths follow lane review.
+Lead reviewed the native implementation and reran the shared Rust check, Svelte check, production build and media tests. A real external file drop started playback in 287 ms. The Japanese badge reached 100% in 1.194 s. At 15:00 the long fixture displayed a new subtitle in 1.32 s. A separate app process restored six cached cues in 146 ms. On a cold French remux, playback started at 215 ms and the first cue arrived at 1.747 s. With the playable evicted and the transcript retained, the player restored all six cues before playback at 188 ms. [Native checks](progress/f-app.md) · [Screenshots](screenshots/native/).
 
-- [ ] Empty state shows the drop zone and the recent list. Dropping a file plays it within 1 s (Direct).
-- [ ] The language badge shows "Japanese 9x %" within 15 s, and subtitles appear and stay in sync during playback.
-- [ ] Original / Translation / Both / Off switch instantly. Changing the target to English shows "translating…" coverage, then English text.
-- [ ] Seeking to 15:00 in `fixture_long_en.mp4` shows subtitles there within 5 s, and the coverage bar shows processing has moved there.
-- [ ] `fixture_fr.mkv` shows "Preparing video…" progress, then plays with subtitles already available.
-- [ ] Fullscreen keeps the subtitles and controls; `Esc` exits; subtitle size scales.
-- [ ] Clicking a transcript row seeks; `,` and `.` jump between lines; auto-scroll follows.
-- [ ] Export writes SRT, VTT and ASS next to the video, and they load in QuickTime/IINA/VLC (any player available).
-- [ ] Overriding the spoken language to the wrong one and back re-transcribes (stale text is replaced).
-- [ ] Quitting and reopening the same file restores the subtitles instantly.
-- [ ] Setup screen: rename `~/.OminiX/models/silero-vad`, restart, and the app asks for that one download only.
-- [ ] Killing `hlp-asr-worker` mid-session: the app restarts it and processing continues.
-- [ ] Main-state screenshots recorded.
+- [x] Empty state shows the drop zone and the recent list. Dropping a file plays it within 1 s (Direct).
+- [x] The language badge shows "Japanese 9x %" within 15 s, and subtitles appear and stay in sync during playback.
+- [x] Original / Translation / Both / Off switch instantly. Changing the target to English shows "translating…" coverage, then English text.
+- [x] Seeking to 15:00 in `fixture_long_en.mp4` shows subtitles there within 5 s, and the coverage bar shows processing has moved there.
+- [x] `fixture_fr.mkv` shows "Preparing video…" progress, then plays with subtitles already available.
+- [x] Fullscreen keeps the subtitles and controls; `Esc` exits; subtitle size scales.
+- [x] Clicking a transcript row seeks; `,` and `.` jump between lines; auto-scroll follows.
+- [x] Export writes SRT, VTT and ASS next to the video, and they load in QuickTime/IINA/VLC (any player available).
+- [x] Overriding the spoken language to the wrong one and back re-transcribes (stale text is replaced).
+- [x] Quitting and reopening the same file restores the subtitles instantly.
+- [x] Setup screen: rename `~/.OminiX/models/silero-vad`, restart, and the app asks for that one download only.
+- [x] Killing `hlp-asr-worker` mid-session: the app restarts it and processing continues.
+- [x] Main-state screenshots recorded.
 
 ### M7 · URL downloads
 
 - [x] Wikimedia or Internet Archive download plays with subtitles.
 - [x] User-supplied YouTube URL downloads, plays and receives subtitles.
-- [ ] Cancel removes partial downloads.
+- [x] Cancel removes partial downloads. The real UI cancelled a throttled transfer after 3,072 bytes and the destination contained no partial files.
 
 In native WKWebView, the Internet Archive direct video produced 32 bilingual cues. The user-supplied YouTube video `EpJj0qAE0Hg` delivered 322 progress events and played at 1920 pixels wide with detected English and a visible Chinese translation. The Commons test host returned HTTP 429, so the accepted direct-file check used Internet Archive.
 
 ### M8 · Windows
 
-Lane G on `codex/lane-g` passed `cargo check --target x86_64-pc-windows-msvc -p hlp-core -p hlp-asr-worker` using the real Sherpa archive. The PowerShell generator produced nine ffprobe-verified files on the Mac using recorded English audio in place of SAPI. A portable LLVM-MinGW toolchain then supplied real C headers and COFF tools, and the full seven-package Windows-target compile check passed. The lead independently reproduced it. Final Windows linking and execution still require a native Microsoft runtime/toolchain. The lead independently reran the Windows worker cross-check and prepared a self-contained Git bundle under `dist/`. The user confirmed that no Windows PC is available. The same Sherpa backend transcribed a 2.547 s English clip on the Mac CPU in 0.339 s. The native Windows items below are pending.
+All seven packages, including the real desktop and worker, passed `cargo check --target x86_64-pc-windows-msvc` using the production Sherpa archive and portable LLVM tools. The same Sherpa implementation transcribed 2.547 s of English on the Mac CPU in 0.339 s. The PowerShell media generator produced all nine ffprobe-verified files with recorded English standing in for SAPI. A final worker link on macOS identified missing Microsoft SDK and static runtime libraries. The user confirmed no Windows PC is available. The native checks below remain open. [Windows evidence and handoff](progress/g-windows.md).
 
 - [ ] SAPI fixture E2E passes on Windows.
 - [ ] Desktop smoke test passes.
@@ -98,9 +98,11 @@ Lane G on `codex/lane-g` passed `cargo check --target x86_64-pc-windows-msvc -p 
 
 ### M9 · Packaging
 
-- [ ] Unsigned macOS app and DMG include the worker and Metal library.
+- [x] Internal macOS app and DMG include the worker and Metal library. `bash scripts/build_macos_app.sh` built both arm64 executables with a 14.0 minimum deployment target. `codesign --verify --deep --strict` and `hdiutil verify` passed. Both executables link only to system libraries. The 62,814,640-byte DMG has SHA-256 `b5ec79c6ab2ca06ca8b45d53cdab8f18eba3485577b5885732f0723769b5c1be`.
 - [ ] Installed app completes setup and playback on a clean account.
-- [ ] NSIS installer passes on Windows.
+- [ ] NSIS installer passes on Windows. The x64 packaging script passed PowerShell parsing. A manual Windows-hosted workflow builds and uploads the installer and can run the SAPI fixture matrix. No native Windows run has been observed.
+
+The lead mounted the DMG read-only, copied the app to a separate Applications folder, detached the image, and launched that copy with an empty preferences, model and media profile. The first-launch dialog offered 3.67 GB. Setup is downloading the pinned components through the installed app.
 
 ## Lane reports
 
@@ -109,3 +111,5 @@ Lane G on `codex/lane-g` passed `cargo check --target x86_64-pc-windows-msvc -p 
 - [c-models](progress/c-models.md)
 - [d-asr](progress/d-asr.md)
 - [e-ui](progress/e-ui.md)
+- [f-app](progress/f-app.md)
+- [g-windows](progress/g-windows.md)

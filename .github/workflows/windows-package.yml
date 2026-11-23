@@ -1,0 +1,59 @@
+name: Windows installer and fixtures
+on:
+  workflow_dispatch:
+    inputs:
+      test_speech:
+        description: Generate SAPI fixtures and run the local models on the Windows runner
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TARGET_DIR: 'C:\hlp-target'
+
+jobs:
+  installer:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build the x64 installer
+        shell: powershell
+        run: .\scripts\build_windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Hen-Local-Player-Windows-x64
+          path: dist/*-windows-x64-setup.exe
+          if-no-files-found: error
+
+  speech:
+    if: inputs.test_speech
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Set up speech models and generate the SAPI fixture set
+        shell: powershell
+        run: |
+          cargo build --locked -p hlp-cli -p hlp-asr-worker
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & "$env:CARGO_TARGET_DIR\debug\hlp-cli.exe" setup --yes
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          .\scripts\make_test_media.ps1
+      - name: Run the fixture oracle
+        shell: powershell
+        run: .\scripts\e2e.ps1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Windows-speech-results
+          path: tests/results/*-windows.json
+          if-no-files-found: warn
