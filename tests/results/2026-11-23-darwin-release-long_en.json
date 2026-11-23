@@ -1,0 +1,46 @@
+{
+  "long_en": {
+    "checks": {
+      "language": true,
+      "characterErrorRate": true,
+      "onsets": true,
+      "positiveNonoverlapping": true,
+      "translation": true,
+      "music": true,
+      "cache": true,
+      "playbackPlan": true,
+      "exports": true
+    },
+    "wallSeconds": 68.4,
+    "cachedSeconds": 0.047,
+    "cer": 0.0156,
+    "maxOnsetErrorMs": 94,
+    "cues": 359,
+    "summary": {
+      "asrRequests": 359,
+      "asrRtf": 9.555159568786621,
+      "confidence": 1.0,
+      "detected": "en",
+      "done": 359,
+      "event": "summary",
+      "failed": 0,
+      "msPerTranslation": 113.05292510986328,
+      "noSpeech": 0,
+      "outputs": [
+        "fixture_long_en.en.srt",
+        "fixture_long_en.zh.srt",
+        "fixture_long_en.en-zh.srt",
+        "fixture_long_en.en.vtt",
+        "fixture_long_en.zh.vtt",
+        "fixture_long_en.en-zh.vtt",
+        "fixture_long_en.en.ass",
+        "fixture_long_en.zh.ass",
+        "fixture_long_en.en-zh.ass"
+      ],
+      "translated": 359,
+      "translationRequests": 359,
+      "utterances": 359,
+      "wallSeconds": 68.314194208
+    }
+  }
+}

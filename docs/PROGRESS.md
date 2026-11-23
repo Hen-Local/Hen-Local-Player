@@ -102,6 +102,8 @@ All seven packages, including the real desktop and worker, passed `cargo check -
 - [ ] Installed app completes setup and playback on a clean account.
 - [ ] NSIS installer passes on Windows. The x64 packaging script passed PowerShell parsing. A manual Windows-hosted workflow builds and uploads the installer and can run the SAPI fixture matrix. No native Windows run has been observed.
 
+An independent release CLI run used the exact sidecar in the installed app while macOS denied off-machine connections and access to the developer build directory. On the 20-minute fixture, all nine checks passed with 359 cues in 68.4 s, a 94 ms maximum onset error and a 47 ms cached reopen. ASR reached 9.56× real time, below the 15× performance goal. Mean translation latency was 113 ms per utterance. [Release offline measurements](../tests/results/2026-11-23-darwin-release-long_en.json).
+
 The lead mounted the DMG read-only, copied the app to a separate Applications folder, detached the image, and launched that copy with an empty preferences, model and media profile. The first-launch dialog offered 3.67 GB. Setup is downloading the pinned components through the installed app.
 
 ## Lane reports
