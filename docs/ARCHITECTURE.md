@@ -21,3 +21,11 @@ The pinned upstream MLX release includes libmlx.a, libmlxc.a, libgguflib.a and m
 - FFprobe shares one container name for WebM and Matroska. The EBML DocType distinguishes them. Timestamp-aware 16 kHz resampling keeps PCM aligned across discontinuous AAC packets. The Range server supplements ServeFile with If-Range validation.
 - Some existing tokenizer.json files discard the ASR delimiter during skip-special decoding. The worker rebuilds the tokenizer in memory from the original pinned vocabulary, merges and token configuration. Real automatic inference returns the expected language header.
 - Native objects and Metal kernels in the upstream prebuilt archive target macOS 15. The developer and packaging scripts build MLX 0.30.1 for macOS 14, with SHA-verified kernels from the corresponding official wheel. The build and fixture recognition passed on the development Mac using the standalone macOS 14.4 SDK. A Sonoma hardware run is outstanding. [Native patch notes](../vendor/qwen3-asr-mlx/PATCHES.md).
+
+## Session and cache
+
+The CLI and player use the same session task. A bounded 64-frame channel connects FFmpeg extraction and the Silero thread. Each audio track has its own PCM file, VAD segments, transcript and translations. A file lock protects an open project from competing writers and cache eviction. Session shutdown joins outstanding media work before releasing the lock.
+
+A saved transcript records the model, VAD hash and source-language mode. Changing a forced language on macOS queues the affected rows and retains their text as stale until recognition finishes. An automatic language probe without a majority at six eligible utterances waits for twelve. Cache hits publish the restored cues with the opening event and require no engine requests.
+
+The fixture oracle decodes subtitle streams explicitly with FFmpeg's WebVTT encoder. FFmpeg's null muxer has no default subtitle codec and reports “Output file does not contain any stream” for a valid subtitle-only input.

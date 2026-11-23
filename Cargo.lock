@@ -2308,6 +2308,7 @@ dependencies = [
  "anyhow",
  "crossbeam-channel",
  "dirs 5.0.1",
+ "fs2",
  "hex",
  "hlp-core",
  "hlp-media",
