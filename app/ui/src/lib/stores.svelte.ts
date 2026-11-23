@@ -1,6 +1,9 @@
 import { TauriBackend, type Backend, type Events } from './backend'
 import { MockBackend } from './mock'
+import { ResumeHistory } from './resume'
+import { subtitleTracks } from './subtitle-tracks.svelte'
 import { defaults } from './defaults'
+import { getCurrentWindow } from '@tauri-apps/api/window'
 import { capMimes } from './format'
 import en from './i18n/en'
 import zh from './i18n/zh'
@@ -51,7 +54,17 @@ class PlayerState {
   track = $state(0)
   error = $state('')
   notice = $state('')
-  video: HTMLVideoElement | null = null
+  video = $state.raw<HTMLVideoElement | null>(null)
+  videoFit = $state<'contain' | 'cover'>('contain')
+  queue = $state<{ path: string; title: string }[]>([])
+  currentPath = $state('')
+  queueIndex = $derived(this.queue.findIndex((item) => item.path === this.currentPath))
+  repeat = $state<'off' | 'all' | 'one'>('off')
+  private positions = new ResumeHistory()
+  private fileOperations = Promise.resolve()
+  private switchPosition: { path: string; ms: number; playing: boolean } | null = null
+  private lastSave = 0
+  private lastVolume = 0.85
   info = $state({ version: '', logDir: '', cacheBytes: 0 })
   locale = $derived<'zh' | 'en'>(
     (this.settings.uiLanguage === 'system'
@@ -93,14 +106,140 @@ class PlayerState {
   async update(patch: Partial<Settings>) {
     this.settings = await backend.call('update_settings', { patch })
   }
-  async open(path: string) {
-    await this.act(() => backend.call('open_media', { path }))
+  private queueItems(paths: string[]) {
+    return [...new Set(paths.filter(Boolean))].map((path) => ({
+      path,
+      title: path.split(/[\\/]/).pop() || path,
+    }))
+  }
+  private fileOperation(operation: () => Promise<void>) {
+    // File opens replace a native session. Keep picker, Finder and playlist
+    // operations in arrival order even when probing a slow file.
+    this.fileOperations = this.fileOperations.then(() => this.act(operation))
+    return this.fileOperations
+  }
+  async openPaths(paths: string[]) {
+    const items = this.queueItems(paths)
+    if (!items.length) return
+    await this.fileOperation(async () => {
+      this.remember(true)
+      const previous = this.queue
+      this.queue = items
+      try {
+        await backend.call('open_media', { path: items[0].path })
+      } catch (error) {
+        this.queue = previous
+        throw error
+      }
+    })
+  }
+  open(path: string) {
+    const index = this.queue.findIndex((item) => item.path === path)
+    return index < 0 ? this.openPaths([path]) : this.openQueueIndex(index)
   }
   async choose() {
+    await this.act(async () => this.openPaths(await backend.openFiles()))
+  }
+  async chooseFolder() {
+    await this.act(async () => this.openPaths(await backend.openFolder()))
+  }
+  async addToQueue() {
     await this.act(async () => {
-      const path = await backend.openFile()
-      if (path) await this.open(path)
+      const paths = await backend.openFiles()
+      if (!this.media) return this.openPaths(paths)
+      this.queue.push(
+        ...this.queueItems(paths).filter((item) => !this.queue.some((q) => q.path === item.path)),
+      )
     })
+  }
+  async openQueueIndex(index: number) {
+    const item = this.queue[index]
+    if (!item) return
+    await this.fileOperation(async () => {
+      this.remember(true)
+      await backend.call('open_media', { path: item.path })
+    })
+  }
+  async removeQueueItem(index: number) {
+    const item = this.queue[index]
+    if (!item) return
+    if (item.path === this.currentPath) {
+      if (this.queue.length === 1) return this.close()
+      const replacement = this.queue[index + 1] ?? this.queue[index - 1]
+      await this.fileOperation(async () => {
+        this.remember(true)
+        await backend.call('open_media', { path: replacement.path })
+        this.queue = this.queue.filter((entry) => entry.path !== item.path)
+      })
+    } else this.queue = this.queue.filter((entry) => entry.path !== item.path)
+  }
+  next() {
+    const index = this.queueIndex + 1
+    if (index < this.queue.length) return this.openQueueIndex(index)
+    if (this.repeat === 'all' && this.queue.length) return this.openQueueIndex(0)
+  }
+  previous() {
+    if (this.queueIndex > 0) return this.openQueueIndex(this.queueIndex - 1)
+    if (this.repeat === 'all' && this.queue.length > 1)
+      return this.openQueueIndex(this.queue.length - 1)
+    this.seek(0)
+  }
+  toggleRepeat() {
+    this.repeat = this.repeat === 'off' ? 'all' : this.repeat === 'all' ? 'one' : 'off'
+  }
+  ended() {
+    this.remember(true)
+    if (this.repeat === 'one' || (this.repeat === 'all' && this.queue.length === 1)) {
+      this.seek(0)
+      void this.video?.play().catch((error) => this.message(error))
+    } else void this.next()
+  }
+  close() {
+    return this.fileOperation(async () => {
+      this.remember(true)
+      await backend.call('close_media')
+      this.video?.pause()
+      this.media = null
+      this.prep = this.status = this.language = null
+      this.queue = []
+      this.currentPath = ''
+      this.switchPosition = null
+      this.queued = null
+      if (this.fullscreen) await this.full(false)
+      this.ms = this.duration = 0
+      this.playing = false
+      this.replace([])
+    })
+  }
+  resumePosition(path: string) {
+    return this.positions.get(path)
+  }
+  remember(force = false) {
+    const video = this.video
+    if (!video || video.readyState < 1 || video.dataset.session !== this.media?.sessionId) return
+    const now = Date.now()
+    if (!force && now - this.lastSave < 4000) return
+    this.lastSave = now
+    this.positions.save(this.currentPath, video.currentTime * 1000, video.duration * 1000)
+  }
+  restoreVideo(video: HTMLVideoElement) {
+    const pending = this.switchPosition?.path === this.currentPath ? this.switchPosition : null
+    this.switchPosition = null
+    const ms = pending?.ms ?? this.resumePosition(this.currentPath)
+    if (ms > 0 && ms < video.duration * 1000) video.currentTime = ms / 1000
+    if (pending?.playing !== false)
+      void video.play().catch(() => {
+        this.playing = false
+      })
+  }
+  skip(deltaMs: number) {
+    this.seek((this.video ? this.video.currentTime * 1000 : this.ms) + deltaMs)
+  }
+  mute() {
+    if (this.volume) {
+      this.lastVolume = this.volume
+      this.volume = 0
+    } else this.volume = this.lastVolume
   }
   async setSource(code: string) {
     await backend.call('set_source_language', { modeOrCode: code })
@@ -111,8 +250,15 @@ class PlayerState {
     this.settings = { ...this.settings, targetLanguage: code }
   }
   async setTrack(order: number) {
-    await backend.call('select_audio_track', { order })
-    this.track = order
+    if (order === this.track) return
+    this.switchPosition = { path: this.currentPath, ms: this.ms, playing: this.playing }
+    try {
+      await backend.call('select_audio_track', { order })
+      this.track = order
+    } catch (error) {
+      this.switchPosition = null
+      throw error
+    }
   }
   seek(ms: number) {
     if (this.video) {
@@ -121,11 +267,12 @@ class PlayerState {
     }
   }
   jump(dir: number) {
-    let i =
+    const cues = subtitleTracks.authored?.cues ?? this.cues
+    const index =
       dir < 0
-        ? this.cues.map((c) => c.startMs < this.ms - 150).lastIndexOf(true)
-        : this.cues.findIndex((c) => c.startMs > this.ms + 150)
-    if (i >= 0) this.seek(this.cues[i].startMs)
+        ? cues.map((cue) => cue.startMs < this.ms - 150).lastIndexOf(true)
+        : cues.findIndex((cue) => cue.startMs > this.ms + 150)
+    if (index >= 0) this.seek(cues[index].startMs)
   }
   toggle() {
     if (this.video) {
@@ -138,10 +285,7 @@ class PlayerState {
     this.fullscreen = value
   }
   cycle() {
-    return this.update({
-      subtitleMode:
-        modes[(modes.indexOf(this.settings.subtitleMode as (typeof modes)[number]) + 1) % 4],
-    })
+    return subtitleTracks.cycle()
   }
   scale(delta: number) {
     return this.update({
@@ -169,7 +313,16 @@ class PlayerState {
   async init() {
     this.disposed = false
     await Promise.all([
+      this.listen('app://open-files', (paths) => {
+        void this.openPaths(paths)
+      }),
       this.listen('media://opened', (e) => {
+        this.remember(true)
+        const path = e.sourcePath
+        if (path && !this.queue.some((item) => item.path === path))
+          this.queue.push({ path, title: e.title })
+        this.currentPath = path || ''
+        this.playing = false
         this.media = e
         this.prep = null
         this.status = null
@@ -222,19 +375,102 @@ class PlayerState {
       this.listen('download://progress', (e) => (this.download = e)),
       this.listen('app://menu', (action) => {
         if (this.dialog) return
-        if (action === 'open') void this.choose()
-        else if (action === 'url' || this.media) this.dialog = action
+        switch (action) {
+          case 'open':
+            void this.choose()
+            break
+          case 'open-folder':
+            void this.chooseFolder()
+            break
+          case 'close-media':
+            void this.close()
+            break
+          case 'url':
+            this.dialog = 'url'
+            break
+          case 'settings':
+            this.dialog = 'settings'
+            break
+          case 'export':
+            if (this.media) this.dialog = 'export'
+            break
+          case 'play-pause':
+            this.toggle()
+            break
+          case 'previous-file':
+            void this.previous()
+            break
+          case 'next-file':
+            void this.next()
+            break
+          case 'seek-backward':
+            this.skip(-10000)
+            break
+          case 'seek-forward':
+            this.skip(10000)
+            break
+          case 'volume-up':
+            this.volume = Math.min(1, this.volume + 0.05)
+            break
+          case 'volume-down':
+            this.volume = Math.max(0, this.volume - 0.05)
+            break
+          case 'audio-tracks':
+            if (this.media) window.dispatchEvent(new Event('hlp:playback-options'))
+            break
+          case 'mute':
+            this.mute()
+            break
+          case 'repeat':
+            this.toggleRepeat()
+            break
+          case 'fullscreen':
+            void this.act(() => this.full(!this.fullscreen))
+            break
+          case 'playback-options':
+          case 'subtitle-file':
+            if (this.media) window.dispatchEvent(new Event('hlp:' + action))
+            break
+          case 'transcript':
+          case 'playlist':
+            window.dispatchEvent(new CustomEvent('player:panel', { detail: action }))
+            break
+          case 'subtitles':
+            void this.act(() => this.cycle())
+            break
+        }
       }),
       this.listen('app://error', (e) => {
         if (!e.sessionId || this.own(e.sessionId)) this.message(e.message)
       }),
     ])
-    const unDrop = await backend.onDrop((path) => void this.open(path))
+    const unDrop = await backend.onDrop((paths) => void this.openPaths(paths))
     if (this.disposed) {
       unDrop()
       return
     }
     this.cleanups.push(unDrop)
+    const save = () => this.remember(true)
+    window.addEventListener('pagehide', save)
+    document.addEventListener('visibilitychange', save)
+    this.cleanups.push(() => {
+      window.removeEventListener('pagehide', save)
+      document.removeEventListener('visibilitychange', save)
+    })
+    if (mockMode) {
+      const reflectFullscreen = () => {
+        this.fullscreen = Boolean(document.fullscreenElement)
+      }
+      document.addEventListener('fullscreenchange', reflectFullscreen)
+      this.cleanups.push(() => document.removeEventListener('fullscreenchange', reflectFullscreen))
+    } else {
+      const win = getCurrentWindow()
+      const reflectFullscreen = async () => {
+        this.fullscreen = await win.isFullscreen()
+      }
+      this.cleanups.push(await win.onResized(() => void this.act(reflectFullscreen)))
+      await this.act(reflectFullscreen)
+    }
     const video = document.createElement('video')
     await backend.call('set_playback_capabilities', {
       caps: Object.fromEntries(capMimes.map((m) => [m, video.canPlayType(m)])),
@@ -249,20 +485,9 @@ class PlayerState {
     this.components = components
     this.recent = recent
     this.info = info
-    if (
-      components.some(
-        (c) =>
-          !c.ready &&
-          ![
-            'yt-dlp',
-            'deno',
-            settings.asrModel === 'qwen3-asr-0.6b' ? 'asr-qwen3-1.7b-mlx' : 'asr-qwen3-0.6b-mlx',
-          ].includes(c.id),
-      )
-    )
-      this.dialog = 'setup'
   }
   dispose() {
+    this.remember(true)
     this.disposed = true
     for (const fn of this.cleanups) fn()
     this.cleanups = []

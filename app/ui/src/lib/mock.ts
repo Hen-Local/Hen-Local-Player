@@ -10,6 +10,7 @@ import type {
 } from './types'
 import { defaults } from './defaults'
 import { languages } from './languages'
+import mediaExtensions from '../../../media-formats.json'
 
 const demoPath = 'fixture_ja.mp4'
 const sample = [
@@ -88,27 +89,53 @@ export class MockBackend implements Backend {
     this.events.dispatchEvent(new CustomEvent(name, { detail: structuredClone(payload) }))
   }
   private file(file: File) {
-    const old = this.sources.get(file.name)
+    const path =
+      'browser:' +
+      file.size +
+      ':' +
+      file.lastModified +
+      '/' +
+      (file.webkitRelativePath || file.name)
+    const old = this.sources.get(path)
     if (old) URL.revokeObjectURL(old)
-    this.sources.set(file.name, URL.createObjectURL(file))
-    return file.name
+    this.sources.set(path, URL.createObjectURL(file))
+    return path
   }
-  async openFile(): Promise<string | null> {
+  private mediaFiles(files: FileList | null) {
+    return Array.from(files ?? []).filter(
+      (file) =>
+        /^(audio|video)\//.test(file.type) ||
+        mediaExtensions.includes(file.name.split('.').pop()?.toLowerCase() ?? ''),
+    )
+  }
+  openFiles(directory = false): Promise<string[]> {
     return new Promise((resolve) => {
       const input = document.createElement('input')
       input.type = 'file'
-      input.accept = 'video/*,audio/*,.mkv,.avi,.mov,.flv,.ts,.wmv'
-      input.onchange = () => resolve(input.files?.[0] ? this.file(input.files[0]) : null)
-      input.oncancel = () => resolve(null)
+      input.multiple = true
+      input.accept = ['video/*', 'audio/*', ...mediaExtensions.map((ext) => '.' + ext)].join(',')
+      if (directory && 'webkitdirectory' in input) input.webkitdirectory = true
+      input.onchange = () => {
+        const files = this.mediaFiles(input.files)
+        if (directory)
+          files.sort((a, b) =>
+            a.webkitRelativePath.localeCompare(b.webkitRelativePath, undefined, { numeric: true }),
+          )
+        resolve(files.map((file) => this.file(file)))
+      }
+      input.oncancel = () => resolve([])
       input.click()
     })
   }
-  async onDrop(receive: (path: string) => void) {
+  openFolder() {
+    return this.openFiles(true)
+  }
+  async onDrop(receive: (paths: string[]) => void) {
     const over = (e: DragEvent) => e.preventDefault()
     const drop = (e: DragEvent) => {
       e.preventDefault()
-      const file = e.dataTransfer?.files[0]
-      if (file) receive(this.file(file))
+      const files = this.mediaFiles(e.dataTransfer?.files ?? null)
+      if (files.length) receive(files.map((file) => this.file(file)))
     }
     window.addEventListener('dragover', over)
     window.addEventListener('drop', drop)
@@ -120,7 +147,13 @@ export class MockBackend implements Backend {
   async saveFile(path: string) {
     return path
   }
-  async fullscreen(_enabled: boolean) {}
+  async fullscreen(enabled: boolean) {
+    if (enabled && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+      // Embedded previews can deny the browser's fullscreen request. The
+      // player still expands inside its host and Escape restores the layout.
+      await document.documentElement.requestFullscreen().catch(() => {})
+    } else if (!enabled && document.fullscreenElement) await document.exitFullscreen()
+  }
   private cues(target: string): Cue[] {
     const duration = this.current?.durationMs ?? 22500
     return Array.from({ length: Math.ceil(duration / 22500) }, (_, loop) =>
@@ -227,7 +260,7 @@ export class MockBackend implements Backend {
   }
   private async duration(path: string) {
     const src = this.sources.get(path)
-    if (!src || /\.(mkv|avi)$/i.test(path)) return 22500
+    if (!src) return 22500
     return new Promise<number>((resolve) => {
       const video = document.createElement('video')
       let timer = 0
@@ -256,7 +289,13 @@ export class MockBackend implements Backend {
     const durationMs = await this.duration(path)
     if (turn !== this.generation) return
     const title = path.split(/[\\/]/).at(-1) || demoPath
-    const plan = /\.mkv$/i.test(title) ? 'remux' : /\.avi$/i.test(title) ? 'transcode' : 'direct'
+    const plan = this.sources.has(path)
+      ? 'direct'
+      : /\.mkv$/i.test(title)
+        ? 'remux'
+        : /\.avi$/i.test(title)
+          ? 'transcode'
+          : 'direct'
     const cached =
       this.cueCache.get(
         JSON.stringify([path, this.settings.sourceLanguage, this.settings.targetLanguage]),
@@ -264,6 +303,7 @@ export class MockBackend implements Backend {
     const sessionId = String(turn)
     const info: MediaOpened = {
       sessionId,
+      sourcePath: path,
       title,
       mediaUrl: plan === 'direct' ? this.sources.get(path) || '/demo/demo.mp4' : null,
       durationMs,
@@ -293,9 +333,12 @@ export class MockBackend implements Backend {
       ],
       cues: cached,
     }
+    if (this.sources.has(path)) {
+      info.language = { ...info.language, detected: null, confidence: 0, locked: false }
+      info.audioTracks = []
+      this.visibleCues.clear()
+    }
     this.current = info
-    this.emit('media://opened', info)
-    this.emit('pipeline://language', info.language)
     this.recent = [
       {
         path,
@@ -311,6 +354,9 @@ export class MockBackend implements Backend {
       'recent',
       this.recent.filter((r) => r.path === demoPath),
     )
+    this.emit('media://opened', info)
+    this.emit('pipeline://language', info.language)
+    if (this.sources.has(path)) return
     this.stream(path, cached)
     if (plan !== 'direct')
       for (const progress of [0.2, 0.6, 1]) {
@@ -360,6 +406,19 @@ export class MockBackend implements Backend {
       case 'list_recent':
         reply = [...this.recent]
         break
+      case 'get_sample_media':
+        reply = demoPath
+        break
+      case 'list_chapters':
+        reply = []
+        break
+      case 'close_media':
+        this.generation++
+        clearInterval(this.timer)
+        this.current = null
+        this.currentPath = ''
+        this.visibleCues.clear()
+        break
       case 'open_media':
         if (a && 'path' in a) await this.open(a.path)
         break
@@ -368,7 +427,7 @@ export class MockBackend implements Backend {
         if (a && 'modeOrCode' in a) this.settings.sourceLanguage = a.modeOrCode
         if (a && 'code' in a && typeof a.code === 'string') this.settings.targetLanguage = a.code
         persist('settings', this.settings)
-        if (this.current) {
+        if (this.current && !this.sources.has(this.currentPath)) {
           const s = this.current
           s.target = this.settings.targetLanguage
           s.language = {

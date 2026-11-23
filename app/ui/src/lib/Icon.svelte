@@ -21,6 +21,11 @@
     audio: 'M3 10v4m4-8v12m5-15v18m5-15v12m4-8v4',
     check: 'm4 12 5 5L20 6',
     download: 'M12 3v12m-5-5 5 5 5-5M4 17v4h16v-4',
+    'skip-back': 'M7 4L3 8l4 4M4 8h9a7 7 0 0 1 7 7',
+    'skip-forward': 'm17 4 4 4-4 4m3-4h-9a7 7 0 0 0-7 7',
+    repeat: 'M4 9a4 4 0 0 1 4-4h11l-3-3m3 3-3 3M20 15a4 4 0 0 1-4 4H5l3 3m-3-3 3-3',
+    'repeat-one': 'M4 9a4 4 0 0 1 4-4h11l-3-3m3 3-3 3M20 15a4 4 0 0 1-4 4H5l3 3m-3-3 3-3m3-5 2-1v5',
+    pip: 'M3 4h18v16H3zM11 11h8v6h-8z',
     previous: 'M5 5v14m13-14L7 12l11 7z',
     next: 'M19 5v14M6 5l11 7-11 7z',
     list: 'M4 6h16M4 12h13M4 18h9',
@@ -43,4 +48,15 @@
   aria-hidden="true"
 >
   <path d={paths[name]} />
+  {#if name === 'skip-back' || name === 'skip-forward'}
+    <text
+      x="12"
+      y="20"
+      text-anchor="middle"
+      font-size="10"
+      font-weight="600"
+      fill="currentColor"
+      stroke="none">10</text
+    >
+  {/if}
 </svg>

@@ -2,16 +2,23 @@
   import { player as p } from './stores.svelte'
   import { clock } from './format'
   import Icon from './Icon.svelte'
-  let { buffered = 0, hidden = false }: { buffered?: number; hidden?: boolean } = $props()
-  let hover = $state<number | null>(null),
-    lastVolume = 0.85
+  import { togglePiP } from './picture-in-picture'
+  let {
+    buffered = 0,
+    hidden = false,
+    pipAvailable = false,
+    pipActive = false,
+  }: {
+    buffered?: number
+    hidden?: boolean
+    pipAvailable?: boolean
+    pipActive?: boolean
+  } = $props()
+  let hover = $state<number | null>(null)
+  let repeatLabel = $derived(
+    p.t(p.repeat === 'all' ? 'repeatAll' : p.repeat === 'one' ? 'repeatOne' : 'repeatOff'),
+  )
   const pct = (ms: number) => Math.min(100, Math.max(0, (ms * 100) / (p.duration || 1)))
-  function mute() {
-    if (p.volume > 0) {
-      lastVolume = p.volume
-      p.volume = 0
-    } else p.volume = lastVolume || 0.85
-  }
 </script>
 
 <div class="controls" class:idle={hidden}>
@@ -26,7 +33,10 @@
   >
     <div class="rail">
       <i class="buffered" style:width={pct(buffered) + '%'}></i>
-      <i class="extracted" style:width={(p.status?.vadComplete ? 100 : pct(p.status?.extractedUntilMs ?? 0)) + '%'}></i>
+      <i
+        class="extracted"
+        style:width={(p.status?.vadComplete ? 100 : pct(p.status?.extractedUntilMs ?? 0)) + '%'}
+      ></i>
       {#each p.status?.asrPendingSpans ?? [] as span}<i
           class="asr-hole"
           style:left={pct(span[0]) + '%'}
@@ -58,6 +68,20 @@
   </div>
   <div class="transport">
     <button
+      class="icon queue-control"
+      title={p.t('previousFile')}
+      aria-label={p.t('previousFile')}
+      disabled={!p.media}
+      onclick={() => p.previous()}><Icon name="previous" size={16} /></button
+    >
+    <button
+      class="icon skip-control"
+      title={p.t('skipBack')}
+      aria-label={p.t('skipBack')}
+      disabled={!p.media}
+      onclick={() => p.skip(-10000)}><Icon name="skip-back" size={20} /></button
+    >
+    <button
       class="play-button icon"
       title={p.playing ? p.t('pause') : p.t('play')}
       aria-label={p.playing ? p.t('pause') : p.t('play')}
@@ -66,6 +90,20 @@
     >
       <Icon name={p.playing ? 'pause' : 'play'} size={17} />
     </button>
+    <button
+      class="icon skip-control"
+      title={p.t('skipForward')}
+      aria-label={p.t('skipForward')}
+      disabled={!p.media}
+      onclick={() => p.skip(10000)}><Icon name="skip-forward" size={20} /></button
+    >
+    <button
+      class="icon queue-control"
+      title={p.t('nextFile')}
+      aria-label={p.t('nextFile')}
+      disabled={p.queueIndex + 1 >= p.queue.length && p.repeat !== 'all'}
+      onclick={() => p.next()}><Icon name="next" size={16} /></button
+    >
     <span class="time">
       {clock(p.ms)}
       <span>/ {clock(p.duration)}</span>
@@ -74,8 +112,8 @@
     <button
       class="icon"
       title={p.volume ? p.t('mute') : p.t('unmute')}
-      aria-label={p.t('volume')}
-      onclick={mute}
+      aria-label={p.volume ? p.t('mute') : p.t('unmute')}
+      onclick={() => p.mute()}
     >
       <Icon name={p.volume ? 'volume' : 'mute'} />
     </button>
@@ -89,27 +127,45 @@
       bind:value={p.volume}
     />
     <select class="rate" aria-label={p.t('speed')} bind:value={p.rate}>
-      {#each [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as speed}<option value={speed}>
+      {#each [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4] as speed}<option value={speed}>
           {speed}×
         </option>{/each}
     </select>
-    <span class="separator"></span>
     <button
-      class="text-icon"
-      title={p.t('sizeDown')}
-      aria-label={p.t('sizeDown')}
-      onclick={() => p.act(() => p.scale(-0.1))}
+      class="icon repeat-control"
+      title={repeatLabel}
+      aria-label={repeatLabel}
+      aria-pressed={p.repeat !== 'off'}
+      onclick={() => p.toggleRepeat()}
     >
-      A−
+      <Icon name={p.repeat === 'one' ? 'repeat-one' : 'repeat'} size={17} />
     </button>
-    <button
-      class="text-icon"
-      title={p.t('sizeUp')}
-      aria-label={p.t('sizeUp')}
-      onclick={() => p.act(() => p.scale(0.1))}
-    >
-      A+
-    </button>
+    {#if p.fullscreen}
+      {#each ['subtitles', 'playlist'] as const as panel}
+        <button
+          class="icon fullscreen-panel-control"
+          title={p.t(panel)}
+          aria-label={p.t(panel)}
+          onclick={() => window.dispatchEvent(new CustomEvent('player:panel', { detail: panel }))}
+        >
+          <Icon name={panel === 'subtitles' ? 'cc' : 'list'} size={17} />
+        </button>
+      {/each}
+    {/if}
+    {#if pipAvailable}
+      <button
+        class="icon pip-control"
+        aria-label={p.t('pictureInPicture')}
+        title={p.t('pictureInPicture')}
+        aria-pressed={pipActive}
+        onclick={() =>
+          p.act(async () => {
+            if (p.video) await togglePiP(p.video)
+          })}
+      >
+        <Icon name="pip" size={17} />
+      </button>
+    {/if}
     <button
       class="icon"
       title={p.t('fullscreen')}
