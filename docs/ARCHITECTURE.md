@@ -1,0 +1,11 @@
+# Implementation contracts
+
+Rust owns the canonical camelCase wire and disk types in `hlp-core`. The UI mirrors them in `app/ui/src/lib/types.ts`. Every pipeline event carries its session ID. Times are milliseconds from the start of the media. Sample offsets always refer to mono signed little-endian 16-bit PCM at 16 kHz.
+
+One shared ASR client and one llama-server serve successive sessions. The worker protocol is line-delimited JSON with monotonically assigned request IDs. A session owns the selected file, track, playhead and cache lifetime. The desktop and CLI use the same session. The local media server issues per-registration opaque URLs and serves byte ranges.
+
+Setup is independent of player sessions. Model and tool paths use `HLP_OMINIX_ROOT` when set. Caches, settings and recently opened items live in the platform application data directory. Lane-local fixture tests read generated speech and its onset truth from `tests/fixtures`.
+
+## Build observations
+
+The pinned upstream MLX release includes libmlx.a, libmlxc.a, libgguflib.a and mlx.metallib. The translator release workflow supplies the SHA-256 for the build archive. A Command Line Tools installation can supply clang on hosts where full Xcode is unavailable. The installed Homebrew FFmpeg on the development Mac omits libvpx. The fixture generator accepts an encoder-capable FFmpeg via HLP_FFMPEG.

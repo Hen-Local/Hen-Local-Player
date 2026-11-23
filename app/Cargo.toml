@@ -1,0 +1,30 @@
+[package]
+name = "henlocal-player"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+hlp-core.workspace = true
+hlp-media.workspace = true
+hlp-models.workspace = true
+hlp-pipeline.workspace = true
+anyhow.workspace = true
+tauri.workspace = true
+tauri-plugin-dialog.workspace = true
+tauri-plugin-opener.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true
+parking_lot.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+dirs.workspace = true
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

@@ -1,0 +1,25 @@
+[package]
+name = "hlp-asr-worker"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+hlp-core.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap.workspace = true
+tracing.workspace = true
+dirs.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+qwen3-asr-mlx = { path = "../../vendor/qwen3-asr-mlx" }
+mlx-sys = { git = "https://github.com/OminiX-ai/OminiX-MLX.git", rev = "6aac996db8b71fb7dae7a2409c46b4f2ade93092" }
+
+[target.'cfg(windows)'.dependencies]
+sherpa-onnx.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tokenizers.workspace = true

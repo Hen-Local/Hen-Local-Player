@@ -1,0 +1,29 @@
+[package]
+name = "hlp-pipeline"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+hlp-core.workspace = true
+hlp-media.workspace = true
+hlp-models.workspace = true
+anyhow.workspace = true
+thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+rand.workspace = true
+parking_lot.workspace = true
+crossbeam-channel.workspace = true
+dirs.workspace = true
+sherpa-onnx.workspace = true
+sha2.workspace = true
+hex.workspace = true
+whatlang.workspace = true
+reqwest.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
