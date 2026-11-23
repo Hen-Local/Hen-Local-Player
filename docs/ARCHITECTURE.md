@@ -24,7 +24,7 @@ The pinned upstream MLX release includes libmlx.a, libmlxc.a, libgguflib.a and m
 
 ## Session and cache
 
-The CLI and player use the same session task. A bounded 64-frame channel connects FFmpeg extraction and the Silero thread. Each audio track has its own PCM file, VAD segments, transcript and translations. A file lock protects an open project from competing writers and cache eviction. Session shutdown joins outstanding media work before releasing the lock.
+The CLI and player use the same session task. A bounded 64-frame channel connects FFmpeg extraction and the Silero thread. Each audio track has its own PCM file, VAD segments, transcript and translations. Its playback index also records the preparation plan and browser capabilities, so switching back can immediately serve a compatible cached video. A file lock protects an open project from competing writers and cache eviction. Session shutdown joins outstanding media work before releasing the lock.
 
 A saved transcript records the model, VAD hash and source-language mode. Changing a forced language on macOS queues the affected rows and retains their text as stale until recognition finishes. An automatic language probe without a majority at six eligible utterances waits for twelve. Cache hits publish the restored cues with the opening event and require no engine requests.
 
