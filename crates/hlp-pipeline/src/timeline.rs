@@ -307,6 +307,30 @@ impl Timeline {
                     .is_none_or(|item| item.source_hash != store::hash(v))
             })
     }
+    fn asr_rtf(&self) -> f32 {
+        if self.asr_ms == 0 {
+            return 0.;
+        }
+        self.audio_ms as f32 / self.asr_ms as f32
+    }
+    pub fn defer_translation(&self, candidate: &Utterance, playhead: Ms, lookahead_s: u32) -> bool {
+        // Wait for several utterances of evidence. Keep the line playing now
+        // and the next two seconds eligible even when both models share a slow GPU.
+        if self.audio_ms < 8_000
+            || self.asr_rtf() >= 8.
+            || (candidate.end_ms >= playhead
+                && candidate.start_ms <= playhead.saturating_add(2_000))
+        {
+            return false;
+        }
+        let horizon = playhead.saturating_add(u64::from(lookahead_s) * 1000);
+        self.rows.values().any(|u| {
+            u.status == UttStatus::Pending
+                && u.end_ms >= playhead
+                && u.start_ms <= horizon
+                && (self.audio_complete || u.end_ms <= self.extracted)
+        })
+    }
     pub fn pick(&self, translation: bool, playhead: Ms, s: &Settings) -> Option<&Utterance> {
         self.rows
             .values()
@@ -409,11 +433,7 @@ impl Timeline {
                 append(&mut tr, u)
             }
         }
-        let rtf = if self.asr_ms > 0 {
-            self.audio_ms as f32 / self.asr_ms as f32
-        } else {
-            0.
-        };
+        let rtf = self.asr_rtf();
         let mean = if self.tr_count > 0 {
             self.tr_ms as f32 / self.tr_count as f32
         } else {
@@ -460,6 +480,34 @@ mod tests {
             forced_language: None,
             asr_model: Some("qwen3-asr-1.7b".into()),
         }
+    }
+
+    #[test]
+    fn slow_recognition_defers_background_translation_until_the_lookahead_is_ready() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut t =
+            Timeline::load(temp.path().join("track"), &Settings::default(), "test").unwrap();
+        let later = utterance(3, "en");
+        let mut missing = utterance(4, "en");
+        missing.status = UttStatus::Pending;
+        t.rows.insert(missing.id.clone(), missing.clone());
+        t.audio_complete = true;
+        t.asr_ms = 1500;
+        assert!(!t.defer_translation(&later, 0, 180));
+        t.audio_ms = 9000;
+        assert!(t.defer_translation(&later, 0, 180));
+        assert!(!t.defer_translation(&later, 8500, 180));
+        assert!(!t.defer_translation(&later, 0, 5));
+        assert!(!t.defer_translation(&later, 20000, 180));
+        t.asr_ms = 1000;
+        assert!(!t.defer_translation(&later, 0, 180));
+        t.asr_ms = 1500;
+        t.audio_complete = false;
+        assert!(!t.defer_translation(&later, 0, 180));
+        t.extracted = missing.end_ms;
+        assert!(t.defer_translation(&later, 0, 180));
+        t.rows.clear();
+        assert!(!t.defer_translation(&later, 0, 180));
     }
 
     #[test]

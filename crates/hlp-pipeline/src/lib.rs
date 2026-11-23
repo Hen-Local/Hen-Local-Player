@@ -190,6 +190,7 @@ impl Session {
             tools,
             id: id.clone(),
             playhead: 0,
+            playing: false,
         };
         let task = tokio::spawn(async move {
             let _guard = guard;

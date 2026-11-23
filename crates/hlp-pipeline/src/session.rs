@@ -34,6 +34,7 @@ pub(crate) struct Context {
     pub tools: Tools,
     pub id: String,
     pub playhead: Ms,
+    pub playing: bool,
 }
 impl Context {
     fn dir(&self) -> PathBuf {
@@ -311,6 +312,12 @@ impl Running {
         }
         if !self.mt {
             if let Some(u) = t.pick(true, ctx.playhead, &ctx.settings) {
+                if cfg!(target_os = "macos")
+                    && ctx.playing
+                    && t.defer_translation(u, ctx.playhead, ctx.settings.lookahead_seconds)
+                {
+                    return;
+                }
                 if !hlp_models::gguf_path().is_file() || !hlp_models::llama_server_path().is_file()
                 {
                     self.setup = true;
@@ -745,7 +752,10 @@ fn handle_command(
     };
     match command {
         SessionCommand::Shutdown => return Ok(Some(Next::Stop)),
-        SessionCommand::Playhead { ms, .. } => ctx.playhead = ms,
+        SessionCommand::Playhead { ms, playing } => {
+            ctx.playhead = ms;
+            ctx.playing = playing;
+        }
         SessionCommand::SetTarget(code) => {
             let mut s = ctx.settings.clone();
             s.target_language = code.clone();

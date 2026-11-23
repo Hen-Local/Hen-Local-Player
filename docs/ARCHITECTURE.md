@@ -26,6 +26,8 @@ The pinned upstream MLX release includes libmlx.a, libmlxc.a, libgguflib.a and m
 
 The CLI and player use the same session task. A bounded 64-frame channel connects FFmpeg extraction and the Silero thread. Each audio track has its own PCM file, VAD segments, transcript and translations. Its playback index also records the preparation plan and browser capabilities, so switching back can immediately serve a compatible cached video. A file lock protects an open project from competing writers and cache eviction. Session shutdown joins outstanding media work before releasing the lock.
 
+On macOS, slow speech recognition gets priority over background translation while audio is playing. After processing eight seconds of speech, the scheduler defers new background translations if ASR is below 8× and extracted speech inside the lookahead still needs recognition. Translations for the current line and the next two seconds remain eligible.
+
 A saved transcript records the model, VAD hash and source-language mode. Changing a forced language on macOS queues the affected rows and retains their text as stale until recognition finishes. An automatic language probe without a majority at six eligible utterances waits for twelve. Cache hits publish the restored cues with the opening event and require no engine requests.
 
 The fixture oracle decodes subtitle streams explicitly with FFmpeg's WebVTT encoder. FFmpeg's null muxer has no default subtitle codec and reports “Output file does not contain any stream” for a valid subtitle-only input.
