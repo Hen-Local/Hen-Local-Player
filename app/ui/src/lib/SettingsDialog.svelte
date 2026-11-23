@@ -5,6 +5,12 @@
   import { size } from './format'
   import { languages, languageName } from './languages'
   import type { Settings } from './types'
+  const themes = [
+    {id:'neon-blue', label:'themeBlue', color:'#0003fe'},
+    {id:'neon-orange', label:'themeOrange', color:'#ff5705'},
+    {id:'neon-pink', label:'themePink', color:'#ff0073'},
+    {id:'neon-green', label:'themeGreen', color:'#51f91b'},
+  ] as const
   let tab = $state<'general' | 'subtitles' | 'processing' | 'storage'>('general'),
     confirm = $state(false),
     updating = $state(false)
@@ -52,6 +58,14 @@
         <option value="zh">中文</option>
       </select>
     </label>
+    <fieldset class="theme-picker">
+      <legend>{p.t('accentColor')}</legend>
+      <div>{#each themes as theme}
+        <button aria-pressed={p.settings.accentTheme === theme.id} onclick={() => set('accentTheme', theme.id)}>
+          <i aria-hidden="true" style:background={theme.color}></i>{p.t(theme.label)}
+        </button>
+      {/each}</div>
+    </fieldset>
     <label class="toggle">
       <input
         type="checkbox"
@@ -196,3 +210,15 @@
       {p.t('logs')}
     </button>{/if}
 </Dialog>
+
+<style>
+  .theme-picker { padding:0; border:0; margin:0; min-width:0; }
+  .theme-picker legend { margin-bottom:8px; font-size:12px; font-weight:700; }
+  .theme-picker > div { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; }
+  .theme-picker button { gap:5px; padding:6px 2px; font-size:12px; }
+  .theme-picker button[aria-pressed=true] { box-shadow:inset 0 -3px var(--accent); }
+  .theme-picker i { display:block; width:12px; height:12px; border-radius:50%; }
+  :global(:root[data-accent-theme="neon-orange"]) { --accent:#ff5705; --accent-soft:#fff0e9; --accent-text:#9c3500; }
+  :global(:root[data-accent-theme="neon-pink"]) { --accent:#ff0073; --accent-soft:#ffe8f2; --accent-text:#a8004c; }
+  :global(:root[data-accent-theme="neon-green"]) { --accent:#51f91b; --accent-soft:#ecffe6; --accent-text:#176d09; }
+</style>

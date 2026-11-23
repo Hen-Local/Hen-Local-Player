@@ -115,7 +115,10 @@ impl Session {
             let old =
                 store::read::<store::Project>(&data.join("media").join(&fp).join("project.json"))
                     .filter(|p| p.schema_version == 1 && p.fingerprint == fp);
-            let probe = if let Some(p) = old.as_ref().filter(|p| !p.probe.audio.is_empty()) {
+            let probe = if let Some(p) = old
+                .as_ref()
+                .filter(|p| p.probe.video.is_some() || !p.probe.audio.is_empty())
+            {
                 p.probe.clone()
             } else if probe_tools.ffprobe.is_file() {
                 hlp_media::probe(&probe_tools, &path)?
@@ -144,11 +147,7 @@ impl Session {
             .map(|p| p.audio_track_order)
             .filter(|&i| probe.audio.iter().any(|a| a.order == i))
             .unwrap_or(default);
-        let plan = if probe.audio.is_empty() {
-            PlaybackPlan::Direct
-        } else {
-            hlp_media::decide(&probe, &caps, order)
-        };
+        let plan = hlp_media::decide(&probe, &caps, order);
         let mut project = store::Project {
             schema_version: 1,
             fingerprint: fp.clone(),
@@ -189,6 +188,7 @@ impl Session {
             shared,
             tools,
             id: id.clone(),
+            opened_at: store::now(),
             playhead: 0,
             playing: false,
         };

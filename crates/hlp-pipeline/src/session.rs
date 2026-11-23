@@ -33,6 +33,7 @@ pub(crate) struct Context {
     pub shared: SharedEngines,
     pub tools: Tools,
     pub id: String,
+    pub opened_at: u64,
     pub playhead: Ms,
     pub playing: bool,
 }
@@ -72,7 +73,7 @@ impl Context {
         } else {
             0.
         };
-        store::record_recent(&self.root, &self.project, fraction)
+        store::record_recent(&self.root, &self.project, fraction, self.opened_at)
     }
 }
 
@@ -393,6 +394,12 @@ pub(super) async fn serve(ctx: &mut Context, mut requests: mpsc::Receiver<Reques
             .dir()
             .join(format!("track-{}", ctx.project.audio_track_order));
         let mut timeline = Timeline::load(track, &ctx.settings, &ctx.id)?;
+        if ctx.project.probe.video.is_some() && ctx.project.probe.audio.is_empty() {
+            // Silent recordings can play immediately and have no recognition work.
+            timeline.vad_complete = true;
+            timeline.audio_complete = true;
+            timeline.extracted = ctx.project.duration_ms;
+        }
         // A different track or an earlier decoder fallback may already have produced
         // a complete playable for this exact WebView capability set.
         if let Some(prepared) =
@@ -412,7 +419,7 @@ pub(super) async fn serve(ctx: &mut Context, mut requests: mpsc::Receiver<Reques
             prep: false,
             asr_epoch: 0,
             tr_epoch: 0,
-            setup: ctx.project.probe.audio.is_empty(),
+            setup: ctx.project.probe.audio.is_empty() && ctx.project.probe.video.is_none(),
             engine_failed: false,
             prep_failed: false,
             seen: HashSet::new(),
@@ -474,11 +481,7 @@ pub(super) async fn serve(ctx: &mut Context, mut requests: mpsc::Receiver<Reques
             } => {
                 ctx.project.audio_track_order = order;
                 ctx.project.playback = store::Playback {
-                    plan: if ctx.project.probe.audio.is_empty() {
-                        PlaybackPlan::Direct
-                    } else {
-                        hlp_media::decide(&ctx.project.probe, &ctx.caps, order)
-                    },
+                    plan: hlp_media::decide(&ctx.project.probe, &ctx.caps, order),
                     playable_path: None,
                 };
                 if model != ctx.settings.asr_model {

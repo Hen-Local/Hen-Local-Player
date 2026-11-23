@@ -19,7 +19,7 @@ Audit structure adapted from Hen-Local-Translator/docs/MODEL_AND_ASSET_LICENSE_A
 
 ## FFmpeg builds
 
-The media layer invokes FFmpeg and FFprobe as separate executables. The macOS fixture generator was exercised with OSXExperts FFmpeg 9.1 arm64. Its Mach-O deployment target is macOS 13.0. The binary reports VideoToolbox, GPL, version 3, x264, x265 and libvpx support. [Build publisher and corresponding source links](https://www.osxexperts.net/).
+The desktop installers include FFmpeg and FFprobe as separate executables so playback and media preparation work on first launch. Their license is packaged under `licenses/FFmpeg-LICENSE.txt`. The macOS fixture generator was exercised with OSXExperts FFmpeg 9.1 arm64. Its Mach-O deployment target is macOS 13.0. The binary reports VideoToolbox, GPL, version 3, x264, x265 and libvpx support. [Build publisher and corresponding source links](https://www.osxexperts.net/).
 
 The managed macOS download uses that same 9.1 build. Its publisher links an older source branch. The corresponding upstream release is [FFmpeg n9.1](https://github.com/FFmpeg/FFmpeg/tree/n9.1).
 

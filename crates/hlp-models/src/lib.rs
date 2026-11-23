@@ -13,7 +13,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::{LazyLock, Mutex},
+    sync::{LazyLock, Mutex, OnceLock},
     time::{Duration, Instant},
 };
 use tokio_util::sync::CancellationToken;
@@ -56,7 +56,28 @@ pub fn gguf_path() -> PathBuf {
 pub fn vad_path() -> PathBuf {
     model_root().join("silero-vad/silero_vad.onnx")
 }
+// Only the desktop shell opts into its signed, adjacent playback executables.
+// Installer destinations and the CLI continue to use their own component root.
+static BUNDLED_PLAYBACK_TOOLS: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn use_bundled_playback_tools() {
+    if let Ok(app) = std::env::current_exe() {
+        if let Some(dir) = app.parent() {
+            if ["ffmpeg", "ffprobe"]
+                .iter()
+                .all(|name| dir.join(executable(name)).is_file())
+            {
+                let _ = BUNDLED_PLAYBACK_TOOLS.set(dir.to_path_buf());
+            }
+        }
+    }
+}
 pub fn tool_path(name: &str) -> PathBuf {
+    if matches!(name, "ffmpeg" | "ffprobe") {
+        if let Some(dir) = BUNDLED_PLAYBACK_TOOLS.get() {
+            return dir.join(executable(name));
+        }
+    }
     let id = if name == "ffprobe" { "ffmpeg" } else { name };
     let root = ominix_root();
     component(id)
@@ -125,7 +146,14 @@ fn file_len(p: &Path) -> u64 {
         .map_or(0, |m| m.len())
 }
 fn ready(root: &Path, c: &Component) -> bool {
-    let dir = active_directory(root, c);
+    let dir = if c.id == "ffmpeg" {
+        BUNDLED_PLAYBACK_TOOLS
+            .get()
+            .cloned()
+            .unwrap_or_else(|| active_directory(root, c))
+    } else {
+        active_directory(root, c)
+    };
     let first = &c.files[0];
     match c.ready {
         Check::Mlx => {

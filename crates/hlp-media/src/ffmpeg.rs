@@ -244,11 +244,11 @@ pub fn prepare_playback(
     if *plan == PlaybackPlan::Direct {
         return Ok(input);
     }
-    let audio = info
-        .audio
-        .iter()
-        .find(|s| s.order == track)
-        .context("Audio track unavailable")?;
+    let audio = info.audio.iter().find(|s| s.order == track);
+    ensure!(
+        audio.is_some() || (info.video.is_some() && info.audio.is_empty()),
+        "Audio track unavailable"
+    );
     if cached(output, plan, track) {
         progress(1.);
         return Ok(output.to_owned());
@@ -289,13 +289,16 @@ pub fn prepare_playback(
         } else {
             cmd.arg("-vn");
         }
-        cmd.arg("-map")
-            .arg(format!("0:a:{track}"))
-            .args(["-sn", "-dn"]);
-        if info.video.is_some() && copy_audio(&audio.codec_name, caps) {
-            cmd.args(["-c:a", "copy"]);
+        cmd.args(["-sn", "-dn"]);
+        if let Some(audio) = audio {
+            cmd.arg("-map").arg(format!("0:a:{track}"));
+            if info.video.is_some() && copy_audio(&audio.codec_name, caps) {
+                cmd.args(["-c:a", "copy"]);
+            } else {
+                cmd.args(["-c:a", "aac", "-b:a", "192k", "-ac", "2"]);
+            }
         } else {
-            cmd.args(["-c:a", "aac", "-b:a", "192k", "-ac", "2"]);
+            cmd.arg("-an");
         }
         cmd.args(["-movflags", "+faststart", "-f", "mp4"])
             .arg(&part)

@@ -5,6 +5,7 @@ use tauri::{AppHandle, Emitter};
 
 pub struct Bridge {
     pub app: AppHandle,
+    pub source_path: std::path::PathBuf,
     pub language: RwLock<Option<String>>,
 }
 pub fn emit<T: Serialize + Clone>(app: &AppHandle, name: &str, payload: T) {
@@ -15,7 +16,21 @@ pub fn emit<T: Serialize + Clone>(app: &AppHandle, name: &str, payload: T) {
 impl PipelineEvents for Bridge {
     fn media_opened(&self, e: MediaOpened) {
         *self.language.write() = e.language.detected.as_ref().map(|c| c.0.clone());
-        emit(&self.app, "media://opened", e)
+        #[derive(Clone, Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Opened<'a> {
+            #[serde(flatten)]
+            media: MediaOpened,
+            source_path: &'a std::path::Path,
+        }
+        emit(
+            &self.app,
+            "media://opened",
+            Opened {
+                media: e,
+                source_path: &self.source_path,
+            },
+        )
     }
     fn language(&self, e: LanguageEvent) {
         *self.language.write() = e.detected.as_ref().map(|c| c.0.clone());

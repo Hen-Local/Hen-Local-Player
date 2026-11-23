@@ -2,7 +2,22 @@
 
 A checked item has been exercised. Worktree branches and tags are local until publication is requested.
 
-The lead merged phase 2 in order (A, C, B, D, E), verified the CLI slice on macOS, then merged F followed by G. The final tree passed Rust formatting, 38 regular Rust tests, the Svelte check with zero warnings, the production UI build and the seven-package Windows x64 cross-check.
+## Standalone player revision · November 23, 2026
+
+- [x] The desktop opens to a media library in the Hen Local Translator style. It includes the original hen mark, four persistent accent colors and a 22.5-second animated Japanese sample with six bilingual lines. A movie takes over the main window. Subtitles, the transcript and the playlist open on demand. Chrome checks covered the full-size window, fullscreen keyboard navigation and 320-pixel layouts. [Screenshots and interaction checks](progress/player-shell.md).
+- [x] Finder can open multiple movies directly in the player. The file and folder pickers, playlist, resume, repeat, fullscreen, timed picture-in-picture subtitles and system media keys are connected. Chapter selection, jump to time, A–B repeat, fit/fill, audio tracks and PNG frame capture are available during playback. A native test switched audio while paused at 7.1 seconds and sought to a chapter at 8 seconds. Opening a bad file preserved playback. [Playback checks](progress/player-transport.md).
+- [x] Embedded text tracks, adjacent or imported SRT/WebVTT, subtitle delay and a clickable transcript work without model installation. Native WKWebView selected a forced Japanese track, displayed the sample’s six bilingual lines and sought to 7.767 seconds from its third transcript row. Per-movie preferences survived switching files and restarting the browser. [Subtitle checks](progress/player-subtitles.md).
+- [x] The Apple Silicon disk image was mounted read-only, copied into an independent directory and verified with strict code signing checks. The bundled sample, poster and SRT matched the source assets. The installed app used its packaged tools with external networking and access to the developer models and build products denied. It opened the sample directly and remuxed a silent, chaptered MKV to a 22.5-second H.264 MP4 with zero audio streams. Both model directories remained empty. Three successive Finder opens on the installed app left the newest file first in the library. The sample button was exercised in the production browser preview. The installed-app test used an open-file event path because its accessibility probe could not locate that button.
+- [x] Rust formatting, 42 regular Rust tests, the additional real embedded-track test, both fixture-backed media tests, the production UI build and the Svelte check passed. The release CLI passed all 81 checks on nine speech and media fixtures. The long fixture produced 359 bilingual cues in 65.72 seconds and reopened in 45 ms. [Fixture results](../tests/results/2026-11-23-darwin-player.json).
+- [x] Windows x64 code passed the local Rust cross-check, and PowerShell parsed the updated packaging script. Native Windows installation, WebView2 playback and speech inference still need a Windows host. All development and packaging stayed local.
+
+Current Mac installer: `dist/Hen-Local-Player-0.1.0-macos-arm64.dmg`, 123,442,074 bytes. SHA-256 `e8cedb95e98ba6e787afb9dcfd1ff5bbdc16a8278d25f886f7ca4ce7b400fa2c`. The package uses an ad-hoc signature for local testing.
+
+## Original prototype
+
+The lead merged phase 2 in order (A, C, B, D, E), verified the CLI slice on macOS, then merged F followed by G. The original tree passed Rust formatting, 38 regular Rust tests, the Svelte check with zero warnings, the production UI build and the seven-package Windows x64 cross-check.
+
+The M0–M9 evidence below records the original prototype at `d3768fe`.
 
 ## Foundation and lane evidence
 

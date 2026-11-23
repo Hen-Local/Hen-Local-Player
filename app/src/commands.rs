@@ -20,8 +20,8 @@ pub async fn set_playback_capabilities(
     let mut p = state.player.lock().await;
     p.caps = caps;
     p.ready = true;
-    if let Some(path) = p.pending.take() {
-        p.open(&app, path, None).await.map_err(err)?;
+    if !p.pending.is_empty() {
+        emit(&app, "app://open-files", std::mem::take(&mut p.pending));
     }
     Ok(())
 }
@@ -35,6 +35,15 @@ pub async fn open_media(app: AppHandle, state: State<'_, Desktop>, path: PathBuf
         .await
         .map_err(err)
 }
+#[tauri::command]
+pub async fn close_media(state: State<'_, Desktop>) -> Reply<()> {
+    let mut p = state.player.lock().await;
+    if let Some(file) = p.active.take() {
+        file.session.shutdown().await.map_err(err)?;
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn set_playhead(
     state: State<'_, Desktop>,

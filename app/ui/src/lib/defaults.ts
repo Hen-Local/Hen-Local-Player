@@ -3,6 +3,7 @@ import type { Settings } from './types'
 export function defaults(): Settings {
   return {
     uiLanguage: 'system',
+    accentTheme: 'neon-blue',
     targetLanguage: defaultTarget(navigator.language),
     sourceLanguage: 'auto',
     subtitleMode: 'both',
@@ -10,7 +11,7 @@ export function defaults(): Settings {
     subtitleScale: 1,
     subtitleBackground: 0,
     subtitleBottomOffset: 0.06,
-    showTranscriptPanel: true,
+    showTranscriptPanel: false,
     lookaheadSeconds: 180,
     processWholeFile: true,
     dialogueChannelFocus: true,

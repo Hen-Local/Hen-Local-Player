@@ -1,1 +1,14 @@
-{"bundle":{"externalBin":["binaries/hlp-asr-worker"]}}
+{
+  "bundle": {
+    "externalBin": [
+      "binaries/hlp-asr-worker",
+      "binaries/ffmpeg",
+      "binaries/ffprobe"
+    ],
+    "resources": {
+      "binaries/FFmpeg-LICENSE.txt": "licenses/FFmpeg-LICENSE.txt",
+      "../docs/LICENSES.md": "licenses/components.md",
+      "ui/public/demo/": "demo/"
+    }
+  }
+}

@@ -4,17 +4,18 @@
 )]
 mod commands;
 mod events;
+mod playback;
+mod player_menu;
 mod prewarm;
 mod state;
+mod subtitle_tracks;
 use commands::*;
 use state::Desktop;
-use tauri::{
-    menu::{Menu, MenuItem, MenuItemKind},
-    Manager, RunEvent,
-};
+use tauri::{Manager, RunEvent};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 fn main() {
+    hlp_models::use_bundled_playback_tools();
     let log_dir = hlp_pipeline::store::data_root().join("logs");
     std::fs::create_dir_all(&log_dir).expect("create player log directory");
     let file = tracing_appender::rolling::Builder::new()
@@ -51,33 +52,20 @@ fn main() {
             app.manage(desktop);
             Ok(())
         })
-        .menu(|app| {
-            let menu = Menu::default(app)?;
-            for item in menu.items()? {
-                if let MenuItemKind::Submenu(file) = item {
-                    if file.text()? == "File" {
-                        for (id, label, key) in [
-                            ("export", "Export Subtitles…", "CmdOrCtrl+E"),
-                            ("url", "Open Link…", "CmdOrCtrl+L"),
-                            ("open", "Open File…", "CmdOrCtrl+O"),
-                        ] {
-                            file.prepend(&MenuItem::with_id(app, id, label, true, Some(key))?)?;
-                        }
-                        break;
-                    }
-                }
-            }
-            Ok(menu)
-        })
-        .on_menu_event(|app, e| match e.id().as_ref() {
-            "open" | "url" | "export" => {
-                events::emit(app, "app://menu", e.id().as_ref().to_string())
-            }
-            _ => (),
-        })
+        .menu(player_menu::build)
+        .on_menu_event(|app, event| player_menu::handle(app, event.id().as_ref()))
         .invoke_handler(tauri::generate_handler![
             set_playback_capabilities,
             open_media,
+            close_media,
+            playback::choose_media_folder,
+            playback::get_sample_media,
+            playback::list_chapters,
+            playback::save_video_frame,
+            subtitle_tracks::list_subtitle_tracks,
+            subtitle_tracks::read_sidecar_subtitle,
+            subtitle_tracks::read_embedded_subtitle,
+            subtitle_tracks::choose_subtitle_file,
             probe_url,
             download_url,
             cancel_download,
@@ -111,26 +99,23 @@ fn main() {
             } => show_window(app),
             #[cfg(target_os = "macos")]
             RunEvent::Opened { urls } => {
-                if let Some(path) = urls.into_iter().find_map(|url| url.to_file_path().ok()) {
+                let paths: Vec<_> = urls
+                    .into_iter()
+                    .filter_map(|url| url.to_file_path().ok())
+                    .collect();
+                if !paths.is_empty() {
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move {
                         let state = app.state::<Desktop>();
-                        let mut p = state.player.lock().await;
-                        if !p.ready {
-                            p.pending = Some(path);
-                            return;
-                        }
-                        if let Err(e) = p.open(&app, path, None).await {
-                            events::emit(
-                                &app,
-                                "app://error",
-                                hlp_core::events::ErrorEvent {
-                                    session_id: None,
-                                    code: "OpenMedia".into(),
-                                    message: format!("{e:#}"),
-                                    recoverable: true,
-                                },
-                            );
+                        let mut player = state.player.lock().await;
+                        if player.ready {
+                            events::emit(&app, "app://open-files", paths);
+                        } else {
+                            for path in paths {
+                                if !player.pending.contains(&path) {
+                                    player.pending.push(path);
+                                }
+                            }
                         }
                     });
                 }

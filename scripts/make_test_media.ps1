@@ -134,9 +134,6 @@ try {
     }
     Invoke-Ffmpeg ($video + @('-f','lavfi','-i','sine=frequency=440:duration=12','-f','lavfi','-i','anoisesrc=duration=12:amplitude=0.01','-filter_complex','[1:a][2:a]amix[a]','-map','0:v','-map','[a]','-t','12','-c:v',$h264,'-b:v','500k','-c:a','aac',(Join-Path $fixtures 'fixture_music.mp4')))
     Write-Truth 'music' $null @()
-    $demo = Join-Path $repoDirectory 'app/ui/public/demo'
-    New-Item -ItemType Directory -Force -Path $demo | Out-Null
-    Copy-Item -LiteralPath (Join-Path $fixtures 'fixture_ja.mp4') -Destination (Join-Path $demo 'demo.mp4') -Force
 } finally {
     $synth.Dispose()
     if (Test-Path -LiteralPath $tempDir) { Remove-Item -LiteralPath $tempDir -Recurse -Force }

@@ -95,6 +95,7 @@ export interface LanguageEvent {
   unverifiedTranslation: boolean
 }
 export interface MediaOpened {
+  sourcePath?: string
   sessionId: string
   title: string
   durationMs: number
@@ -140,6 +141,7 @@ export interface ErrorEvent {
   recoverable: boolean
 }
 export interface Settings {
+  accentTheme: 'neon-blue' | 'neon-orange' | 'neon-pink' | 'neon-green'
   uiLanguage: string
   targetLanguage: string
   sourceLanguage: string

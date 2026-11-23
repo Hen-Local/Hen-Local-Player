@@ -2,7 +2,6 @@
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import tempfile
 import wave
@@ -62,6 +61,3 @@ with tempfile.TemporaryDirectory() as td:
         print(stem,flush=True)
     ff(*video,'-f','lavfi','-i','sine=frequency=440:duration=12','-f','lavfi','-i','anoisesrc=duration=12:amplitude=0.01','-filter_complex','[1:a][2:a]amix[a]','-map','0:v','-map','[a]','-t',12,'-c:v','h264_videotoolbox','-b:v','500k','-c:a','aac',fixtures/'fixture_music.mp4')
     truth('fixture_music',None,[])
-demo=Path('app/ui/public/demo/demo.mp4')
-demo.parent.mkdir(parents=True,exist_ok=True)
-shutil.copyfile(fixtures/'fixture_ja.mp4',demo)

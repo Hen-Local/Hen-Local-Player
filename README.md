@@ -4,7 +4,22 @@ A local video player with on-device speech recognition, translation and bilingua
 
 ## Open the player
 
-On Apple Silicon, open the DMG and drag **Hen Local Player** to Applications. Launch the app and choose **Download missing** in Model setup. The default Mac setup downloads approximately 3.67 GB. Drop a video into the player or use **Open file**. Choose the spoken language or leave it on Auto, then choose the subtitle language. **Open link** previews a video before downloading it. The URL tools install on first use.
+On Apple Silicon, open the DMG and drag **Hen Local Player** to Applications. In Finder, choose **Open With → Hen Local Player** on a movie, or launch the player and choose **Open file** (⌘O), **Open folder** (⇧⌘O), or **Play sample**. FFmpeg and FFprobe are included in the app. Ordinary playback and authored text subtitles work offline from the first launch.
+
+- Select multiple files to play them in order. **Playlist** lets you add, remove and skip files. Playback resumes when you reopen an unfinished movie.
+- Click the video to play or pause. Double-click for fullscreen. The transport includes volume, speed, ten-second skips, repeat and picture-in-picture on supported systems.
+- **Playback** includes time and chapter navigation, A–B repeat, video fit/fill, audio track selection and saving a PNG frame.
+- Open **Subtitles** to use an embedded text track or an SRT/WebVTT file, adjust subtitle timing, or choose locally generated bilingual captions. Install the speech and translation components from **Models & tools** when you want generated subtitles. **Transcript** lets you jump to a line and **Export** saves generated subtitles as SRT, WebVTT or ASS.
+- **Open link** previews a video before downloading it. URL tools install on first use. General settings include the four Hen Local Translator accent colors.
+
+### Browser preview
+
+From the repository root, run the following commands and open the local address printed by Vite. **Play sample** includes a Japanese clip and authored demo captions. You can also open browser-compatible files from your computer. The desktop app runs the speech models and handles additional formats.
+
+```sh
+npm --prefix app/ui ci
+npm --prefix app/ui run dev
+```
 
 ## Development
 
@@ -33,7 +48,7 @@ Run `bash scripts/e2e.sh` after generating the fixtures and installing the compo
 
 ## Build an installer
 
-On an Apple Silicon Mac, run `bash scripts/build_macos_app.sh`. It produces `dist/Hen Local Player.app` and a versioned arm64 DMG. The internal build uses an ad-hoc signature. Public distribution requires a Developer ID signature and notarization.
+On an Apple Silicon Mac, run `bash scripts/build_macos_app.sh`. It stages the pinned playback tools and produces `dist/Hen Local Player.app` and a versioned arm64 DMG. Set `HLP_BUNDLE_TOOL_CACHE` to reuse an existing component cache during packaging. The internal build uses an ad-hoc signature. Public distribution requires a Developer ID signature and notarization.
 
 On Windows x64, run `.\scripts\build_windows.ps1` from a checkout with the MSVC tools installed. The script builds the worker, includes it beside the app executable, and writes a versioned NSIS installer to `dist`. The Windows fixture scripts also require Python 3 and an English desktop SAPI voice. The manual **Windows installer and fixtures** GitHub Actions workflow can build the installer and run the speech tests on a hosted Windows runner when the workflow is published and dispatched. [Windows test commands and verification status](docs/progress/g-windows.md).
 

@@ -87,8 +87,8 @@ fn parse(bytes: &[u8], container_type: Option<&str>) -> Result<MediaInfo> {
             _ => {}
         }
     }
-    if info.audio.is_empty() {
-        bail!("This file has no audio");
+    if info.audio.is_empty() && info.video.is_none() {
+        bail!("This file has no playable video or audio");
     }
     if info.duration_ms == 0 {
         info.duration_ms = longest;
@@ -196,12 +196,30 @@ mod tests {
         }
     }
     #[test]
-    fn rejects_silent_video() {
+    fn silent_movies_use_the_same_video_capability_checks() {
+        for (container, codec, expected) in [
+            ("mov", "h264", Direct),
+            ("matroska", "h264", Remux),
+            ("avi", "mpeg4", Transcode),
+            ("webm", "vp9", Direct),
+        ] {
+            let report = serde_json::json!({
+                "format": { "format_name": container, "duration": "8.0" },
+                "streams": [{"codec_type": "video", "codec_name": codec, "width": 640, "height": 360}]
+            });
+            let media = parse(&serde_json::to_vec(&report).unwrap(), None).unwrap();
+            assert!(media.audio.is_empty());
+            assert_eq!(decide(&media, &default_caps("wkwebview"), 0), expected);
+        }
+    }
+
+    #[test]
+    fn rejects_files_without_media() {
         assert_eq!(
             parse(br#"{"streams":[],"format":{"format_name":"mov"}}"#, None)
                 .unwrap_err()
                 .to_string(),
-            "This file has no audio"
+            "This file has no playable video or audio"
         );
     }
 }

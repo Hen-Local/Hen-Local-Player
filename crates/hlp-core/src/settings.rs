@@ -6,6 +6,7 @@ use std::path::PathBuf;
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
     pub ui_language: String,
+    pub accent_theme: String,
     pub target_language: String,
     pub source_language: String,
     pub subtitle_mode: String,
@@ -26,6 +27,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             ui_language: "system".into(),
+            accent_theme: "neon-blue".into(),
             target_language: crate::lang::default_target(
                 &sys_locale::get_locale().unwrap_or_default(),
             )
@@ -36,7 +38,7 @@ impl Default for Settings {
             subtitle_scale: 1.,
             subtitle_background: 0.,
             subtitle_bottom_offset: 0.06,
-            show_transcript_panel: true,
+            show_transcript_panel: false,
             lookahead_seconds: 180,
             process_whole_file: true,
             dialogue_channel_focus: true,

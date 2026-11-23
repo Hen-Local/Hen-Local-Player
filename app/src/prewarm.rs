@@ -2,6 +2,9 @@ use hlp_core::settings::Settings;
 use hlp_pipeline::SharedEngines;
 
 pub async fn run(settings: Settings, engines: SharedEngines) {
+    if settings.subtitle_mode == "off" {
+        return;
+    }
     let ready = tokio::task::spawn_blocking(hlp_models::status)
         .await
         .unwrap_or_default();

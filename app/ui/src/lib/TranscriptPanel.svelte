@@ -3,20 +3,28 @@
   import { player as p, backend } from './stores.svelte'
   import Icon from './Icon.svelte'
   import { clock } from './format'
+  import { subtitleTracks } from './subtitle-tracks.svelte'
+  import { visibleIndices } from './subtitle-tracks'
   let scroller = $state<HTMLDivElement>(),
     scroll = $state(0),
     height = $state(500),
     manualUntil = 0
+  let authored = $derived(subtitleTracks.authored)
+  let rows = $derived(authored ? authored.cues.map((cue, i) => ({
+    id: 'authored-'+i, startMs: cue.startMs, original: cue.text, translation: null, stale: false,
+  })) : p.cues)
+  let activeIndices = $derived(authored ? visibleIndices(authored, p.ms) : [p.active])
+  let activeRow = $derived(activeIndices.at(-1) ?? -1)
   const rowH = 88
-  let virtual = $derived(p.cues.length > 500),
+  let virtual = $derived(rows.length > 500),
     start = $derived(virtual ? Math.max(0, Math.floor(scroll / rowH) - 4) : 0)
   let end = $derived(
-    virtual ? Math.min(p.cues.length, start + Math.ceil(height / rowH) + 9) : p.cues.length,
+    virtual ? Math.min(rows.length, start + Math.ceil(height / rowH) + 9) : rows.length,
   )
-  let pending = $derived(p.status?.asrPendingSpans ?? [])
-  let status = $derived(p.status)
+  let pending = $derived(authored ? [] : p.status?.asrPendingSpans ?? [])
+  let status = $derived(authored ? null : p.status)
   $effect(() => {
-    const index = p.active
+    const index = activeRow
     if (index < 0 || !scroller || Date.now() < manualUntil) return
     if (virtual) {
       if (
@@ -34,20 +42,7 @@
   }
 </script>
 
-<aside class="side-panel transcript">
-  <div class="panel-title">
-    <Icon name="list" />
-    <h2>{p.t('transcript')}</h2>
-    <span class="spacer"></span>
-    <button
-      class="icon"
-      title={p.t('close')}
-      aria-label={p.t('close')}
-      onclick={() => p.act(() => p.update({ showTranscriptPanel: false }))}
-    >
-      <Icon name="close" size={16} />
-    </button>
-  </div>
+<div class="side-panel transcript">
   {#if status}<div class="coverage-summary">
       <div class="status-line">
         <span class="dot"></span>
@@ -85,24 +80,24 @@
     onpointerdown={manual}
   >
     {#if virtual}<div style:height={start * rowH + 'px'}></div>{/if}
-    {#each p.cues.slice(start, end) as cue, i (cue.id)}
+    {#each rows.slice(start, end) as cue, i (cue.id)}
       <button
         class="cue-row"
-        class:active={i + start === p.active}
+        class:active={activeIndices.includes(i + start)}
         class:virtual
-        aria-current={i + start === p.active}
-        onclick={() => p.seek(cue.startMs - 100)}
+        aria-current={activeIndices.includes(i + start)}
+        onclick={() => p.seek(authored ? cue.startMs : cue.startMs - 100)}
       >
         <time>{clock(cue.startMs)}</time>
         <span>
-          <strong dir="auto">{cue.original}</strong>
+          <strong dir="auto" style:white-space={authored ? 'pre-line' : undefined}>{cue.original}</strong>
           {#if cue.translation}<span dir="auto">{cue.translation}</span>{/if}{#if cue.stale}<small>
               {p.t('stale')}
             </small>{/if}
         </span>
       </button>
     {/each}
-    {#if virtual}<div style:height={(p.cues.length - end) * rowH + 'px'}></div>{/if}
+    {#if virtual}<div style:height={(rows.length - end) * rowH + 'px'}></div>{/if}
     {#each pending.slice(0, 4) as span}<button
         class="cue-row pending"
         onclick={() => p.seek(span[0])}
@@ -110,7 +105,7 @@
         <time>{clock(span[0])}</time>
         <span>{p.t('transcribing')}</span>
       </button>{/each}
-    {#if !p.cues.length && !pending.length}<p class="empty-note subtle">
+    {#if !rows.length && !pending.length}<p class="empty-note subtle">
         {status?.stage === 'complete' ? p.t('noSpeech') : p.t('waiting')}
       </p>{/if}
     {#if status && (status.uttFailed > 0 || status.stage === 'error')}<button
@@ -122,9 +117,9 @@
   </div>
   <div class="panel-footer">
     <Icon name="clock" size={13} />
-    <span>{p.cues.length} {p.t('lines')}</span>
+    <span>{rows.length} {p.t('lines')}</span>
     <span class="spacer"></span>
     <kbd>,</kbd>
     <kbd>.</kbd>
   </div>
-</aside>
+</div>

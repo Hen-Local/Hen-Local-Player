@@ -1,22 +1,44 @@
 <script lang="ts">
-  import { player as p } from './stores.svelte'
+  import { onMount, untrack } from 'svelte'
+  import { player as p, mockMode } from './stores.svelte'
+  import { subtitleTracks as tracks } from './subtitle-tracks.svelte'
   let {
     box,
     clearance,
   }: { box: { width: number; height: number; left: number; top: number }; clearance: number } =
     $props()
-  let cue = $derived(p.cues[p.active])
-  let lines = $derived.by(() => {
-    if (!cue || p.settings.subtitleMode === 'off') return []
-    if (p.settings.subtitleMode === 'original') return [cue.original]
-    if (p.settings.subtitleMode === 'translation') return [cue.translation ?? '']
-    return (
-      p.settings.bilingualOrder === 'translation-first'
-        ? [cue.translation, cue.original]
-        : [cue.original, cue.translation]
-    ).filter(Boolean)
+  let picker: HTMLInputElement
+  let lines = $derived(tracks.linesAt(p.ms, p.cues, p.settings))
+  $effect(() => {
+    const id = p.media?.sessionId ?? ''
+    untrack(() => {
+      void tracks.discover(id)
+    })
+  })
+  function importTrack() {
+    if (!p.media) return
+    tracks.attach(p.media.sessionId)
+    if (mockMode) picker.click()
+    else void p.act(() => tracks.importFile())
+  }
+  onMount(() => {
+    window.addEventListener('hlp:subtitle-file', importTrack)
+    return () => window.removeEventListener('hlp:subtitle-file', importTrack)
   })
 </script>
+
+<input
+  type="file"
+  hidden
+  bind:this={picker}
+  accept=".srt,.vtt,text/vtt,application/x-subrip"
+  aria-label={p.locale === 'zh' ? '字幕文件' : 'Subtitle file'}
+  onchange={(event) => {
+    const file = event.currentTarget.files?.[0]
+    event.currentTarget.value = ''
+    if (file) void p.act(() => tracks.importFile(file))
+  }}
+/>
 
 {#if lines.length && box.height > 0}<div
     class="content-area"
@@ -32,8 +54,8 @@
       style:--sub-size={box.height * 0.034 * p.settings.subtitleScale + 'px'}
       style:--sub-bg={p.settings.subtitleBackground}
     >
-      {#each lines as line, i}{#if line}<div dir="auto" class:secondary={i > 0}>
-            <span>{line}</span>
+      {#each lines as line, i}{#if line}<div dir="auto" class:secondary={!tracks.timeline && i > 0}>
+            <span style:white-space="pre-line">{line}</span>
           </div>{/if}{/each}
     </div>
   </div>{/if}

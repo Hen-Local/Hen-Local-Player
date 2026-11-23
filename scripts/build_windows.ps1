@@ -11,6 +11,14 @@ try {
     $releaseDir = Join-Path $env:CARGO_TARGET_DIR "$triple/release"
     New-Item -ItemType Directory -Force 'app/binaries' | Out-Null
     Copy-Item -LiteralPath (Join-Path $releaseDir 'hlp-asr-worker.exe') -Destination "app/binaries/hlp-asr-worker-$triple.exe" -Force
+    $previousRoot = $env:HLP_OMINIX_ROOT
+    try {
+        $env:HLP_OMINIX_ROOT = if ($env:HLP_BUNDLE_TOOL_CACHE) { $env:HLP_BUNDLE_TOOL_CACHE } else { Join-Path $env:CARGO_TARGET_DIR 'packaging-tools' }
+        cargo run --quiet --locked -p hlp-models --example stage_playback_tools -- app/binaries $triple
+        if ($LASTEXITCODE) { throw "Could not stage the media playback tools ($LASTEXITCODE)." }
+    } finally {
+        $env:HLP_OMINIX_ROOT = $previousRoot
+    }
     if (!(Test-Path 'app/ui/node_modules/.bin/tauri.cmd')) {
         npm.cmd --prefix app/ui ci
         if ($LASTEXITCODE) { throw "Frontend dependencies failed ($LASTEXITCODE)." }

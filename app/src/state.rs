@@ -19,7 +19,7 @@ pub struct Player {
     pub engines: SharedEngines,
     pub active: Option<OpenFile>,
     pub ready: bool,
-    pub pending: Option<PathBuf>,
+    pub pending: Vec<PathBuf>,
 }
 impl Player {
     pub async fn open(
@@ -28,11 +28,20 @@ impl Player {
         path: PathBuf,
         url: Option<String>,
     ) -> Result<()> {
-        if let Some(old) = self.active.take() {
-            let _ = old.session.shutdown().await;
+        // A renamed or duplicated file shares the same exclusive subtitle cache.
+        // Otherwise keep the current session alive until its replacement opens.
+        if let Some(current) = &self.active {
+            let candidate = path.clone();
+            let fingerprint =
+                tokio::task::spawn_blocking(move || hlp_core::fingerprint::fingerprint(&candidate))
+                    .await??;
+            if current.session.fingerprint == fingerprint {
+                self.close().await;
+            }
         }
         let events = Arc::new(Bridge {
             app: app.clone(),
+            source_path: path.clone(),
             language: Default::default(),
         });
         let session = Session::open(
@@ -44,14 +53,25 @@ impl Player {
         )
         .await?;
         if let Some(url) = url {
-            session.set_source_url(url).await?;
+            if let Err(error) = session.set_source_url(url).await {
+                let _ = session.shutdown().await;
+                return Err(error);
+            }
         }
+        self.close().await;
         self.active = Some(OpenFile {
             path,
             session,
             events,
         });
         Ok(())
+    }
+    async fn close(&mut self) {
+        if let Some(previous) = self.active.take() {
+            if let Err(error) = previous.session.shutdown().await {
+                tracing::warn!(%error, "Closing previous movie");
+            }
+        }
     }
     pub fn file(&self) -> Result<&OpenFile> {
         self.active.as_ref().context("Open a media file first")
@@ -73,6 +93,13 @@ impl Player {
 }
 fn validate(s: &Settings) -> Result<()> {
     use hlp_core::lang::lookup;
+    anyhow::ensure!(
+        matches!(
+            s.accent_theme.as_str(),
+            "neon-blue" | "neon-orange" | "neon-pink" | "neon-green"
+        ),
+        "Unknown accent theme"
+    );
     anyhow::ensure!(
         matches!(s.source_language.as_str(), "auto" | "auto-per-line")
             || lookup(&s.source_language).is_some_and(|l| l.qwen3_asr_name.is_some()),
@@ -151,9 +178,10 @@ impl Desktop {
             .unwrap_or_default();
         let engines = SharedEngines::new(&settings).await?;
         let pending = std::env::args_os()
-            .nth(1)
+            .skip(1)
             .map(PathBuf::from)
-            .filter(|p| p.is_file());
+            .filter(|p| p.is_file())
+            .collect();
         Ok(Self {
             player: Mutex::new(Player {
                 settings,

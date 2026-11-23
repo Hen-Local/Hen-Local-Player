@@ -4,7 +4,9 @@ Rust owns the canonical camelCase wire and disk types in `hlp-core`. The UI mirr
 
 One shared ASR client and one llama-server serve successive sessions. The worker protocol is line-delimited JSON with monotonically assigned request IDs. A session owns the selected file, track, playhead and cache lifetime. The desktop and CLI use the same session. The local media server issues per-registration opaque URLs and serves byte ranges.
 
-Setup is independent of player sessions. Model and tool paths use `HLP_OMINIX_ROOT` when set. Caches, settings and recently opened items live in the platform application data directory. Lane-local fixture tests read generated speech and its onset truth from `tests/fixtures`.
+The desktop package ships FFmpeg and FFprobe beside the executable. The player uses them for format detection, playback conversion, chapters, frame capture and embedded text subtitles on first launch. A local media session can run with an empty model directory. The speech and translation models and optional URL tools use `HLP_OMINIX_ROOT` when set. Caches, settings and recently opened items live in the platform application data directory.
+
+The desktop receives file paths from the operating system, its file and folder dialogs, or the command line. The frontend owns the playlist, per-file resume positions and subtitle choices. The session owns playback preparation and generated captions. Embedded and neighboring text tracks come from the original file and its directory. Selected external SRT and WebVTT contents are retained in the WebView’s local IndexedDB. Authored subtitles use the same adjusted cue times for the overlay, transcript and picture-in-picture. Lane-local fixture tests read generated speech and its onset truth from `tests/fixtures`.
 
 ## Build observations
 

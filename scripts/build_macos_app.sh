@@ -14,6 +14,9 @@ trap 'rm -rf "$stage"' EXIT
 worker="$CARGO_TARGET_DIR/release/hlp-asr-worker"
 cargo build --locked --release -p hlp-asr-worker
 install -m 755 "$worker" "app/binaries/hlp-asr-worker-$triple"
+HLP_OMINIX_ROOT="${HLP_BUNDLE_TOOL_CACHE:-$CARGO_TARGET_DIR/packaging-tools}" \
+  cargo run --quiet --locked -p hlp-models --example stage_playback_tools -- \
+    app/binaries "$triple" docs/licenses/FFmpeg-COPYING.GPLv3
 [[ -x app/ui/node_modules/.bin/tauri ]] || npm --prefix app/ui ci
 (
   cd app

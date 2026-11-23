@@ -73,24 +73,28 @@ pub(crate) fn interlaced(field_order: &str) -> bool {
 
 pub fn decide(info: &MediaInfo, caps: &Caps, selected_audio: usize) -> PlaybackPlan {
     use PlaybackPlan::*;
-    let Some(audio) = info.audio.iter().find(|s| s.order == selected_audio) else {
+    let audio = info.audio.iter().find(|s| s.order == selected_audio);
+    if !info.audio.is_empty() && audio.is_none() {
         return Transcode;
-    };
+    }
     let is_default = info
         .audio
         .iter()
         .find(|s| s.default)
         .or(info.audio.first())
-        .is_some_and(|s| s.order == selected_audio);
+        .is_none_or(|s| s.order == selected_audio);
     let container = |name| info.container.split(',').any(|s| s == name);
     let mp4 = container("mov") || container("mp4") || container("m4a") || container("m4v");
-    let audio_mp4 = copy_audio(&audio.codec_name, caps)
-        || match audio.codec_name.as_str() {
-            "ac3" => can(caps, AC3),
-            "eac3" => can(caps, EAC3),
-            _ => false,
-        };
+    let audio_mp4 = audio.is_none_or(|audio| {
+        copy_audio(&audio.codec_name, caps)
+            || match audio.codec_name.as_str() {
+                "ac3" => can(caps, AC3),
+                "eac3" => can(caps, EAC3),
+                _ => false,
+            }
+    });
     let Some(video) = &info.video else {
+        let Some(audio) = audio else { return Direct };
         let direct = (mp4 && audio_mp4)
             || match audio.codec_name.as_str() {
                 "mp3" => container("mp3") && can(caps, MP3),
@@ -115,12 +119,12 @@ pub fn decide(info: &MediaInfo, caps: &Caps, selected_audio: usize) -> PlaybackP
             "av1" => WEBM_AV1,
             _ => "",
         };
-        let audio_mime = match audio.codec_name.as_str() {
-            "opus" => WEBM_OPUS,
-            "vorbis" => WEBM_VORBIS,
-            _ => "",
-        };
-        if can(caps, video_mime) && can(caps, audio_mime) {
+        let audio_ok = audio.is_none_or(|audio| match audio.codec_name.as_str() {
+            "opus" => can(caps, WEBM_OPUS),
+            "vorbis" => can(caps, WEBM_VORBIS),
+            _ => false,
+        });
+        if can(caps, video_mime) && audio_ok {
             return Direct;
         }
     }

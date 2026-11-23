@@ -1,3 +1,4 @@
+import mediaExtensions from '../../../media-formats.json'
 import type { Caps, MediaOpened, PlaybackPrep, CueBatch, PipelineStatus, LanguageEvent, ComponentStatus, ErrorEvent, DownloadProgress, Settings, UrlInfo, RecentItem, SubtitleVariant, SubtitleFormat } from './types'
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
@@ -6,6 +7,11 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { open, save } from '@tauri-apps/plugin-dialog'
 export interface Commands {
   set_playback_capabilities: [ { caps: Caps }, void ]
+  close_media: [ undefined, void ]
+  choose_media_folder: [ undefined, string[] ]
+  save_video_frame: [ { sessionId: string; ms: number }, boolean ]
+  get_sample_media: [ undefined, string | null ]
+  list_chapters: [ { sessionId: string }, { startMs: number; title: string }[] ]
   open_media: [ { path: string }, void ]
   probe_url: [ { url: string }, UrlInfo ]
   download_url: [ { url: string }, void ]
@@ -37,16 +43,18 @@ export interface Events {
   'pipeline://language': LanguageEvent
   'setup://progress': ComponentStatus
   'download://progress': DownloadProgress
-  'app://menu': 'open' | 'url' | 'export'
+  'app://open-files': string[]
+  'app://menu': 'open' | 'open-folder' | 'close-media' | 'url' | 'export' | 'play-pause' | 'playlist' | 'previous-file' | 'next-file' | 'seek-backward' | 'seek-forward' | 'mute' | 'audio-tracks' | 'volume-up' | 'volume-down' | 'repeat' | 'fullscreen' | 'subtitles' | 'transcript' | 'subtitle-file' | 'playback-options' | 'settings'
   'app://error': ErrorEvent
 }
 export interface Backend {
   call<K extends keyof Commands>(command: K, args?: Commands[K][0]): Promise<Commands[K][1]>
   listen<K extends keyof Events>(event: K, receive: (payload: Events[K]) => void): Promise<() => void>
-  openFile(): Promise<string | null>
+  openFiles(): Promise<string[]>
+  openFolder(): Promise<string[]>
   saveFile(defaultPath: string): Promise<string | null>
   fullscreen(enabled: boolean): Promise<void>
-  onDrop(receive: (path: string) => void): Promise<() => void>
+  onDrop(receive: (paths: string[]) => void): Promise<() => void>
 }
 export class TauriBackend implements Backend {
   call<K extends keyof Commands>(command: K, args?: Commands[K][0]): Promise<Commands[K][1]> {
@@ -55,14 +63,19 @@ export class TauriBackend implements Backend {
   listen<K extends keyof Events>(event: K, receive: (payload: Events[K]) => void): Promise<UnlistenFn> {
     return listen<Events[K]>(event, ({ payload }) => receive(payload))
   }
-  openFile() {
-    return open({ multiple: false, directory: false, filters: [{ name: 'Media', extensions: ['mp4','mkv','mov','m4v','webm','avi','ts','flv','wmv','mp3','m4a','wav','flac','ogg','ogv'] }, { name: 'All files', extensions: ['*'] }] })
+  async openFiles() {
+    return (await open({ multiple: true, directory: false, filters: [{ name: 'Media', extensions: mediaExtensions }, { name: 'All files', extensions: ['*'] }] })) ?? []
+  }
+  async openFolder() {
+    const paths = await this.call('choose_media_folder')
+    const order = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+    return paths.sort(order.compare)
   }
   saveFile(defaultPath: string) { return save({ defaultPath }) }
   fullscreen(enabled: boolean) { return getCurrentWindow().setFullscreen(enabled) }
-  onDrop(receive: (path:string) => void) {
+  onDrop(receive: (paths:string[]) => void) {
     return getCurrentWebview().onDragDropEvent(({ payload }) => {
-      if (payload.type === 'drop' && payload.paths.length) receive(payload.paths[0])
+      if (payload.type === 'drop' && payload.paths.length) receive(payload.paths)
     })
   }
 }

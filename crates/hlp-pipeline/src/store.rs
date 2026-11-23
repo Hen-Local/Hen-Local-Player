@@ -160,7 +160,7 @@ impl Translations {
 pub fn list_recent(root: &Path) -> Vec<RecentItem> {
     read(&root.join("recent.json")).unwrap_or_default()
 }
-pub fn record_recent(root: &Path, project: &Project, progress: f32) -> Result<()> {
+pub fn record_recent(root: &Path, project: &Project, progress: f32, opened_at: u64) -> Result<()> {
     use fs2::FileExt;
     let lock = fs::OpenOptions::new()
         .create(true)
@@ -177,10 +177,11 @@ pub fn record_recent(root: &Path, project: &Project, progress: f32) -> Result<()
             path: project.source_path.to_string_lossy().into_owned(),
             title: project.title.clone(),
             duration_ms: project.duration_ms,
-            last_opened: now(),
+            last_opened: opened_at,
             progress,
         },
     );
+    items.sort_by_key(|item| std::cmp::Reverse(item.last_opened));
     items.truncate(20);
     write_json(&root.join("recent.json"), &items)
 }
