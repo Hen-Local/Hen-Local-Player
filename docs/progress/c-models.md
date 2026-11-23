@@ -4,13 +4,15 @@
 - [x] Verify managed Silero and FFmpeg installs under a temporary root. With only the existing model and runtime paths symlinked under `HLP_OMINIX_ROOT=$(mktemp -d)`, `hlp-cli setup --yes --with-urls` downloaded and verified Silero, both FFmpeg executables, yt-dlp and Deno. A subsequent `hlp-cli status` reported all eight entries Ready.
 - [x] Interrupted downloads resume and manifest pins pass validation. `cargo test --locked -p hlp-models` passed six offline tests. The loopback origin recorded a cancelled response after three bytes and a new request with `Range: bytes=3-`. Other tests cover servers ignoring the range, same-size bad digests, concurrent installs, tag validation and immutable pins for both platforms.
 
+The live `cargo test --locked -p hlp-models -- --ignored` passed in 48.25 s. It installed fresh macOS FFmpeg, Silero, llama.cpp, yt-dlp and Deno in an empty temporary directory, exercised the explicit yt-dlp update, and validated the resulting executables. After rebasing on the lane A merge, the six-package check in §9.1.1 passed and `npm --prefix app/ui run check` reported zero errors and warnings.
+
 ## Verified component details
 
 The repository manifest records exact URLs, byte counts and SHA-256 digests. The default and Light MLX repositories have the same ten runtime/model-card files, including one weight file each. The tokenizer can be constructed from vocab.json and merges.txt. The Git transport metadata file is excluded. Verified each local file against its Hugging Face blob ID or LFS digest and the matching ModelScope digest. Each mirror uses its own commit revision. The downloader writes the translator-compatible repo_id and bootstrap_version marker.
 
 The Windows Sherpa archive measured 878,702,423 bytes, SHA-256 `393f8a14e2f5fb96746aaab342997a40641001fbd5bf9592a080a8329178ee96`. Its file list includes conv_frontend.onnx, encoder.int8.onnx, decoder.int8.onnx and the three tokenizer files. The Silero model measured 643,854 bytes, SHA-256 `9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6`.
 
-The yt-dlp 2026.10.26 standalone pins match its SHA2-256SUMS. The Deno v2.9.8 pins match the platform-specific .sha256sum files. Existing installs and ordinary playback require no release metadata request. The explicit yt-dlp update command checks the release's checksum file before activating its version directory. [yt-dlp release](https://github.com/yt-dlp/yt-dlp/releases/tag/2026.10.26) · [Deno release](https://github.com/denoland/deno/releases/tag/v2.9.8)
+The yt-dlp 2026.10.26 standalone pins match its SHA2-256SUMS. The Deno v2.9.8 pins match the platform-specific .sha256sum files. The yt-dlp source is Unlicense. The release README identifies the combined PyInstaller executables as GPLv3+. Existing installs and ordinary playback require no release metadata request. The explicit yt-dlp update command checks the release's checksum file before activating its version directory. [yt-dlp release](https://github.com/yt-dlp/yt-dlp/releases/tag/2026.10.26) · [Deno release](https://github.com/denoland/deno/releases/tag/v2.9.8)
 
 ## FFmpeg audit evidence
 
