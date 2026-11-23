@@ -1,0 +1,28 @@
+[package]
+name = "hlp-models"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+hlp-core.workspace = true
+anyhow.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+dirs.workspace = true
+sha2.workspace = true
+hex.workspace = true
+reqwest.workspace = true
+flate2.workspace = true
+tar.workspace = true
+bzip2.workspace = true
+zip.workspace = true
+fs2.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+futures-util.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+axum.workspace = true
