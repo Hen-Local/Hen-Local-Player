@@ -88,6 +88,8 @@ Lane F measured a real external AppKit file drop in WKWebView. The file opened a
 
 ### M8 · Windows
 
+Lane G on `codex/lane-g` passed `cargo check --target x86_64-pc-windows-msvc -p hlp-core -p hlp-asr-worker` using the real Sherpa archive. The PowerShell generator produced nine ffprobe-verified files on the Mac using recorded English audio in place of SAPI. The remaining cross-build reached native C compilation and requires Windows SDK headers. The lead requested a Windows x64 machine and prepared a self-contained Git bundle under `dist/`. The native items below are pending.
+
 - [ ] SAPI fixture E2E passes on Windows.
 - [ ] Desktop smoke test passes.
 - [ ] CPU throughput measured.

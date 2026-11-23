@@ -6,3 +6,4 @@
 /app/binaries/
 /tests/fixtures/
 .DS_Store
+/dist/
