@@ -60,6 +60,8 @@ The six-package Rust check, Svelte check, core, media, installer and pipeline te
 
 ### M6 · Desktop player
 
+Phase 4 started from `slice-v1` (`3e7522d`). Lane F owns the native desktop and URL work in `codex/lane-f`. Lane G owns the Windows port in `codex/lane-g`. Both use independent worktrees and build directories.
+
 Mock UI reviewed and merged after D. The six-package check, Svelte check and production build passed on the merged tree. Eight screenshots and three browser smoke runs cover the mock flows. Native acceptance remains below. [Lane E evidence](progress/e-ui.md).
 
 - [ ] Empty state shows the drop zone and the recent list. Dropping a file plays it within 1 s (Direct).
