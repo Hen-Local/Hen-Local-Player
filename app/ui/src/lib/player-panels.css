@@ -248,8 +248,8 @@
 .app .player-dialog .dialog-body {
   min-height: 0;
   padding: 16px;
-  overflow: auto;
-  overscroll-behavior: contain;
+  overflow: hidden auto;
+  overscroll-behavior: none contain;
 }
 
 .app .player-dialog .tabs {
@@ -325,8 +325,8 @@
   min-height: 0;
   min-width: 0;
   padding: 4px 14px 14px;
-  overflow: auto;
-  overscroll-behavior: contain;
+  overflow: hidden auto;
+  overscroll-behavior: none contain;
 }
 
 .app .playback-sheet :is(.option-row, form, .option-field) {

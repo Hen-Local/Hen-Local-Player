@@ -158,8 +158,8 @@
     flex: none;
     min-height: 0;
     max-height: 47%;
-    overflow: auto;
-    overscroll-behavior: contain;
+    overflow: hidden auto;
+    overscroll-behavior: none contain;
     border-bottom: 1px solid var(--hairline);
   }
   .track-settings summary {

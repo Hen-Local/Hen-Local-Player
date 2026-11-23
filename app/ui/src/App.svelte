@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
+  import { getCurrentWindow } from '@tauri-apps/api/window'
+  import { enableWindowDragging } from './lib/window-drag'
   import { player as p, mockMode, backend } from './lib/stores.svelte'
   import Icon from './lib/Icon.svelte'
   import Player from './lib/Player.svelte'
@@ -232,6 +234,9 @@
   }
   onMount(() => {
     document.documentElement.classList.toggle('native-mac', nativeMac)
+    const stopDragging = !mockMode && enableWindowDragging(shell,
+      () => !p.fullscreen && !p.dialog && !menuOpen,
+      () => void p.act(() => getCurrentWindow().startDragging()))
     void p.act(() => p.init())
     if (!mockMode) void p.act(async () => { samplePath = await backend.call('get_sample_media') })
     function optionsFromMenu() {
@@ -246,6 +251,7 @@
     }
     window.addEventListener('player:panel', fromMenu)
     return () => {
+      if (stopDragging) stopDragging()
       window.removeEventListener('player:panel', fromMenu)
       window.removeEventListener('hlp:playback-options', optionsFromMenu)
       p.dispose()
@@ -282,7 +288,7 @@
 </script>
 
 <svelte:window onkeydown={key} />
-<main bind:this={shell} class="app" class:watching={!!p.media}
+<main bind:this={shell} class="app" class:desktop={!mockMode} class:watching={!!p.media}
   class:left-dock={leftPanel !== null && !!p.media} class:right-dock={rightTab !== null} class:fullscreen={p.fullscreen}>
   {#if p.media}
     <Player onpanel={transportPanel} onmore={toggleMenu} keepControls={menuOpen || !!leftPanel || !!rightTab}
@@ -385,3 +391,10 @@
   {:else if p.dialog === 'setup'}<SetupScreen
     />{:else if p.dialog === 'export'}<ExportMenu />{/if}
 </main>
+
+<style>
+  .desktop :global(:is(.idle-stage, .video-stage, .panel-title)) {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+</style>

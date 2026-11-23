@@ -32,3 +32,9 @@ On 2026-11-23, I compared the prior Apple Silicon disk image (SHA-256 `2c20d7073
 | Browser and Windows paths | Chrome opened a local movie, entered genuine document fullscreen and exited with Escape. When the host denied the request, Escape restored the embedded player. A simulated Windows Tauri bridge confirmed ordinary native fullscreen requests, OS state synchronization, and one state query after 160 resize events. A Windows PC was unavailable. |
 
 The native window measurements include the operating system transition where the green button or system menu starts a separate Space. Player fullscreen fills the current display without a Space animation. The 36 ms observation interval limits the precision of the faster measurements.
+
+## Window dragging during playback
+
+The desktop starts a native window drag after the primary mouse moves five CSS pixels on the picture or a non-interactive part of the window. Welcome controls, the transport, side-panel controls, selectable sidebar text and fullscreen keep their usual input behavior. The original title bar keeps its native drag handling.
+
+The local Chrome pointer test used the real player UI, a sample movie and a recording callback for the native drag request. It exercised dragging from the welcome background, the picture and the playlist header, including immediately after a button lost focus. A normal click and a two-pixel movement toggled playback, a double-click toggled fullscreen, and releasing a drag kept the movie paused. Scrubbing changed the playhead, dragging the volume slider changed the volume, and fullscreen drags, playlist buttons and right-button drags made zero window-drag requests. The production build and `npm --prefix app/ui run check` passed with zero Svelte errors or warnings.

@@ -289,6 +289,7 @@
       {#key p.media.sessionId}
         {#if url}<video
             bind:this={video}
+            draggable={mockMode ? undefined : false}
             src={url}
             style:object-fit={p.videoFit}
             data-session={p.media.sessionId}

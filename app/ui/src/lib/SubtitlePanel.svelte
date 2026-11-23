@@ -154,7 +154,7 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
-    overflow: auto;
+    overflow: hidden auto;
   }
   .subtitle-workspace :global(.subtitle-track-tools) {
     display: grid;

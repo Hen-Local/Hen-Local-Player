@@ -2,6 +2,12 @@
 
 A checked item has been exercised. Worktree branches and tags are local until publication is requested.
 
+## Scrolling and window dragging · November 23, 2026
+
+- [x] A sideways trackpad gesture previously displaced the whole Mac player by up to 38 pixels. An unbroken subtitle also allowed the list to scroll sideways by 528 pixels. In the fixed player, horizontal movement stayed at zero while vertical scrolling still moved the list. Focused seek and volume sliders retained their values during horizontal input. [Wheel and trackpad checks](progress/player-transport.md#horizontal-scrolling).
+- [x] In an independently installed copy of the Mac app, a left-button drag on the welcome background moved the window 70 pixels right and 28 down. Dragging a paused movie moved the window 70 pixels left and 28 down while the playhead stayed at five seconds. A playing movie kept advancing during a drag. Dragging the background also worked immediately after using the seek slider. A click played the movie, a double-click entered fullscreen, and dragging the seek slider changed the playback position with the window stationary. [Window drag checks](progress/player-shell.md).
+- [x] The production UI build and Svelte checks passed with zero errors or warnings. The arm64 disk image and its app signature passed verification. Installer size 123,949,149 bytes, SHA-256 `e895b87793396cf8554377318cd6ec6bdf7bb4af44b4b242c5d907d8e01ffb2e`.
+
 ## Playback and subtitle fixes · November 23, 2026
 
 - [x] The two sidebars open and close independently. In native WKWebView, all ten transport targets kept the same window-relative bounds and passed hit tests with neither, either and both sidebars open, at 720 × 430 and 2580 × 1080. Touch checks covered 320- and 390-pixel widths. [Transport results](progress/player-transport.md).
