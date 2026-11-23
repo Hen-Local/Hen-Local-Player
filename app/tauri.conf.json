@@ -13,11 +13,13 @@
       {
         "label": "main",
         "title": "Hen Local Player",
-        "width": 1280,
-        "height": 760,
-        "minWidth": 600,
-        "minHeight": 420,
-        "backgroundColor": "#ffffff",
+        "center": true,
+        "width": 720,
+        "height": 430,
+        "minWidth": 450,
+        "minHeight": 300,
+        "theme": "Dark",
+        "backgroundColor": "#191b20",
         "dragDropEnabled": true
       }
     ],

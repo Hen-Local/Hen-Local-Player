@@ -4,17 +4,16 @@ A local video player with on-device speech recognition, translation and bilingua
 
 ## Open the player
 
-On Apple Silicon, open the DMG and drag **Hen Local Player** to Applications. In Finder, choose **Open With → Hen Local Player** on a movie, or launch the player and choose **Open file** (⌘O), **Open folder** (⇧⌘O), or **Play sample**. FFmpeg and FFprobe are included in the app. Ordinary playback and authored text subtitles work offline from the first launch.
+On Apple Silicon, open the DMG and drag **Hen Local Player** to Applications. The compact opening window offers **Open file** (⌘O) and **Open URL** (⌘L). After you have watched a movie, you can reopen it from the short recent-files list. In Finder, **Open With → Hen Local Player** starts playback directly. The **•••** menu includes **Open folder** and, on the opening screen, **Play sample**.
 
-- Select multiple files to play them in order. **Playlist** lets you add, remove and skip files. Playback resumes when you reopen an unfinished movie.
-- Click the video to play or pause. Double-click for fullscreen. The transport includes volume, speed, ten-second skips, repeat and picture-in-picture on supported systems.
-- **Playback** includes time and chapter navigation, A–B repeat, video fit/fill, audio track selection and saving a PNG frame.
-- Open **Subtitles** to use an embedded text track or an SRT/WebVTT file, adjust subtitle timing, or choose locally generated bilingual captions. Install the speech and translation components from **Models & tools** when you want generated subtitles. **Transcript** lets you jump to a line and **Export** saves generated subtitles as SRT, WebVTT or ASS.
-- **Open link** previews a video before downloading it. URL tools install on first use. General settings include the four Hen Local Translator accent colors.
+- Move the pointer over a movie to show the floating controls along the bottom. Volume is on the left, play and ten-second skips are in the center, and the timeline shows elapsed and remaining time. The controls fade while you watch. Double-click the picture for fullscreen.
+- The **Playlist** button opens the left sidebar. Select multiple files to queue them, add and remove items, or skip to a file. Reopening an unfinished movie resumes playback.
+- **Player settings** opens the right sidebar. **Subtitles** selects embedded, external SRT/WebVTT, or locally generated tracks and adjusts timing, text size and position. **Playback** includes speed, audio tracks, repeat, chapter and time navigation, fit/fill and frame capture. **Transcript** lets you jump to a line. Click the same sidebar button or press Escape to close it.
+- FFmpeg and FFprobe are included. Ordinary playback and authored text subtitles work offline from first launch. **Models & tools** in the Subtitles tab installs the components for generated bilingual captions. **Open URL** previews a video before downloading it and offers to install URL tools on first use.
 
 ### Browser preview
 
-From the repository root, run the following commands and open the local address printed by Vite. **Play sample** includes a Japanese clip and authored demo captions. You can also open browser-compatible files from your computer. The desktop app runs the speech models and handles additional formats.
+From the repository root, run the following commands and open the local address printed by Vite. Choose **••• → Play sample** for the Japanese clip or **Open file** for a browser-compatible movie. The Mac app runs local speech models and handles additional formats.
 
 ```sh
 npm --prefix app/ui ci

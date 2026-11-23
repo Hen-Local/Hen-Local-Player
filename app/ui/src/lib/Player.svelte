@@ -4,23 +4,40 @@
   import SubtitleOverlay from './SubtitleOverlay.svelte'
   import Controls from './Controls.svelte'
   import Icon from './Icon.svelte'
-  import { inPiP, supportsPiP, updatePiPCaptions } from './picture-in-picture'
+  import { inPiP, updatePiPCaptions } from './picture-in-picture'
   import { subtitleTracks } from './subtitle-tracks.svelte'
+  type Panel = 'subtitles' | 'playlist' | 'transcript' | 'library'
+  let {
+    onpanel,
+    onmore,
+    keepControls = false,
+    subtitlesOpen = false,
+    playlistOpen = false,
+  }: {
+    onpanel?: (id: Panel) => void
+    onmore?: () => void
+    keepControls?: boolean
+    subtitlesOpen?: boolean
+    playlistOpen?: boolean
+  } = $props()
   let stage: HTMLDivElement,
     stageHeight = $state(0)
   let video = $state<HTMLVideoElement>()
   let box = $state({ width: 0, height: 0, left: 0, top: 0 }),
     buffered = $state(0),
     idle = $state(false),
+    controlsHeight = $state(0),
+    controlsHeld = $state(false),
     pipActive = $state(false),
-    pipAvailable = $state(false),
     audioOnly = $state(false)
   let lastReport = 0,
     raf = 0,
     idleTimer = 0,
     clickTimer = 0,
-    lastPosition = 0
+    lastPosition = 0,
+    wakeTap = false
   let url = $derived(p.prep?.mediaUrl || p.media?.mediaUrl || null)
+  let controlsVisible = $derived(!idle || !p.playing || keepControls || controlsHeld)
   function measure() {
     if (!stage || !video) return
     const { clientWidth: w, clientHeight: h } = stage,
@@ -66,8 +83,12 @@
   function activity() {
     idle = false
     clearTimeout(idleTimer)
-    if (p.playing) idleTimer = window.setTimeout(() => (idle = true), 2500)
+    if (p.playing && !controlsHeld && !keepControls)
+      idleTimer = window.setTimeout(() => (idle = true), 2500)
   }
+  $effect(() => {
+    activity()
+  })
   function play() {
     p.playing = true
     sync(true)
@@ -89,7 +110,6 @@
     for (const track of Array.from(video.textTracks)) {
       if (track.kind === 'captions' || track.kind === 'subtitles') track.mode = 'disabled'
     }
-    pipAvailable = !audioOnly && supportsPiP(video)
     p.restoreVideo(video)
     sync(true)
   }
@@ -119,7 +139,6 @@
       buffered = 0
       idle = false
       audioOnly = false
-      pipAvailable = false
     }
   })
   $effect(() => {
@@ -156,7 +175,11 @@
     updatePiPCaptions(nativeCaptions.track, subtitleTracks.pipCues(p.cues, p.settings))
   })
   function clickStage(e: MouseEvent) {
-    if (!(e.target instanceof HTMLElement) || e.target.closest('button,input,select,.controls'))
+    if (
+      wakeTap ||
+      !(e.target instanceof HTMLElement) ||
+      e.target.closest('button,input,select,[data-transport]')
+    )
       return
     clearTimeout(clickTimer)
     if (e.detail === 2) {
@@ -240,14 +263,22 @@
   })
 </script>
 
+<svelte:window onkeydown={activity} />
+
 <div
   bind:this={stage}
   bind:clientHeight={stageHeight}
   class="video-stage"
-  class:hide-cursor={p.fullscreen && idle}
+  class:controls-visible={controlsVisible}
+  class:hide-cursor={!controlsVisible}
   role="presentation"
-  onpointermove={activity}
-  onpointerdown={activity}
+  onpointermove={(e) => {
+    if (e.pointerType !== 'touch') activity()
+  }}
+  onpointerdown={(e) => {
+    wakeTap = e.pointerType === 'touch' && !controlsVisible
+    activity()
+  }}
   onfocusin={activity}
   onclick={clickStage}
 >
@@ -293,7 +324,9 @@
     {/key}
     <SubtitleOverlay
       {box}
-      clearance={idle && p.playing ? 0 : Math.max(0, 85 - (stageHeight - box.top - box.height))}
+      clearance={controlsVisible
+        ? Math.max(0, controlsHeight + 8 - (stageHeight - box.top - box.height))
+        : 0}
     />
     {#if p.status?.stage === 'needs-setup' && !url && subtitleTracks.selected === 'generated' && p.settings.subtitleMode !== 'off'}<button
         class="stage-chip"
@@ -301,11 +334,52 @@
       >
         {p.t('needsSetup')} →
       </button>
-    {:else if !idle && subtitleTracks.selected === 'generated' && p.settings.subtitleMode !== 'off' && p.status?.asrPendingSpans.some(([a, b]) => a <= p.ms && p.ms < b)}<span
-        class="stage-chip"
-      >
-        {p.t('transcribing')}
-      </span>{/if}
+    {/if}
+    <div
+      class="floating-slot"
+      class:transport-hidden={!controlsVisible}
+      bind:clientHeight={controlsHeight}
+    >
+      <Controls
+        {buffered}
+        {subtitlesOpen}
+        {playlistOpen}
+        onsettings={() => onpanel?.('subtitles')}
+        onplaylist={() => onpanel?.('playlist')}
+        onmore={() => onmore?.()}
+        onhold={(held) => (controlsHeld = held)}
+      />
+    </div>
   {/if}
-  <Controls {buffered} {pipAvailable} {pipActive} hidden={idle && p.playing} />
 </div>
+
+<style>
+  .video-stage.hide-cursor {
+    cursor: none;
+  }
+  .floating-slot {
+    position: absolute;
+    inset: auto 0 0;
+    z-index: 4;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0 clamp(8px, 2.2vw, 24px) max(clamp(8px, 2vh, 20px), env(safe-area-inset-bottom));
+    container-type: inline-size;
+    pointer-events: none;
+    transition:
+      opacity 160ms,
+      transform 160ms;
+  }
+  .floating-slot.transport-hidden {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  .floating-slot.transport-hidden :global([data-transport]) {
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .floating-slot {
+      transition: none;
+    }
+  }
+</style>

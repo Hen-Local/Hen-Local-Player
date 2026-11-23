@@ -1,4 +1,8 @@
 export default {
+  openUrlAction: 'Open URL',
+  remainingTime: 'Time remaining',
+  playerSettings: 'Player settings',
+  more: 'More options',
   accentColor: 'Accent color',
   themeBlue: 'Blue',
   themeOrange: 'Orange',

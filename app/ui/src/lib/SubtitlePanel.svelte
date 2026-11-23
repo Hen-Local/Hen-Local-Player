@@ -3,6 +3,7 @@
   import Icon from './Icon.svelte'
   import LanguageControls from './LanguageControls.svelte'
   import SubtitleTracks from './SubtitleTracks.svelte'
+  import SubtitleAppearance from './SubtitleAppearance.svelte'
   import { subtitleTracks } from './subtitle-tracks.svelte'
 </script>
 
@@ -23,6 +24,9 @@
         {/each}
       </div>
     </div>
+  {/if}
+  <SubtitleAppearance />
+  {#if subtitleTracks.selected === 'generated'}
     <button class="outline wide" onclick={() => (p.dialog = 'export')}
       ><Icon name="export" size={16} />{p.t('exportSubs')}</button
     >

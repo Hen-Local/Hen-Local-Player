@@ -22,6 +22,7 @@
 </script>
 
 <dialog
+  class="player-dialog"
   bind:this={dialog}
   oncancel={(e) => {
     e.preventDefault()

@@ -1,5 +1,9 @@
 import type en from './en'
 export default {
+  openUrlAction: '打开网址',
+  remainingTime: '剩余时间',
+  playerSettings: '播放设置',
+  more: '更多选项',
   accentColor: '主题颜色',
   themeBlue: '电光蓝',
   themeOrange: '霓虹橙',

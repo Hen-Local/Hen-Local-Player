@@ -2,6 +2,18 @@
 
 A checked item has been exercised. Worktree branches and tags are local until publication is requested.
 
+## Compact player window · November 23, 2026
+
+The current Apple Silicon package opens in a centered 720 × 430 window with the Hen mark and **Open file** and **Open URL**. A returning viewer sees up to four recent movies. **More → Play sample** opens the bundled Japanese film. The playback surface uses the full window with a floating controller. Playlist opens on the left and Player settings on the right. On wider windows a sidebar makes room beside the movie. On narrower windows it overlays it. [Mac opening window](screenshots/player/compact-window.webp) · [Floating controls](screenshots/player/compact-playback-native.webp) · [Subtitle sidebar](screenshots/player/compact-sidebar.webp).
+
+- [x] Native macOS inspection found a non-opaque, resizable window, standard traffic lights and an AppKit HUD material. Changing the solid background behind the window changed the same 80 × 80 pixel patch from RGB(84, 29, 31) to RGB(25, 50, 90). A real title-bar drag moved the window. It clamped a 300 × 200 resize request to its 450 × 300 minimum. In a copy installed from the DMG, **Open file** presented the native picker and **Open URL** presented the URL form. Both cancelled back to the opening window.
+- [x] The installed Mac app decoded the packaged sample at 1280 × 720 with Japanese/English captions. Native button presses opened Playlist on the left, Player settings on the right and the Playback tab with speed, repeat, chapter/time navigation where available, audio tracks and frame capture.
+- [x] Chrome exercised actual media playback at six widths between 320 and 1280 pixels. At 720 × 430, the floating controls measured 540 × 66, the play button remained centered and visible captions cleared the controls by eight pixels. Mouse, touch and keyboard checks covered automatic hiding, waking without pausing, scrubbing, mute, fullscreen and toggling each sidebar. At 720 pixels wide the left playlist occupied x=0–248 and the right settings occupied x=472–720. At 320 pixels wide the open sidebar stayed onscreen and scrolled independently.
+- [x] The right sidebar selected subtitle tracks, adjusted live captions from an imported SRT, changed playback speed to 1.5×, switched repeat modes, preserved an A–B loop across panel closure, and entered and exited picture-in-picture. The sample transcript had six timed rows. English and Chinese keyboard tests covered tab navigation, Escape and focus restoration. All four Hen accents and the reduced-transparency preference were exercised.
+- [x] `npm --prefix app/ui run check` returned zero errors and warnings. The production UI build, Rust formatting, `cargo check --locked -p henlocal-player` and all four desktop subtitle-track tests (including real embedded streams) passed locally. The Apple Silicon package passed disk image and strict code-signature verification. Native Windows visual verification remains pending.
+
+Current Mac installer: `dist/Hen-Local-Player-0.1.0-macos-arm64.dmg`, 123,440,981 bytes. SHA-256 `2c20d7073c56650cc031b173bad87dee1c37368d9201b756ba68f3c1261d456d`. The local package is ad-hoc signed.
+
 ## Standalone player revision · November 23, 2026
 
 - [x] The desktop opens to a media library in the Hen Local Translator style. It includes the original hen mark, four persistent accent colors and a 22.5-second animated Japanese sample with six bilingual lines. A movie takes over the main window. Subtitles, the transcript and the playlist open on demand. Chrome checks covered the full-size window, fullscreen keyboard navigation and 320-pixel layouts. [Screenshots and interaction checks](progress/player-shell.md).
@@ -11,7 +23,7 @@ A checked item has been exercised. Worktree branches and tags are local until pu
 - [x] Rust formatting, 42 regular Rust tests, the additional real embedded-track test, both fixture-backed media tests, the production UI build and the Svelte check passed. The release CLI passed all 81 checks on nine speech and media fixtures. The long fixture produced 359 bilingual cues in 65.72 seconds and reopened in 45 ms. [Fixture results](../tests/results/2026-11-23-darwin-player.json).
 - [x] Windows x64 code passed the local Rust cross-check, and PowerShell parsed the updated packaging script. Native Windows installation, WebView2 playback and speech inference still need a Windows host. All development and packaging stayed local.
 
-Current Mac installer: `dist/Hen-Local-Player-0.1.0-macos-arm64.dmg`, 123,442,074 bytes. SHA-256 `e8cedb95e98ba6e787afb9dcfd1ff5bbdc16a8278d25f886f7ca4ce7b400fa2c`. The package uses an ad-hoc signature for local testing.
+Previous standalone-player installer, 123,442,074 bytes. SHA-256 `e8cedb95e98ba6e787afb9dcfd1ff5bbdc16a8278d25f886f7ca4ce7b400fa2c`. The package uses an ad-hoc signature for local testing.
 
 ## Original prototype
 

@@ -1,0 +1,26 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Hen Local Player",
+        "center": true,
+        "width": 720,
+        "height": 430,
+        "minWidth": 450,
+        "minHeight": 300,
+        "theme": "Dark",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 14, "y": 15 },
+        "transparent": true,
+        "backgroundColor": "#191b2000",
+        "windowEffects": {
+          "effects": ["hudWindow"],
+          "state": "followsWindowActiveState"
+        },
+        "dragDropEnabled": true
+      }
+    ]
+  }
+}

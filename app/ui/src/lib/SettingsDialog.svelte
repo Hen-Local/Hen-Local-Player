@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import Dialog from './Dialog.svelte'
+  import SubtitleAppearance from './SubtitleAppearance.svelte'
   import { player as p, backend } from './stores.svelte'
   import { size } from './format'
   import { languages, languageName } from './languages'
@@ -41,6 +42,7 @@
   <div class="tabs">
     {#each ['general', 'subtitles', 'processing', 'storage'] as k}<button
         class:selected={tab === k}
+        aria-pressed={tab === k}
         onclick={() => (tab = k as typeof tab)}
       >
         {p.t(k as typeof tab)}
@@ -116,21 +118,7 @@
         <option value="original-first">{p.t('origFirst')}</option>
       </select>
     </label>
-    {#each [{ key: 'subtitleScale', label: 'scale', min: 0.6, max: 2, step: 0.1 }, { key: 'subtitleBackground', label: 'background', min: 0, max: 0.8, step: 0.05 }, { key: 'subtitleBottomOffset', label: 'offset', min: 0, max: 0.4, step: 0.01 }] as opt}
-      <label class="slider-setting">
-        <span>
-          {p.t(opt.label as 'scale')}
-          <b>{Math.round(Number(p.settings[opt.key as keyof Settings]) * 100)}%</b>
-        </span>
-        <input
-          type="range"
-          min={opt.min}
-          max={opt.max}
-          step={opt.step}
-          value={Number(p.settings[opt.key as keyof Settings])}
-          onchange={(e) => set(opt.key as 'subtitleScale', +e.currentTarget.value)}
-        />
-      </label>{/each}
+    <SubtitleAppearance />
   {:else if tab === 'processing'}
     <label>
       {p.t('model')}
@@ -212,12 +200,14 @@
 </Dialog>
 
 <style>
-  .theme-picker { padding:0; border:0; margin:0; min-width:0; }
-  .theme-picker legend { margin-bottom:8px; font-size:12px; font-weight:700; }
-  .theme-picker > div { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; }
+  .theme-picker { padding:0; border:0; margin:0 0 16px; min-width:0; }
+  .theme-picker legend { margin-bottom:8px; padding:0; font-size:12px; font-weight:630; }
+  .theme-picker > div { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; }
   .theme-picker button { gap:5px; padding:6px 2px; font-size:12px; }
-  .theme-picker button[aria-pressed=true] { box-shadow:inset 0 -3px var(--accent); }
-  .theme-picker i { display:block; width:12px; height:12px; border-radius:50%; }
+  .theme-picker i { display:block; width:11px; height:11px; border:1px solid #ffffff55; border-radius:50%; }
+  @media (max-width: 399px) {
+    .theme-picker > div { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  }
   :global(:root[data-accent-theme="neon-orange"]) { --accent:#ff5705; --accent-soft:#fff0e9; --accent-text:#9c3500; }
   :global(:root[data-accent-theme="neon-pink"]) { --accent:#ff0073; --accent-soft:#ffe8f2; --accent-text:#a8004c; }
   :global(:root[data-accent-theme="neon-green"]) { --accent:#51f91b; --accent-soft:#ecffe6; --accent-text:#176d09; }
