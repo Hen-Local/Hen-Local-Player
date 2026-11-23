@@ -3,21 +3,11 @@
   import Dialog from './Dialog.svelte'
   import { backend, player as p } from './stores.svelte'
   import { size } from './format'
+  import { componentNames } from './component-names'
   import Icon from './Icon.svelte'
   let include = $state(false),
     busy = $state(false),
     error = $state('')
-  const names: Record<string, string> = {
-    'asr-qwen3-1.7b-mlx': 'Qwen3-ASR · 1.7B',
-    'asr-qwen3-0.6b-mlx': 'Qwen3-ASR · 0.6B',
-    'asr-qwen3-0.6b-sherpa': 'Qwen3-ASR · 0.6B',
-    'vad-silero': 'Silero VAD',
-    'mt-hy-mt2-1.8b': 'Hy-MT2 · 1.8B',
-    'llama-runtime-b11429': 'llama.cpp',
-    ffmpeg: 'FFmpeg',
-    deno: 'Deno',
-    'yt-dlp': 'yt-dlp',
-  }
   let missing = $derived(
     p.components.filter(
       (c) =>
@@ -59,7 +49,7 @@
           <Icon name={c.ready ? 'check' : 'download'} size={16} />
         </div>
         <div class="component-name">
-          <strong>{names[c.id] ?? c.id}</strong>
+          <strong>{componentNames[c.id] ?? c.id}</strong>
           <small>
             {size(c.bytesTotal)} · {typeof c.state === 'object' ? p.t('failed') : p.t(c.state)}
           </small>

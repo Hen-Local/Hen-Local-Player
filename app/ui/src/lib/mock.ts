@@ -9,6 +9,7 @@ import type {
   SubtitleFormat,
 } from './types'
 import { defaults } from './defaults'
+import { readSubtitleFile } from './subtitle-tracks'
 import { languages } from './languages'
 import mediaExtensions from '../../../media-formats.json'
 
@@ -65,6 +66,8 @@ export class MockBackend implements Backend {
   private recent = stored<RecentItem[]>('recent', [])
   private sources = new Map<string, string>()
   private cueCache = new Map<string, Cue[]>(stored<[string, Cue[]][]>('samples', []))
+  private companions = new Map<string, File[]>()
+  private generating = false
   private playhead = 0
   private visibleCues = new Map<string, Cue>()
   private current: MediaOpened | null = null
@@ -101,12 +104,35 @@ export class MockBackend implements Backend {
     this.sources.set(path, URL.createObjectURL(file))
     return path
   }
-  private mediaFiles(files: FileList | null) {
-    return Array.from(files ?? []).filter(
-      (file) =>
-        /^(audio|video)\//.test(file.type) ||
-        mediaExtensions.includes(file.name.split('.').pop()?.toLowerCase() ?? ''),
+  private mediaPaths(selection: FileList | null, directory = false) {
+    const files = Array.from(selection ?? [])
+    const media = files.filter(
+      (f) =>
+        /^(audio|video)\//.test(f.type) ||
+        mediaExtensions.includes(f.name.split('.').pop()?.toLowerCase() ?? ''),
     )
+    if (directory)
+      media.sort((a, b) =>
+        a.webkitRelativePath.localeCompare(b.webkitRelativePath, undefined, { numeric: true }),
+      )
+    const subtitles = files.filter((f) => /\.(srt|vtt)$/i.test(f.name))
+    return media.map((file) => {
+      const path = this.file(file)
+      const stem = (file.webkitRelativePath || file.name).replace(/\.[^.]+$/, '')
+      this.companions.set(
+        path,
+        subtitles
+          .filter((caption) => {
+            const base = (caption.webkitRelativePath || caption.name).replace(/\.[^.]+$/, '')
+            return (
+              base === stem ||
+              (base.startsWith(stem + '.') && !base.slice(stem.length).includes('/'))
+            )
+          })
+          .sort((a, b) => a.name.localeCompare(b.name)),
+      )
+      return path
+    })
   }
   openFiles(directory = false): Promise<string[]> {
     return new Promise((resolve) => {
@@ -116,12 +142,7 @@ export class MockBackend implements Backend {
       input.accept = ['video/*', 'audio/*', ...mediaExtensions.map((ext) => '.' + ext)].join(',')
       if (directory && 'webkitdirectory' in input) input.webkitdirectory = true
       input.onchange = () => {
-        const files = this.mediaFiles(input.files)
-        if (directory)
-          files.sort((a, b) =>
-            a.webkitRelativePath.localeCompare(b.webkitRelativePath, undefined, { numeric: true }),
-          )
-        resolve(files.map((file) => this.file(file)))
+        resolve(this.mediaPaths(input.files, directory))
       }
       input.oncancel = () => resolve([])
       input.click()
@@ -134,8 +155,8 @@ export class MockBackend implements Backend {
     const over = (e: DragEvent) => e.preventDefault()
     const drop = (e: DragEvent) => {
       e.preventDefault()
-      const files = this.mediaFiles(e.dataTransfer?.files ?? null)
-      if (files.length) receive(files.map((file) => this.file(file)))
+      const paths = this.mediaPaths(e.dataTransfer?.files ?? null)
+      if (paths.length) receive(paths)
     }
     window.addEventListener('dragover', over)
     window.addEventListener('drop', drop)
@@ -283,6 +304,7 @@ export class MockBackend implements Backend {
   private currentPath = ''
   private async open(path: string) {
     const turn = ++this.generation
+    this.generating = false
     clearInterval(this.timer)
     this.currentPath = path
     this.playhead = 0
@@ -339,6 +361,7 @@ export class MockBackend implements Backend {
       this.visibleCues.clear()
     }
     this.current = info
+    this.visibleCues = new Map(cached.map((c) => [c.id, c]))
     this.recent = [
       {
         path,
@@ -357,7 +380,6 @@ export class MockBackend implements Backend {
     this.emit('media://opened', info)
     this.emit('pipeline://language', info.language)
     if (this.sources.has(path)) return
-    this.stream(path, cached)
     if (plan !== 'direct')
       for (const progress of [0.2, 0.6, 1]) {
         await wait(400)
@@ -459,7 +481,7 @@ export class MockBackend implements Backend {
                 stale: command === 'set_source_language',
               })),
           })
-          this.stream(this.currentPath, cached)
+          if (this.generating) this.stream(this.currentPath, cached)
         }
         break
       }
@@ -536,8 +558,70 @@ export class MockBackend implements Backend {
       case 'export_subtitles':
         if (a && 'variant' in a && 'path' in a) this.exportSample(a.variant, a.format, a.path)
         break
+      case 'list_subtitle_tracks': {
+        if (!a || !('sessionId' in a) || a.sessionId !== this.current?.sessionId)
+          throw Error('Media changed')
+        if (this.currentPath === demoPath) {
+          reply = {
+            embedded: [],
+            sidecars: ['demo.srt'],
+            exactSidecar: 'demo.srt',
+            probeFailed: false,
+          }
+          break
+        }
+        const sidecars = (this.companions.get(this.currentPath) ?? []).map((f) => f.name)
+        const title = this.current.title.replace(/\.[^.]+$/, '')
+        reply = {
+          embedded: [],
+          sidecars,
+          exactSidecar: sidecars.find((n) => n.replace(/\.[^.]+$/, '') === title) ?? null,
+          probeFailed: false,
+        }
+        break
+      }
+      case 'read_sidecar_subtitle': {
+        if (!a || !('name' in a) || a.sessionId !== this.current?.sessionId)
+          throw Error('Media changed')
+        if (this.currentPath === demoPath && a.name === 'demo.srt') {
+          const response = await fetch('/demo/demo.srt')
+          if (!response.ok) throw Error('Sample subtitles unavailable')
+          reply = await response.text()
+          break
+        }
+        const file = this.companions.get(this.currentPath)?.find((f) => f.name === a.name)
+        if (!file) throw Error('Subtitle file unavailable')
+        reply = await readSubtitleFile(file, this.settings.uiLanguage)
+        break
+      }
+      case 'read_embedded_subtitle':
+        throw Error('Open this file in the desktop player for embedded tracks.')
+      case 'start_transcription': {
+        if (!a || !('sessionId' in a) || a.sessionId !== this.current?.sessionId)
+          throw Error('Media changed')
+        if (this.sources.has(this.currentPath))
+          throw Error('Open this file in the desktop player to transcribe it.')
+        const asr =
+          this.settings.asrModel === 'qwen3-asr-0.6b' ? 'asr-qwen3-0.6b-mlx' : 'asr-qwen3-1.7b-mlx'
+        const required = ['ffmpeg', asr, 'vad-silero']
+        if (
+          this.settings.targetLanguage !== 'none' &&
+          this.settings.targetLanguage !== this.current.language.detected
+        )
+          required.push('mt-hy-mt2-1.8b', 'llama-runtime-b11429')
+        const missing = required.filter(
+          (key) => !this.components.some((c) => c.id === key && c.ready),
+        )
+        reply = { missing }
+        if (!missing.length) {
+          this.generating = true
+          this.stream(this.currentPath, [...this.visibleCues.values()])
+        }
+        break
+      }
       case 'retry_failed':
-        if (this.current) this.stream(this.currentPath)
+        if (this.current && this.generating && !this.sources.has(this.currentPath))
+          this.stream(this.currentPath, [...this.visibleCues.values()])
         break
       case 'report_playback_error':
         if (this.current)

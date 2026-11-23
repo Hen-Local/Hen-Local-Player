@@ -2,6 +2,17 @@
 
 A checked item has been exercised. Worktree branches and tags are local until publication is requested.
 
+## Playback and subtitle fixes · November 23, 2026
+
+- [x] The two sidebars open and close independently. In native WKWebView, all ten transport targets kept the same window-relative bounds and passed hit tests with neither, either and both sidebars open, at 720 × 430 and 2580 × 1080. Touch checks covered 320- and 390-pixel widths. [Transport results](progress/player-transport.md).
+- [x] The fullscreen button, F and double-click fill the current Mac display in place. Native mouse and keyboard events restored the original window and keyboard focus. Sampled transition times were 35–38 ms. The green button uses the macOS Spaces transition. On the same machine it took about 0.6 seconds and the sample kept playing. [Fullscreen checks](progress/player-shell.md).
+- [x] Reproduced the reported setup condition with the existing speech and translation models and no user-installed Silero detector. A mounted installer copy supplied its own 643,854-byte detector. Its Subtitles panel opened the reported 110-second clip from the old empty cache, offered **Transcribe and create subtitles**, and generated eight Chinese lines and eight English translations. Clicking a timed line showed its caption over the video. Playback kept the same video element and media URL. Reopening restored all eight lines. A separate run reopened an interrupted request with no saved lines and finished automatically.
+- [x] With an empty model directory the same app named the selected speech model, translation model and translation runtime, each with an enabled download button. Browser checks covered individual install failures, retry, automatic resume, original-language-only generation, a silent file and switching movies during a pending request. The bundled sample automatically selected its six-line bilingual SRT. Explicitly choosing the generated track offered transcription in the same panel.
+- [x] A backend test with real speech confirmed idle playback used zero inference calls and created no PCM, two consecutive start requests produced six lines with exactly six speech requests, and reopening used zero additional requests. The release CLI passed all 81 checks on nine fixtures, including the 359-cue long movie. [Fixture results](../tests/results/2026-11-23-darwin-subtitles.json).
+- [x] All 42 regular Rust tests, the additional real embedded-track and on-demand generation tests, Svelte checks, production UI build and local Windows x64 cross-check passed. Native Windows playback remains untested. Opening a file from Finder at cold launch populated the playlist on the first event, including when macOS delivered it before the player window was ready.
+
+The locally signed Apple Silicon installer passed disk image and strict code-signature verification. It is 123,947,712 bytes with SHA-256 `adfc7b607215b003e93a89a56993cd526471eff4f954f8b0c67011a33f33af74`.
+
 ## Compact player window · November 23, 2026
 
 The current Apple Silicon package opens in a centered 720 × 430 window with the Hen mark and **Open file** and **Open URL**. A returning viewer sees up to four recent movies. **More → Play sample** opens the bundled Japanese film. The playback surface uses the full window with a floating controller. Playlist opens on the left and Player settings on the right. On wider windows a sidebar makes room beside the movie. On narrower windows it overlays it. [Mac opening window](screenshots/player/compact-window.webp) · [Floating controls](screenshots/player/compact-playback-native.webp) · [Subtitle sidebar](screenshots/player/compact-sidebar.webp).
@@ -12,7 +23,7 @@ The current Apple Silicon package opens in a centered 720 × 430 window with the
 - [x] The right sidebar selected subtitle tracks, adjusted live captions from an imported SRT, changed playback speed to 1.5×, switched repeat modes, preserved an A–B loop across panel closure, and entered and exited picture-in-picture. The sample transcript had six timed rows. English and Chinese keyboard tests covered tab navigation, Escape and focus restoration. All four Hen accents and the reduced-transparency preference were exercised.
 - [x] `npm --prefix app/ui run check` returned zero errors and warnings. The production UI build, Rust formatting, `cargo check --locked -p henlocal-player` and all four desktop subtitle-track tests (including real embedded streams) passed locally. The Apple Silicon package passed disk image and strict code-signature verification. Native Windows visual verification remains pending.
 
-Current Mac installer: `dist/Hen-Local-Player-0.1.0-macos-arm64.dmg`, 123,440,981 bytes. SHA-256 `2c20d7073c56650cc031b173bad87dee1c37368d9201b756ba68f3c1261d456d`. The local package is ad-hoc signed.
+Previous compact-window installer: `dist/Hen-Local-Player-0.1.0-macos-arm64.dmg`, 123,440,981 bytes. SHA-256 `2c20d7073c56650cc031b173bad87dee1c37368d9201b756ba68f3c1261d456d`. The local package is ad-hoc signed.
 
 ## Standalone player revision · November 23, 2026
 

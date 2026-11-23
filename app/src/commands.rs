@@ -85,6 +85,53 @@ pub async fn select_audio_track(state: State<'_, Desktop>, order: usize) -> Repl
         .await
         .map_err(err)
 }
+#[derive(serde::Serialize)]
+pub struct TranscriptionStart {
+    missing: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn start_transcription(
+    state: State<'_, Desktop>,
+    session_id: String,
+) -> Reply<TranscriptionStart> {
+    let (model, target, source) = {
+        let p = state.player.lock().await;
+        let f = p.file().map_err(err)?;
+        if f.session.id != session_id {
+            return Err("The open movie has changed.".into());
+        }
+        (
+            p.settings.asr_model.clone(),
+            p.settings.target_language.clone(),
+            p.settings.source_language.clone(),
+        )
+    };
+    let translate = target != "none" && source != target;
+    let selected_model = model.clone();
+    let missing = tokio::task::spawn_blocking(move || {
+        hlp_models::missing_for_transcription(&selected_model, translate)
+    })
+    .await
+    .map_err(err)?;
+    let p = state.player.lock().await;
+    let f = p.file().map_err(err)?;
+    if f.session.id != session_id
+        || p.settings.asr_model != model
+        || p.settings.target_language != target
+        || p.settings.source_language != source
+    {
+        return Err("The movie or its subtitle settings changed. Try again.".into());
+    }
+    f.session
+        .send(SessionCommand::StartTranscription {
+            components_ready: missing.is_empty(),
+        })
+        .await
+        .map_err(err)?;
+    Ok(TranscriptionStart { missing })
+}
+
 #[tauri::command]
 pub async fn retry_failed(state: State<'_, Desktop>) -> Reply<()> {
     let p = state.player.lock().await;

@@ -24,6 +24,7 @@ tokio-util.workspace = true
 dirs.workspace = true
 
 [build-dependencies]
+cc = "1"
 tauri-build.workspace = true
 
 [features]

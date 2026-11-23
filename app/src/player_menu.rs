@@ -71,7 +71,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     for (id, label, key) in [
         ("subtitle-file", "Open Subtitle File…", None),
         ("subtitles", "Cycle Generated Subtitles", None),
-        ("transcript", "Show Transcript", None),
+        ("transcript", "Show Subtitles Panel", None),
         ("export", "Export Generated Subtitles…", Some("CmdOrCtrl+E")),
     ] {
         subtitles.append(&item(app, id, label, key)?)?;

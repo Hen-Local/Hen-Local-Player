@@ -157,6 +157,9 @@ pub enum SessionCommand {
     SetSource(String),
     SelectAudioTrack(usize),
     PlaybackError(u16),
+    StartTranscription {
+        components_ready: bool,
+    },
     RetryFailed,
     UpdateSettings(crate::settings::Settings),
     Export {

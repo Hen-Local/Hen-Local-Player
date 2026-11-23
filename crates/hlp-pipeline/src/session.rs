@@ -25,6 +25,7 @@ use tokio_util::sync::CancellationToken;
 
 pub(crate) struct Context {
     pub(super) counts: Arc<super::Counts>,
+    pub automatic_transcription: bool,
     pub root: PathBuf,
     pub project: store::Project,
     pub settings: Settings,
@@ -103,6 +104,8 @@ struct Running {
     tx: mpsc::UnboundedSender<Work>,
     tasks: JoinSet<()>,
     cancel: CancellationToken,
+    generate: bool,
+    extracting: bool,
     asr: bool,
     mt: bool,
     prep: bool,
@@ -146,7 +149,7 @@ impl Running {
         });
     }
     fn extract(&mut self, ctx: &Context, t: &Timeline) -> Result<()> {
-        if t.vad_complete {
+        if !self.generate || self.extracting || t.vad_complete {
             return Ok(());
         }
         let pcm = t.track.join("audio.pcm");
@@ -185,6 +188,7 @@ impl Running {
             self.tx.clone(),
             self.cancel.clone(),
         );
+        self.extracting = true;
         self.tasks.spawn_blocking(move || {
             let result = std::thread::scope(|scope| -> Result<u64> {
                 let (frames, incoming) = crossbeam_channel::bounded::<(Vec<f32>, Ms)>(64);
@@ -239,7 +243,7 @@ impl Running {
         Ok(())
     }
     fn schedule(&mut self, ctx: &Context, t: &mut Timeline) {
-        if self.setup || self.engine_failed {
+        if !self.generate || self.setup || self.engine_failed {
             return;
         }
         if !self.asr {
@@ -414,6 +418,10 @@ pub(super) async fn serve(ctx: &mut Context, mut requests: mpsc::Receiver<Reques
             tx,
             tasks: JoinSet::new(),
             cancel: CancellationToken::new(),
+            generate: ctx.automatic_transcription
+                || timeline.track.join("generate.requested").is_file()
+                || !timeline.rows.is_empty(),
+            extracting: false,
             asr: false,
             mt: false,
             prep: false,
@@ -547,6 +555,8 @@ async fn drive(
             "error"
         } else if run.setup {
             "needs-setup"
+        } else if !run.generate {
+            "idle"
         } else if t.vad_complete && !run.asr && !run.mt && !run.prep {
             if t.rows
                 .values()
@@ -619,28 +629,31 @@ fn apply_work(ctx: &mut Context, t: &mut Timeline, run: &mut Running, event: Wor
                 t.dirty = true
             }
         }
-        Work::Extracted(result) => match result {
-            Ok(n) => {
-                t.extracted = n / 16;
-                t.audio_complete = true;
-                t.vad_complete = true;
-                t.rows.retain(|id, _| run.seen.contains(id));
-                t.dirty = true;
-                store::write_json(
-                    &t.track.join("audio.json"),
-                    &Audio {
-                        sample_rate: 16000,
-                        total_samples: n,
-                        complete: true,
-                        dialogue_focus: ctx.settings.dialogue_channel_focus,
-                    },
-                )?;
+        Work::Extracted(result) => {
+            run.extracting = false;
+            match result {
+                Ok(n) => {
+                    t.extracted = n / 16;
+                    t.audio_complete = true;
+                    t.vad_complete = true;
+                    t.rows.retain(|id, _| run.seen.contains(id));
+                    t.dirty = true;
+                    store::write_json(
+                        &t.track.join("audio.json"),
+                        &Audio {
+                            sample_rate: 16000,
+                            total_samples: n,
+                            complete: true,
+                            dialogue_focus: ctx.settings.dialogue_channel_focus,
+                        },
+                    )?;
+                }
+                Err(e) => {
+                    run.engine_failed = true;
+                    ctx.error("Extraction", format!("{e:#}"), true)
+                }
             }
-            Err(e) => {
-                run.engine_failed = true;
-                ctx.error("Extraction", format!("{e:#}"), true)
-            }
-        },
+        }
         Work::Prep(progress) => ctx.events.playback_prep(PlaybackPrep {
             session_id: ctx.id.clone(),
             plan: ctx.project.playback.plan.clone(),
@@ -739,6 +752,19 @@ fn apply_work(ctx: &mut Context, t: &mut Timeline, run: &mut Running, event: Wor
     }
     Ok(())
 }
+fn resume_transcription(ctx: &mut Context, t: &mut Timeline, run: &mut Running) -> Result<()> {
+    for u in t.rows.values_mut() {
+        if matches!(u.status, UttStatus::Failed { .. }) {
+            u.status = UttStatus::Pending;
+        }
+    }
+    t.translations.items.retain(|_, v| !v.failed);
+    run.engine_failed = false;
+    run.setup = false;
+    t.dirty = true;
+    ctx.tools = Tools::resolve();
+    run.extract(ctx, t)
+}
 fn handle_command(
     ctx: &mut Context,
     t: &mut Timeline,
@@ -823,26 +849,38 @@ fn handle_command(
             &path,
             hlp_core::subs::render(&t.cues(), &format, &variant).as_bytes(),
         )?,
-        SessionCommand::RetryFailed => {
-            for u in t.rows.values_mut() {
-                if matches!(u.status, UttStatus::Failed { .. }) {
-                    u.status = UttStatus::Pending
-                }
+        SessionCommand::StartTranscription { components_ready } => {
+            if !components_ready {
+                run.setup = true;
+                return Ok(None);
             }
-            t.translations.items.retain(|_, v| !v.failed);
-            run.engine_failed = false;
-            t.dirty = true;
-            if run.setup {
+            anyhow::ensure!(
+                !ctx.project.probe.audio.is_empty(),
+                "This file has no audio track to transcribe."
+            );
+            // Persist only an accepted request. Reopening resumes a partial
+            // transcription; visiting the subtitles panel alone never starts one.
+            store::atomic_write(&t.track.join("generate.requested"), b"1")?;
+            run.generate = true;
+            resume_transcription(ctx, t, run)?;
+        }
+        SessionCommand::RetryFailed => {
+            // A development install can open a file before ffprobe is available.
+            // Refresh track metadata and the playback plan once setup supplies it.
+            if ctx.project.probe.audio.is_empty() && ctx.project.probe.video.is_none() {
                 ctx.tools = Tools::resolve();
-                if ctx.project.probe.audio.is_empty() && ctx.tools.ffprobe.is_file() {
+                if ctx.tools.ffprobe.is_file() {
                     ctx.project.probe = hlp_media::probe(&ctx.tools, &ctx.project.source_path)?;
                     ctx.project.duration_ms = ctx.project.probe.duration_ms;
+                    return Ok(Some(Next::Restart {
+                        order: ctx.project.audio_track_order,
+                        model: ctx.settings.asr_model.clone(),
+                        focus: ctx.settings.dialogue_channel_focus,
+                    }));
                 }
-                return Ok(Some(Next::Restart {
-                    order: ctx.project.audio_track_order,
-                    model: ctx.settings.asr_model.clone(),
-                    focus: ctx.settings.dialogue_channel_focus,
-                }));
+            }
+            if run.generate {
+                resume_transcription(ctx, t, run)?;
             }
         }
         SessionCommand::PlaybackError(code) => {

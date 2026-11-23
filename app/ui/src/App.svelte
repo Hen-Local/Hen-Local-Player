@@ -4,7 +4,6 @@
   import Icon from './lib/Icon.svelte'
   import Player from './lib/Player.svelte'
   import PlaybackOptions from './lib/PlaybackOptions.svelte'
-  import TranscriptPanel from './lib/TranscriptPanel.svelte'
   import RecentList from './lib/RecentList.svelte'
   import PlaylistPanel from './lib/PlaylistPanel.svelte'
   import SubtitlePanel from './lib/SubtitlePanel.svelte'
@@ -16,24 +15,25 @@
   import './styles.css'
   import './lib/player-panels.css'
 
-  type SettingsTab = 'subtitles' | 'playback' | 'transcript'
-  type Panel = 'library' | 'playlist' | SettingsTab
-  const tabs = ['subtitles', 'playback', 'transcript'] as const
-  let settingsTab: SettingsTab = 'subtitles'
+  type SettingsTab = 'subtitles' | 'playback'
+  type LeftPanel = 'library' | 'playlist'
+  type Panel = LeftPanel | SettingsTab | 'transcript'
+  type Side = 'left' | 'right'
+  const tabs = ['subtitles', 'playback'] as const
   const mac = /Mac/.test(navigator.platform)
   const nativeMac = !mockMode && mac
   let shell: HTMLElement
   let samplePath = $state<string | null>(mockMode ? 'fixture_ja.mp4' : null)
-  let drawer = $state<Panel | null | undefined>(undefined)
-  let fullscreenDrawer = $state<Panel | null>(null)
-  let active: Panel | null = $derived(
-    p.fullscreen && p.media ? fullscreenDrawer :
-      (drawer === undefined ? (p.media && p.settings.showTranscriptPanel ? 'transcript' : null) : drawer),
-  )
+  let leftPanel = $state<LeftPanel | null>(null)
+  let lastSettingsTab: SettingsTab = 'subtitles'
+  let playbackOpen = $state(false)
+  let subtitleOverride = $state<boolean | null>(null)
+  let rightTab: SettingsTab | null = $derived(!p.media ? null :
+    (subtitleOverride ?? p.settings.showTranscriptPanel) ? 'subtitles' : playbackOpen ? 'playback' : null)
+  let preferenceWrite = Promise.resolve()
+  let preferenceRevision = 0
   let menuOpen = $state(false)
-  const rightOpen = $derived(active === 'subtitles' || active === 'playback' || active === 'transcript')
-  const leftOpen = $derived(active === 'playlist' || active === 'library')
-  let drawerTrigger: HTMLElement | null = null
+  let lastSide: Side = 'right'
   let wasPlayingFile = false
 
   function focusMore() {
@@ -53,47 +53,64 @@
     placeOverlays()
     menuOpen = !menuOpen
   }
-  async function setPanel(id: Panel | null) {
-    if (!p.media && id !== 'library' && id !== null) return
-    menuOpen = false
-    if (id === 'subtitles' || id === 'playback' || id === 'transcript') settingsTab = id
-    if (p.fullscreen && p.media) fullscreenDrawer = id
-    else {
-      drawer = id
-      if (p.media && p.settings.showTranscriptPanel !== (id === 'transcript'))
-        await p.act(() => p.update({ showTranscriptPanel: id === 'transcript' }))
-      if (drawer === id && (id === 'transcript' || id === null)) drawer = undefined
-    }
+  function setRight(tab: SettingsTab | null) {
+    if (tab) lastSettingsTab = tab
+    playbackOpen = tab === 'playback'
+    const showSubtitles = tab === 'subtitles'
+    subtitleOverride = showSubtitles
+    // Keep the visible tab responsive while serializing preference changes.
+    const revision = ++preferenceRevision
+    preferenceWrite = preferenceWrite.then(async () => {
+      if (p.settings.showTranscriptPanel !== showSubtitles)
+        await p.act(() => p.update({ showTranscriptPanel: showSubtitles }))
+      if (revision === preferenceRevision) subtitleOverride = null
+    })
   }
-  function togglePanel(id: Panel) {
-    if (active === id) closePanel()
-    else {
-      drawerTrigger = document.activeElement instanceof HTMLElement ? document.activeElement : null
-      void setPanel(id).then(tick).then(() => shell.querySelector<HTMLButtonElement>('.inspector:not([hidden]) .panel-close')?.focus({ preventScroll: true }))
+  function showPanel(id: Panel, toggle = false) {
+    if (!p.media && id !== 'library') return
+    menuOpen = false
+    const left = id === 'library' || id === 'playlist'
+    const side = left ? 'left' : 'right'
+    const tab = id === 'transcript' ? 'subtitles' : id
+    if (toggle && (left ? leftPanel === id : rightTab === tab)) {
+      closePanel(side)
+      return
     }
+    lastSide = side
+    if (left) leftPanel = id
+    else setRight(id === 'transcript' ? 'subtitles' : id)
+    void tick().then(() => {
+      const selector = id === 'transcript'
+        ? '.right-inspector .subtitle-workspace'
+        : '.' + side + '-inspector .panel-close'
+      const target = shell.querySelector<HTMLElement>(selector)
+        ?? shell.querySelector<HTMLElement>('.' + side + '-inspector .panel-close')
+      target?.focus({ preventScroll: true })
+    })
   }
   function transportPanel(id: Panel) {
     if (id === 'subtitles') {
-      if (rightOpen) closePanel()
-      else togglePanel(settingsTab)
-    } else togglePanel(id)
+      if (rightTab) closePanel('right')
+      else showPanel(lastSettingsTab)
+    } else showPanel(id, true)
   }
   function tabKey(e: KeyboardEvent) {
-    const index = tabs.findIndex((tab) => tab === active)
+    const index = tabs.findIndex((tab) => tab === rightTab)
     const next = e.key === 'ArrowRight' ? (index + 1) % tabs.length
       : e.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length
       : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : -1
     if (next < 0) return
     e.preventDefault()
     e.stopPropagation()
-    void setPanel(tabs[next]).then(tick).then(() => {
-      if (active === tabs[next]) shell.querySelector<HTMLButtonElement>('#tab-' + tabs[next])?.focus()
-    })
+    setRight(tabs[next])
+    shell.querySelector<HTMLButtonElement>('#tab-' + tabs[next])?.focus()
   }
-  function closePanel() {
-    void setPanel(null)
-    if (drawerTrigger?.isConnected) drawerTrigger.focus({ preventScroll: true })
-    else focusMore()
+  function closePanel(side: Side) {
+    if (side === 'left') leftPanel = null
+    else setRight(null)
+    const selector = side === 'right' ? '.settings-trigger' : p.media ? '.playlist-trigger' : '.more-trigger'
+    shell?.querySelector<HTMLButtonElement>(selector)?.focus({ preventScroll: true })
+    lastSide = side === 'left' ? 'right' : 'left'
   }
   function menuAction(action: string) {
     // Return focus before a picker, dialog or drawer takes it.
@@ -105,8 +122,8 @@
       case 'url': p.dialog = 'url'; break
       case 'settings': p.dialog = 'settings'; break
       case 'sample': if (samplePath) void p.open(samplePath); break
-      case 'library': togglePanel('library'); break
-      case 'close': void setPanel(null).then(() => p.close()); break
+      case 'library': showPanel('library', true); break
+      case 'close': void p.close(); break
     }
   }
 
@@ -118,9 +135,13 @@
       focusMore()
       return
     }
-    if (e.key === 'Escape' && active) {
+    if (e.key === 'Escape' && (leftPanel || rightTab)) {
       e.preventDefault()
-      closePanel()
+      const focused = (e.target as Element | null)?.closest?.('.inspector')
+      const side = focused?.classList.contains('left-inspector') ? 'left'
+        : focused?.classList.contains('right-inspector') ? 'right'
+        : leftPanel && rightTab ? lastSide : leftPanel ? 'left' : 'right'
+      closePanel(side)
       return
     }
     if (menuOpen) return
@@ -177,19 +198,19 @@
         p.mute()
         break
       case 'f':
-        void p.act(() => p.full(!p.fullscreen))
+        if (!e.repeat) void p.act(() => p.full(!p.fullscreen))
         break
       case 's':
         void p.act(() => p.cycle())
         break
       case 't':
-        togglePanel('transcript')
+        showPanel('transcript', true)
         break
       case 'c':
-        togglePanel('subtitles')
+        showPanel('subtitles', true)
         break
       case 'l':
-        togglePanel('playlist')
+        showPanel('playlist', true)
         break
       case 'p':
       case 'n':
@@ -215,13 +236,13 @@
     if (!mockMode) void p.act(async () => { samplePath = await backend.call('get_sample_media') })
     function optionsFromMenu() {
       menuOpen = false
-      if (p.media) void setPanel('playback')
+      showPanel('playback')
     }
     window.addEventListener('hlp:playback-options', optionsFromMenu)
     function fromMenu(e: Event) {
       const id = (e as CustomEvent).detail
       if (['library', 'playlist', 'subtitles', 'transcript'].includes(id))
-        setPanel(id)
+        showPanel(id)
     }
     window.addEventListener('player:panel', fromMenu)
     return () => {
@@ -231,8 +252,7 @@
     }
   })
   $effect(() => {
-    // Observe the dock itself because opening a sidebar changes the video width
-    // without resizing the application window.
+    // The menu and compact panels clear the actual transport, including after resize.
     p.media?.sessionId
     const observer = new ResizeObserver(placeOverlays)
     let mounted = true
@@ -241,8 +261,6 @@
       observer.observe(shell)
       const bar = shell.querySelector('[data-transport]')
       if (bar) observer.observe(bar)
-      const viewport = shell.querySelector('.movie-viewport')
-      if (viewport) observer.observe(viewport)
       placeOverlays()
     })
     return () => { mounted = false; observer.disconnect() }
@@ -253,22 +271,22 @@
     document.title = p.media ? p.media.title + ' · ' + p.t('app') : p.t('app')
     if (!!p.media !== wasPlayingFile) {
       wasPlayingFile = !!p.media
-      drawer = undefined
+      if (!p.media) {
+        leftPanel = null
+        playbackOpen = false
+      }
       menuOpen = false
     }
-    if (!p.fullscreen) fullscreenDrawer = null
     if (p.dialog) menuOpen = false
   })
 </script>
 
 <svelte:window onkeydown={key} />
 <main bind:this={shell} class="app" class:watching={!!p.media}
-  class:left-dock={leftOpen && !!p.media} class:right-dock={rightOpen} class:fullscreen={p.fullscreen}>
+  class:left-dock={leftPanel !== null && !!p.media} class:right-dock={rightTab !== null} class:fullscreen={p.fullscreen}>
   {#if p.media}
-    <div class="movie-viewport">
-      <Player onpanel={transportPanel} onmore={toggleMenu} keepControls={menuOpen || !!active}
-        subtitlesOpen={rightOpen} playlistOpen={active === 'playlist'} />
-    </div>
+    <Player onpanel={transportPanel} onmore={toggleMenu} keepControls={menuOpen || !!leftPanel || !!rightTab}
+      subtitlesOpen={!!rightTab} playlistOpen={leftPanel === 'playlist'} />
   {:else}
     <section class="idle-stage" aria-label={p.t('player')}>
       <div class="welcome" class:has-history={p.recent.length > 0}>
@@ -310,37 +328,36 @@
     </header>
   {/if}
 
-  {#if leftOpen && active}
-    <aside class="inspector left-inspector" aria-label={p.t(active === 'library' ? 'recent' : 'playlist')}>
+  {#if leftPanel}
+    <aside id="playlist-sidebar" class="inspector left-inspector" onfocusin={() => (lastSide = 'left')} aria-label={p.t(leftPanel === 'library' ? 'recent' : 'playlist')}>
       <div class="panel-title">
-        <h2>{p.t(active === 'library' ? 'recent' : 'playlist')}</h2>
+        <h2>{p.t(leftPanel === 'library' ? 'recent' : 'playlist')}</h2>
         <button class="icon panel-close" title={p.t('close')} aria-label={p.t('close')}
-          onclick={closePanel}><Icon name="close" size={16}/></button>
+          onclick={() => closePanel('left')}><Icon name="close" size={16}/></button>
       </div>
-      {#if active === 'playlist'}<PlaylistPanel />
-      {:else}<RecentList {samplePath} onselect={closePanel} />{/if}
+      {#if leftPanel === 'playlist'}<PlaylistPanel />
+      {:else}<RecentList {samplePath} onselect={() => closePanel('left')} />{/if}
     </aside>
   {/if}
   {#if p.media}
-    <aside class="inspector right-inspector" hidden={!rightOpen} aria-label={p.t('playerSettings')}>
+    <aside id="player-settings" class="inspector right-inspector" onfocusin={() => (lastSide = 'right')} hidden={!rightTab} aria-label={p.t('playerSettings')}>
       <div class="panel-title">
         <h2>{p.t('playerSettings')}</h2>
         <button class="icon panel-close" title={p.t('close')} aria-label={p.t('close')}
-          onclick={closePanel}><Icon name="close" size={16}/></button>
+          onclick={() => closePanel('right')}><Icon name="close" size={16}/></button>
       </div>
       <div class="inspector-tabs" role="tablist" tabindex="-1" aria-label={p.t('playerSettings')} onkeydown={tabKey}>
         {#each tabs as tab}
-          <button role="tab" id={'tab-' + tab} aria-controls={'pane-' + tab} aria-selected={active === tab}
-            tabindex={active === tab ? 0 : -1} onclick={() => setPanel(tab)}>
+          <button role="tab" id={'tab-' + tab} aria-controls={'pane-' + tab} aria-selected={rightTab === tab}
+            tabindex={rightTab === tab ? 0 : -1} onclick={() => setRight(tab)}>
             {p.t(tab === 'playback' ? 'quick' : tab)}
           </button>
         {/each}
       </div>
-      {#if active === 'subtitles'}<div class="inspector-page" id="pane-subtitles" role="tabpanel" aria-labelledby="tab-subtitles"><SubtitlePanel /></div>{/if}
-      <div class="inspector-page" hidden={active !== 'playback'} id="pane-playback" role="tabpanel" aria-labelledby="tab-playback">
-        <PlaybackOptions open={active === 'playback'} onreturnfocus={closePanel} />
+      {#if rightTab === 'subtitles'}<div class="inspector-page" id="pane-subtitles" role="tabpanel" aria-labelledby="tab-subtitles"><SubtitlePanel /></div>{/if}
+      <div class="inspector-page" hidden={rightTab !== 'playback'} id="pane-playback" role="tabpanel" aria-labelledby="tab-playback">
+        <PlaybackOptions open={rightTab === 'playback'} onreturnfocus={() => closePanel('right')} />
       </div>
-      {#if active === 'transcript'}<div class="inspector-page" id="pane-transcript" role="tabpanel" aria-labelledby="tab-transcript"><TranscriptPanel /></div>{/if}
     </aside>
   {/if}
   {#if menuOpen}

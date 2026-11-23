@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
-import { backend, cueAt, mockMode, player } from './stores.svelte'
+import { backend, cueAt, player } from './stores.svelte'
 import {
+  readSubtitleFile,
   parseSubtitleText,
   indexTimeline,
   visibleText,
@@ -15,23 +16,19 @@ import {
   type FileEntry,
 } from './subtitle-tracks-history'
 import type { Cue, Settings } from './types'
+import type { EmbeddedTrack } from './backend'
 
-export interface EmbeddedTrack {
-  order: number
-  default: boolean
-  forced: boolean
-  language: string | null
-  title: string | null
-}
-interface SubtitleInventory {
-  embedded: EmbeddedTrack[]
-  sidecars: string[]
-  exactSidecar: string | null
-  probeFailed: boolean
-}
-function generatedLines(cue: Cue | undefined, settings: Settings): string[] {
+export function generatedLines(
+  cue: (Pick<Cue, 'original' | 'translation'> & { lang?: string | null }) | undefined,
+  settings: Settings,
+): string[] {
   if (!cue || settings.subtitleMode === 'off') return []
-  if (settings.subtitleMode === 'original') return [cue.original]
+  if (
+    settings.subtitleMode === 'original' ||
+    settings.targetLanguage === 'none' ||
+    settings.targetLanguage === cue.lang
+  )
+    return [cue.original]
   if (settings.subtitleMode === 'translation') return cue.translation ? [cue.translation] : []
   const pair =
     settings.bilingualOrder === 'translation-first'
@@ -60,6 +57,7 @@ class SubtitleTracks {
         .filter((cue) => cue.endMs > cue.startMs),
     )
   })
+  discovering = $state(false)
   loading = $state(false)
   discoveryError = $state(false)
   private path = ''
@@ -83,6 +81,7 @@ class SubtitleTracks {
     this.extracted.clear()
     this.probed = false
     this.initial = true
+    this.discovering = false
     this.loading = false
     this.discoveryError = false
     ++this.request
@@ -97,11 +96,10 @@ class SubtitleTracks {
     if (!id || this.probed) return
     const revision = this.request
     this.probed = true
+    this.discovering = true
     this.discoveryError = false
     try {
-      const result = mockMode
-        ? { embedded: [], sidecars: [], exactSidecar: null, probeFailed: false }
-        : await invoke<SubtitleInventory>('list_subtitle_tracks', { sessionId: id })
+      const result = await backend.call('list_subtitle_tracks', { sessionId: id })
       if (!this.current(id)) return
       this.embedded = result.embedded
       this.sidecars = result.sidecars
@@ -109,33 +107,33 @@ class SubtitleTracks {
       this.discoveryError = result.probeFailed
       if (!this.initial) return
       this.initial = false
-      let key = this.pref.choice
-      if (!key && player.settings.subtitleMode !== 'off') {
-        const embedded = this.embedded.find((t) => t.forced) ?? this.embedded.find((t) => t.default)
-        if (embedded) key = 'embedded:' + embedded.order
-        else if (result.exactSidecar) {
-          const components = player.components.length
-            ? player.components
-            : await backend.call('get_setup_status')
-          const asr =
-            player.settings.asrModel === 'sherpa-qwen3-asr-0.6b'
-              ? 'asr-qwen3-0.6b-sherpa'
-              : player.settings.asrModel === 'qwen3-asr-0.6b'
-                ? 'asr-qwen3-0.6b-mlx'
-                : 'asr-qwen3-1.7b-mlx'
-          const needed = [asr, 'vad-silero']
-          if (player.settings.targetLanguage !== 'none')
-            needed.push('mt-hy-mt2-1.8b', 'llama-runtime-b11429')
-          if (needed.some((id) => !components.some((c) => c.id === id && c.ready)))
-            key = 'sidecar:' + result.exactSidecar
-        }
+      if (revision !== this.request) return
+      if (this.pref.choice) {
+        const key = this.pref.choice
+        await this.select(key, false)
+        if (!this.current(id) || this.request !== revision + 1 || this.selected === key) return
       }
-      if (key && revision === this.request && this.current(id)) await this.select(key, false)
+      if (player.settings.subtitleMode === 'off') return
+      const embeddedKey = (t: EmbeddedTrack) => 'embedded:' + t.order
+      const options = [
+        ...this.embedded.filter((t) => t.forced).map(embeddedKey),
+        ...this.embedded.filter((t) => t.default).map(embeddedKey),
+        ...(result.exactSidecar ? ['sidecar:' + result.exactSidecar] : []),
+        ...this.embedded.map(embeddedKey),
+        ...this.sidecars.map((name) => 'sidecar:' + name),
+      ]
+      for (const key of new Set(options)) {
+        const expected = this.request + 1
+        await this.select(key, false)
+        if (!this.current(id) || this.request !== expected || this.timeline) return
+      }
     } catch {
       if (this.current(id)) {
         this.probed = false
         this.discoveryError = true
       }
+    } finally {
+      if (this.current(id)) this.discovering = false
     }
   }
 
@@ -162,9 +160,9 @@ class SubtitleTracks {
       const order = Number(item)
       let read: Promise<string | undefined>
       if (key.startsWith('embedded:') && this.embedded.some((t) => t.order === order)) {
-        read = invoke<string>('read_embedded_subtitle', { sessionId: id, order })
+        read = backend.call('read_embedded_subtitle', { sessionId: id, order })
       } else if (key.startsWith('sidecar:') && this.sidecars.includes(item)) {
-        read = invoke<string>('read_sidecar_subtitle', { sessionId: id, name: item })
+        read = backend.call('read_sidecar_subtitle', { sessionId: id, name: item })
       } else if (this.files.some((file) => file.id === key)) {
         read = importedText(this.path, key)
       } else return
@@ -225,19 +223,7 @@ class SubtitleTracks {
     this.loading = false
     let file: { name: string; text: string } | null
     if (browserFile) {
-      if (browserFile.size > 16 * 1024 * 1024)
-        throw Error(player.locale === 'zh' ? '字幕文件超过 16 MiB' : 'Subtitle file exceeds 16 MiB')
-      const bytes = new Uint8Array(await browserFile.arrayBuffer())
-      const encoding =
-        bytes[0] === 0xff && bytes[1] === 0xfe
-          ? 'utf-16le'
-          : bytes[0] === 0xfe && bytes[1] === 0xff
-            ? 'utf-16be'
-            : 'utf-8'
-      file = {
-        name: browserFile.name,
-        text: new TextDecoder(encoding, { fatal: true }).decode(bytes),
-      }
+      file = { name: browserFile.name, text: await readSubtitleFile(browserFile, player.locale) }
     } else {
       file = await invoke<{ name: string; text: string } | null>('choose_subtitle_file')
     }

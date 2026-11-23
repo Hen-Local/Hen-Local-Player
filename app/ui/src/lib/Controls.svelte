@@ -111,6 +111,7 @@
       class="float-button playlist-trigger"
       title={p.t('playlist')}
       aria-label={p.t('playlist')}
+      aria-controls={playlistOpen ? 'playlist-sidebar' : undefined}
       aria-expanded={playlistOpen}
       onclick={onplaylist}><Icon name="list" size={19} /></button
     >
@@ -118,6 +119,7 @@
       class="float-button settings-trigger"
       title={p.t('playerSettings')}
       aria-label={p.t('playerSettings')}
+      aria-controls="player-settings"
       aria-expanded={subtitlesOpen}
       onclick={onsettings}><Icon name="settings" size={18} /></button
     >

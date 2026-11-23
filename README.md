@@ -6,10 +6,10 @@ A local video player with on-device speech recognition, translation and bilingua
 
 On Apple Silicon, open the DMG and drag **Hen Local Player** to Applications. The compact opening window offers **Open file** (⌘O) and **Open URL** (⌘L). After you have watched a movie, you can reopen it from the short recent-files list. In Finder, **Open With → Hen Local Player** starts playback directly. The **•••** menu includes **Open folder** and, on the opening screen, **Play sample**.
 
-- Move the pointer over a movie to show the floating controls along the bottom. Volume is on the left, play and ten-second skips are in the center, and the timeline shows elapsed and remaining time. The controls fade while you watch. Double-click the picture for fullscreen.
-- The **Playlist** button opens the left sidebar. Select multiple files to queue them, add and remove items, or skip to a file. Reopening an unfinished movie resumes playback.
-- **Player settings** opens the right sidebar. **Subtitles** selects embedded, external SRT/WebVTT, or locally generated tracks and adjusts timing, text size and position. **Playback** includes speed, audio tracks, repeat, chapter and time navigation, fit/fill and frame capture. **Transcript** lets you jump to a line. Click the same sidebar button or press Escape to close it.
-- FFmpeg and FFprobe are included. Ordinary playback and authored text subtitles work offline from first launch. **Models & tools** in the Subtitles tab installs the components for generated bilingual captions. **Open URL** previews a video before downloading it and offers to install URL tools on first use.
+- Move the pointer over a movie to show the floating controls along the bottom. Volume is on the left, play and ten-second skips are in the center, and the timeline shows elapsed and remaining time. The controls fade while you watch. Double-click the picture, press **F**, or use the fullscreen button to fill the current display. On Mac, the green window button opens a separate fullscreen Space.
+- The **Playlist** button opens the left sidebar. Playlist and Player settings can stay open together. The controls stay in place as either sidebar opens. Select multiple files to queue them, add and remove items, or skip to a file. Reopening an unfinished movie resumes playback.
+- **Player settings** opens the right sidebar. **Subtitles** finds embedded text tracks and nearby SRT/WebVTT files. If a movie has no captions, choose **Transcribe and create subtitles**. Timed lines appear here and on the video as speech is recognized. Click a line to seek. Subtitle controls include translation, timing, text size, position and export. **Playback** includes speed, audio tracks, repeat, chapter and time navigation, fit/fill and frame capture. Click a sidebar’s button again to close it. Escape closes the focused sidebar.
+- FFmpeg, FFprobe and the speech detector are included. Ordinary playback and authored text subtitles work offline from first launch. The player uses installed speech and translation models and offers to install individual missing components when you request captions. **Open URL** previews a video before downloading it and offers to install URL tools on first use.
 
 ### Browser preview
 
@@ -47,7 +47,7 @@ Run `bash scripts/e2e.sh` after generating the fixtures and installing the compo
 
 ## Build an installer
 
-On an Apple Silicon Mac, run `bash scripts/build_macos_app.sh`. It stages the pinned playback tools and produces `dist/Hen Local Player.app` and a versioned arm64 DMG. Set `HLP_BUNDLE_TOOL_CACHE` to reuse an existing component cache during packaging. The internal build uses an ad-hoc signature. Public distribution requires a Developer ID signature and notarization.
+On an Apple Silicon Mac, run `bash scripts/build_macos_app.sh`. It stages the pinned playback tools and speech detector and produces `dist/Hen Local Player.app` and a versioned arm64 DMG. Set `HLP_BUNDLE_TOOL_CACHE` to reuse an existing component cache during packaging. The internal build uses an ad-hoc signature. Public distribution requires a Developer ID signature and notarization.
 
 On Windows x64, run `.\scripts\build_windows.ps1` from a checkout with the MSVC tools installed. The script builds the worker, includes it beside the app executable, and writes a versioned NSIS installer to `dist`. The Windows fixture scripts also require Python 3 and an English desktop SAPI voice. The manual **Windows installer and fixtures** GitHub Actions workflow can build the installer and run the speech tests on a hosted Windows runner when the workflow is published and dispatched. [Windows test commands and verification status](docs/progress/g-windows.md).
 

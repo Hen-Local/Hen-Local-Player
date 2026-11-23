@@ -8,7 +8,9 @@
     "resources": {
       "binaries/FFmpeg-LICENSE.txt": "licenses/FFmpeg-LICENSE.txt",
       "../docs/LICENSES.md": "licenses/components.md",
-      "ui/public/demo/": "demo/"
+      "ui/public/demo/": "demo/",
+      "binaries/silero_vad.onnx": "speech/silero_vad.onnx",
+      "../docs/licenses/Silero-LICENSE.txt": "licenses/Silero-LICENSE.txt"
     }
   }
 }

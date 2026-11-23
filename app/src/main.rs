@@ -4,9 +4,9 @@
 )]
 mod commands;
 mod events;
+mod fullscreen;
 mod playback;
 mod player_menu;
-mod prewarm;
 mod state;
 mod subtitle_tracks;
 use commands::*;
@@ -41,21 +41,27 @@ fn main() {
         tracing::error!(panic=%e,"Player panic");
         old_hook(e)
     }));
+    // Finder can deliver the initial file before Tauri runs its setup hook.
+    let desktop = tauri::async_runtime::block_on(Desktop::new()).expect("initialize player");
     tauri::Builder::default()
+        .manage(desktop)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let desktop = tauri::async_runtime::block_on(Desktop::new())?;
-            let p = desktop.player.try_lock()?;
-            tauri::async_runtime::spawn(prewarm::run(p.settings.clone(), p.engines.clone()));
-            drop(p);
-            app.manage(desktop);
+            if let Ok(resources) = app.path().resource_dir() {
+                hlp_models::use_bundled_vad(&resources.join("speech/silero_vad.onnx"));
+            }
+            #[cfg(debug_assertions)]
+            hlp_models::use_bundled_vad(
+                &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries/silero_vad.onnx"),
+            );
             Ok(())
         })
         .menu(player_menu::build)
         .on_menu_event(|app, event| player_menu::handle(app, event.id().as_ref()))
         .invoke_handler(tauri::generate_handler![
             set_playback_capabilities,
+            fullscreen::set_player_fullscreen,
             open_media,
             close_media,
             playback::choose_media_folder,
@@ -75,6 +81,7 @@ fn main() {
             select_audio_track,
             report_playback_error,
             retry_failed,
+            start_transcription,
             export_subtitles,
             suggest_export_paths,
             get_settings,

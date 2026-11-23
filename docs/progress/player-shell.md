@@ -16,3 +16,19 @@ On 2026-11-23, `npm --prefix app/ui run check` reported zero errors and zero war
 ## Built-in film
 
 The 22.5-second landscape, train animation and cover image were drawn locally for this player. The clip retains the macOS-generated Japanese narration from the existing speech fixture. FFprobe identified H.264 video at 1280 × 720, 24 fps, and AAC audio in the 1,662,373-byte MP4. Packet extraction produced the same SHA-256 for the sample and the fixture's AAC stream, `113247a8e4527de13af608ea0d446376163ab91c211199124526fda5e5b66309`. The bilingual SRT ships alongside the film. Generating new test fixtures leaves the shipped sample in place.
+
+## Fullscreen transitions during playback
+
+On 2026-11-23, I compared the prior Apple Silicon disk image (SHA-256 `2c20d7073c56650cc031b173bad87dee1c37368d9201b756ba68f3c1261d456d`) with a signed local release built using `cargo build --locked --release -p henlocal-player --features custom-protocol`. Both played the same bundled 1280 × 720, 22.5-second Japanese sample. Each run used a separate player profile. A local timing probe sent AppKit key and mouse events, sampled the window and WKWebView every 36 ms, and recorded the system fullscreen notifications and movie clock.
+
+| Check | Result |
+| --- | --- |
+| Prior macOS Space transition | The green button completed entry in 678 ms and exit in 610 ms. On a separate F attempt AppKit announced entry and then returned to the original frame without completing the transition. |
+| Player fullscreen | F, Escape, the player control, and a double-click filled the 2580 × 1080 display or restored the previous 720 × 430 frame within 35–38 ms in the timing run. The media clock advanced continuously. |
+| Mixed shortcuts | F entered player fullscreen. Control-Command-F exited that mode and the next Control-Command-F entered a native Space in 631 ms. Escape completed a single system exit in 593 ms. |
+| Native Spaces | The green button and Control-Command-F retained the system transition. Green followed by Escape emitted one exit notification and restored the window. Closing the window from a native Space exited the application cleanly. |
+| Space unavailable | In a separate test process I set the individual NSWindow to disallow fullscreen Spaces. Real F, Escape, and double-click still entered and exited player fullscreen. The user’s system preferences were untouched. |
+| Live resize | Sixty native window resizes in 480 ms sent 60 fullscreen-state queries in the prior release and one in the revised release. Playback advanced approximately 1.26 seconds over the same 1.25-second observation window. |
+| Browser and Windows paths | Chrome opened a local movie, entered genuine document fullscreen and exited with Escape. When the host denied the request, Escape restored the embedded player. A simulated Windows Tauri bridge confirmed ordinary native fullscreen requests, OS state synchronization, and one state query after 160 resize events. A Windows PC was unavailable. |
+
+The native window measurements include the operating system transition where the green button or system menu starts a separate Space. Player fullscreen fills the current display without a Space animation. The 36 ms observation interval limits the precision of the faster measurements.

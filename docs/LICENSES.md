@@ -10,7 +10,7 @@ Audit structure adapted from Hen-Local-Translator/docs/MODEL_AND_ASSET_LICENSE_A
 | Hy-MT2-1.8B Q4_K_M | GGUF model download | Tencent's license text for the exact distributed GGUF revision specifies Apache-2.0. [Pinned LICENSE.txt](https://huggingface.co/tencent/Hy-MT2-1.8B-GGUF/blob/a0c709d9fac510f2c807aa3af52872340dc37a4a/LICENSE.txt). |
 | llama.cpp | Separate downloaded process | MIT. The runtime includes its upstream license. [Release b11429](https://github.com/ggml-org/llama.cpp/releases/tag/b11429). |
 | sherpa-onnx and ONNX Runtime | Native VAD and Windows recognition | Apache-2.0 and MIT, respectively. [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx/blob/master/LICENSE), [ONNX Runtime](https://github.com/microsoft/onnxruntime/blob/main/LICENSE). |
-| Silero VAD | ONNX model download | MIT. [Silero](https://github.com/snakers4/silero-vad/blob/master/LICENSE). |
+| Silero VAD | Bundled speech detector in the desktop app, managed download for CLI | MIT. The desktop package includes the upstream notice. [Silero](https://github.com/snakers4/silero-vad/blob/master/LICENSE). |
 | yt-dlp | Optional standalone executable | Source code is Unlicense. Upstream identifies the PyInstaller binaries for macOS and Windows as GPL-3.0-or-later combined works. [Distribution licenses](https://github.com/yt-dlp/yt-dlp#licensing). |
 | Deno | Optional separate process | MIT plus notices for its components. [License](https://github.com/denoland/deno/blob/main/LICENSE.md). |
 | Tauri and Svelte | Desktop shell and interface | Tauri uses MIT or Apache-2.0 and Svelte uses MIT. [Tauri](https://github.com/tauri-apps/tauri#license), [Svelte](https://github.com/sveltejs/svelte/blob/main/LICENSE.md). |

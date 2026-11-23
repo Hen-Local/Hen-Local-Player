@@ -5,8 +5,22 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { open, save } from '@tauri-apps/plugin-dialog'
+export interface EmbeddedTrack {
+  order: number
+  default: boolean
+  forced: boolean
+  language: string | null
+  title: string | null
+}
+export interface SubtitleInventory {
+  embedded: EmbeddedTrack[]
+  sidecars: string[]
+  exactSidecar: string | null
+  probeFailed: boolean
+}
 export interface Commands {
   set_playback_capabilities: [ { caps: Caps }, void ]
+  set_player_fullscreen: [ { enabled: boolean }, void ]
   close_media: [ undefined, void ]
   choose_media_folder: [ undefined, string[] ]
   save_video_frame: [ { sessionId: string; ms: number }, boolean ]
@@ -22,6 +36,10 @@ export interface Commands {
   select_audio_track: [ { order: number }, void ]
   report_playback_error: [ { sessionId: string; code: number }, void ]
   retry_failed: [ undefined, void ]
+  start_transcription: [{ sessionId: string }, { missing: string[] }]
+  list_subtitle_tracks: [{ sessionId: string }, SubtitleInventory]
+  read_embedded_subtitle: [{ sessionId: string; order: number }, string]
+  read_sidecar_subtitle: [{ sessionId: string; name: string }, string]
   export_subtitles: [ { variant: SubtitleVariant; format: SubtitleFormat; path: string }, void ]
   suggest_export_paths: [ { variant: SubtitleVariant; format: SubtitleFormat }, string ]
   get_settings: [ undefined, Settings ]

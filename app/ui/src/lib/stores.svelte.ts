@@ -38,6 +38,12 @@ class PlayerState {
   media = $state<MediaOpened | null>(null)
   prep = $state<PlaybackPrep | null>(null)
   status = $state<PipelineStatus | null>(null)
+  transcriptionRequested = $state(false)
+  startingTranscription = $state(false)
+  missingSubtitleComponents = $state<string[]>([])
+  subtitleError = $state('')
+  installingSubtitleComponent = $state('')
+
   language = $state<LanguageEvent | null>(null)
   cues = $state.raw<Cue[]>([])
   cueIndex = new Map<string, number>()
@@ -51,6 +57,9 @@ class PlayerState {
   volume = $state(0.85)
   rate = $state(1)
   fullscreen = $state(false)
+  private inPlaceFullscreen = false
+  private fullscreenRevision = 0
+  private fullscreenOperation = Promise.resolve()
   track = $state(0)
   error = $state('')
   notice = $state('')
@@ -105,6 +114,48 @@ class PlayerState {
   }
   async update(patch: Partial<Settings>) {
     this.settings = await backend.call('update_settings', { patch })
+  }
+  async startTranscription(originalOnly = false) {
+    const id = this.media?.sessionId
+    if (!id || this.startingTranscription) return
+    this.startingTranscription = true
+    this.subtitleError = ''
+    try {
+      if (originalOnly) await this.setTarget('none')
+      if (!this.own(id)) return
+      if (subtitleTracks.selected !== 'generated' || this.settings.subtitleMode === 'off')
+        await subtitleTracks.select('generated')
+      if (!this.own(id) || subtitleTracks.selected !== 'generated') return
+      this.transcriptionRequested = true
+      const { missing } = await backend.call('start_transcription', { sessionId: id })
+      if (this.own(id)) this.missingSubtitleComponents = missing
+    } catch (error) {
+      if (this.own(id)) this.subtitleError = String(error instanceof Error ? error.message : error)
+    } finally {
+      if (this.own(id)) this.startingTranscription = false
+    }
+  }
+  private componentReady(id: string) {
+    if (!this.missingSubtitleComponents.includes(id)) return
+    this.missingSubtitleComponents = this.missingSubtitleComponents.filter((key) => key !== id)
+    if (this.media && !this.missingSubtitleComponents.length && this.transcriptionRequested && subtitleTracks.selected === 'generated')
+      return this.startTranscription()
+  }
+  async installSubtitleComponent(component: string) {
+    const id = this.media?.sessionId
+    if (!id || this.installingSubtitleComponent || !this.missingSubtitleComponents.includes(component)) return
+    this.installingSubtitleComponent = component
+    this.subtitleError = ''
+    try {
+      await backend.call('start_setup', { includeUrlTools: false, ids: [component] })
+      this.components = await backend.call('get_setup_status')
+      if (this.components.some((c) => c.id === component && c.ready))
+        await this.componentReady(component)
+    } catch (error) {
+      if (this.own(id)) this.subtitleError = String(error instanceof Error ? error.message : error)
+    } finally {
+      this.installingSubtitleComponent = ''
+    }
   }
   private queueItems(paths: string[]) {
     return [...new Set(paths.filter(Boolean))].map((path) => ({
@@ -203,6 +254,7 @@ class PlayerState {
       this.prep = this.status = this.language = null
       this.queue = []
       this.currentPath = ''
+      subtitleTracks.attach('')
       this.switchPosition = null
       this.queued = null
       if (this.fullscreen) await this.full(false)
@@ -242,12 +294,18 @@ class PlayerState {
     } else this.volume = this.lastVolume
   }
   async setSource(code: string) {
+    const id = this.media?.sessionId
     await backend.call('set_source_language', { modeOrCode: code })
     this.settings = { ...this.settings, sourceLanguage: code }
+    if (id && this.own(id) && this.missingSubtitleComponents.length && subtitleTracks.selected === 'generated' && !this.startingTranscription)
+      await this.startTranscription()
   }
   async setTarget(code: string) {
+    const id = this.media?.sessionId
     await backend.call('set_target_language', { code })
     this.settings = { ...this.settings, targetLanguage: code }
+    if (id && this.own(id) && this.missingSubtitleComponents.length && subtitleTracks.selected === 'generated' && !this.startingTranscription)
+      await this.startTranscription()
   }
   async setTrack(order: number) {
     if (order === this.track) return
@@ -267,12 +325,15 @@ class PlayerState {
     }
   }
   jump(dir: number) {
-    const cues = subtitleTracks.authored?.cues ?? this.cues
+    const authored = subtitleTracks.authored
+    const cues = authored?.cues ?? this.cues
+    const delay = authored ? 0 : subtitleTracks.delayMs
+    const now = this.ms - delay
     const index =
       dir < 0
-        ? cues.map((cue) => cue.startMs < this.ms - 150).lastIndexOf(true)
-        : cues.findIndex((cue) => cue.startMs > this.ms + 150)
-    if (index >= 0) this.seek(cues[index].startMs)
+        ? cues.map((cue) => cue.startMs < now - 150).lastIndexOf(true)
+        : cues.findIndex((cue) => cue.startMs > now + 150)
+    if (index >= 0) this.seek(cues[index].startMs + delay)
   }
   toggle() {
     if (this.video) {
@@ -281,8 +342,31 @@ class PlayerState {
     }
   }
   async full(value: boolean) {
-    await backend.fullscreen(value)
+    const revision = ++this.fullscreenRevision
+    const previous = this.fullscreen
     this.fullscreen = value
+    const operation = this.fullscreenOperation.then(async () => {
+      if (revision !== this.fullscreenRevision) return
+      if (!mockMode && /Mac/.test(navigator.platform) && (value || this.inPlaceFullscreen)) {
+        const win = getCurrentWindow()
+        // The player fills its current display immediately. The green button and
+        // system menu can still put this window in a separate macOS Space.
+        if (value && (this.inPlaceFullscreen || await win.isFullscreen())) return
+        await backend.call('set_player_fullscreen', { enabled: value })
+        this.inPlaceFullscreen = value
+      } else {
+        await backend.fullscreen(value)
+      }
+    })
+    this.fullscreenOperation = operation.catch(() => {})
+    try {
+      await operation
+    } catch (error) {
+      const actual = mockMode ? previous :
+        this.inPlaceFullscreen || await getCurrentWindow().isFullscreen().catch(() => previous)
+      if (revision === this.fullscreenRevision) this.fullscreen = actual
+      throw error
+    }
   }
   cycle() {
     return subtitleTracks.cycle()
@@ -324,6 +408,11 @@ class PlayerState {
         this.currentPath = path || ''
         this.playing = false
         this.media = e
+        subtitleTracks.attach(e.sessionId)
+        this.transcriptionRequested = false
+        this.startingTranscription = false
+        this.missingSubtitleComponents = []
+        this.subtitleError = ''
         this.prep = null
         this.status = null
         this.language = e.language
@@ -358,6 +447,9 @@ class PlayerState {
       this.listen('pipeline://status', (s) => {
         if (!this.own(s.sessionId)) return
         this.status = s
+        // A previously requested track can resume before any cues have arrived.
+        if (this.media?.audioTracks.length && (s.stage === 'processing' || s.stage === 'paused'))
+          this.transcriptionRequested = true
         if (s.stage === 'complete' && this.queued?.sessionId === s.sessionId) {
           const q = this.queued
           this.queued = null
@@ -371,6 +463,7 @@ class PlayerState {
         this.components = [...this.components.filter((c) => c.id !== e.id), e].sort((a, b) =>
           a.id.localeCompare(b.id),
         )
+        if (e.ready && !this.installingSubtitleComponent) void this.componentReady(e.id)
       }),
       this.listen('download://progress', (e) => (this.download = e)),
       this.listen('app://menu', (action) => {
@@ -441,7 +534,12 @@ class PlayerState {
         }
       }),
       this.listen('app://error', (e) => {
-        if (!e.sessionId || this.own(e.sessionId)) this.message(e.message)
+        if (e.sessionId && !this.own(e.sessionId)) return
+        if (e.sessionId && this.transcriptionRequested && ['AsrUnavailable', 'Translation', 'Extraction'].includes(e.code)) {
+          this.subtitleError = e.message
+          return
+        }
+        this.message(e.message)
       }),
     ])
     const unDrop = await backend.onDrop((paths) => void this.openPaths(paths))
@@ -465,10 +563,30 @@ class PlayerState {
       this.cleanups.push(() => document.removeEventListener('fullscreenchange', reflectFullscreen))
     } else {
       const win = getCurrentWindow()
-      const reflectFullscreen = async () => {
-        this.fullscreen = await win.isFullscreen()
+      const exitPlayerFullscreen = () => {
+        if (this.inPlaceFullscreen) void this.act(() => this.full(false))
       }
-      this.cleanups.push(await win.onResized(() => void this.act(reflectFullscreen)))
+      window.addEventListener('hlp:exit-player-fullscreen', exitPlayerFullscreen)
+      let resizeTimer = 0
+      let resizeRevision = 0
+      const reflectFullscreen = async () => {
+        const resize = ++resizeRevision
+        const request = this.fullscreenRevision
+        await this.fullscreenOperation
+        if (request !== this.fullscreenRevision || this.disposed) return
+        const active = this.inPlaceFullscreen || await win.isFullscreen()
+        if (request === this.fullscreenRevision && resize === resizeRevision && !this.disposed)
+          this.fullscreen = active
+      }
+      const unlisten = await win.onResized(() => {
+        window.clearTimeout(resizeTimer)
+        resizeTimer = window.setTimeout(() => void this.act(reflectFullscreen), 80)
+      })
+      this.cleanups.push(() => {
+        window.clearTimeout(resizeTimer)
+        window.removeEventListener('hlp:exit-player-fullscreen', exitPlayerFullscreen)
+        unlisten()
+      })
       await this.act(reflectFullscreen)
     }
     const video = document.createElement('video')

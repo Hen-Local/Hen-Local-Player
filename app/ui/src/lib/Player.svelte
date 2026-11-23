@@ -20,8 +20,8 @@
     subtitlesOpen?: boolean
     playlistOpen?: boolean
   } = $props()
-  let stage: HTMLDivElement,
-    stageHeight = $state(0)
+  let surface: HTMLDivElement, stage: HTMLDivElement
+  let stageHeight = $state(0), stageBottomGap = $state(0)
   let video = $state<HTMLVideoElement>()
   let box = $state({ width: 0, height: 0, left: 0, top: 0 }),
     buffered = $state(0),
@@ -39,7 +39,8 @@
   let url = $derived(p.prep?.mediaUrl || p.media?.mediaUrl || null)
   let controlsVisible = $derived(!idle || !p.playing || keepControls || controlsHeld)
   function measure() {
-    if (!stage || !video) return
+    if (!stage || !surface || !video) return
+    stageBottomGap = surface.clientHeight - stage.offsetTop - stage.clientHeight
     const { clientWidth: w, clientHeight: h } = stage,
       aspect = (video.videoWidth || 16) / (video.videoHeight || 9)
     const width = p.videoFit === 'cover' ? w : Math.min(w, h * aspect),
@@ -252,6 +253,7 @@
     const removeMediaKeys = mediaKeys()
     const size = new ResizeObserver(measure)
     size.observe(stage)
+    size.observe(surface)
     return () => {
       removeMediaKeys()
       size.disconnect()
@@ -265,76 +267,80 @@
 
 <svelte:window onkeydown={activity} />
 
-<div
-  bind:this={stage}
-  bind:clientHeight={stageHeight}
-  class="video-stage"
-  class:controls-visible={controlsVisible}
-  class:hide-cursor={!controlsVisible}
-  role="presentation"
-  onpointermove={(e) => {
-    if (e.pointerType !== 'touch') activity()
-  }}
-  onpointerdown={(e) => {
-    wakeTap = e.pointerType === 'touch' && !controlsVisible
-    activity()
-  }}
-  onfocusin={activity}
-  onclick={clickStage}
->
-  {#if p.media}
-    {#key p.media.sessionId}
-      {#if url}<video
-          bind:this={video}
-          src={url}
-          style:object-fit={p.videoFit}
-          data-session={p.media.sessionId}
-          preload="auto"
-          playsinline
-          onloadedmetadata={loaded}
-          onresize={measure}
-          onplay={play}
-          onpause={pause}
-          onended={() => {
-            pause()
-            p.ended()
-          }}
-          onseeked={() => sync(true)}
-          ontimeupdate={() => {
-            if (!p.playing || document.hidden) sync()
-          }}
-          onprogress={() => {
-            if (video?.buffered.length)
-              buffered = video.buffered.end(video.buffered.length - 1) * 1000
-          }}
-          onerror={reportError}
-        >
-          <track kind="captions" />
-        </video>
-        {#if audioOnly}<div class="stage-state">
-            <Icon name="audio" size={54} />
-            <span>{p.t('audioOnly')}</span>
+<div class="player-surface" bind:this={surface}>
+  <div
+    bind:this={stage}
+    bind:clientHeight={stageHeight}
+    class="video-stage movie-viewport"
+    class:controls-visible={controlsVisible}
+    class:hide-cursor={!controlsVisible}
+    role="presentation"
+    onpointermove={(e) => {
+      if (e.pointerType !== 'touch') activity()
+    }}
+    onpointerdown={(e) => {
+      wakeTap = e.pointerType === 'touch' && !controlsVisible
+      activity()
+    }}
+    onfocusin={activity}
+    onclick={clickStage}
+  >
+    {#if p.media}
+      {#key p.media.sessionId}
+        {#if url}<video
+            bind:this={video}
+            src={url}
+            style:object-fit={p.videoFit}
+            data-session={p.media.sessionId}
+            preload="auto"
+            playsinline
+            onloadedmetadata={loaded}
+            onresize={measure}
+            onplay={play}
+            onpause={pause}
+            onended={() => {
+              pause()
+              p.ended()
+            }}
+            onseeked={() => sync(true)}
+            ontimeupdate={() => {
+              if (!p.playing || document.hidden) sync()
+            }}
+            onprogress={() => {
+              if (video?.buffered.length)
+                buffered = video.buffered.end(video.buffered.length - 1) * 1000
+            }}
+            onerror={reportError}
+          >
+            <track kind="captions" />
+          </video>
+          {#if audioOnly}<div class="stage-state">
+              <Icon name="audio" size={54} />
+              <span>{p.t('audioOnly')}</span>
+            </div>{/if}
+        {:else}<div class="stage-state">
+            <Icon name="film" size={40} />
+            <strong>{p.t('preparing')}</strong>
+            <progress max="1" value={p.prep?.progress ?? 0}></progress>
+            <small>{Math.round((p.prep?.progress ?? 0) * 100)}%</small>
           </div>{/if}
-      {:else}<div class="stage-state">
-          <Icon name="film" size={40} />
-          <strong>{p.t('preparing')}</strong>
-          <progress max="1" value={p.prep?.progress ?? 0}></progress>
-          <small>{Math.round((p.prep?.progress ?? 0) * 100)}%</small>
-        </div>{/if}
-    {/key}
-    <SubtitleOverlay
-      {box}
-      clearance={controlsVisible
-        ? Math.max(0, controlsHeight + 8 - (stageHeight - box.top - box.height))
-        : 0}
-    />
-    {#if p.status?.stage === 'needs-setup' && !url && subtitleTracks.selected === 'generated' && p.settings.subtitleMode !== 'off'}<button
-        class="stage-chip"
-        onclick={() => (p.dialog = 'setup')}
-      >
-        {p.t('needsSetup')} →
-      </button>
+      {/key}
+      <SubtitleOverlay
+        {box}
+        clearance={controlsVisible
+          ? Math.max(0, controlsHeight + 8 - stageBottomGap - (stageHeight - box.top - box.height))
+          : 0}
+      />
+      {#if p.status?.stage === 'needs-setup' && !url && subtitleTracks.selected === 'generated' && p.settings.subtitleMode !== 'off'}<button
+          class="stage-chip"
+          onclick={() => (p.dialog = 'setup')}
+        >
+          {p.t('needsSetup')} →
+        </button>
+      {/if}
     {/if}
+  </div>
+  {#if p.media}
     <div
       class="floating-slot"
       class:transport-hidden={!controlsVisible}
@@ -360,19 +366,16 @@
   .floating-slot {
     position: absolute;
     inset: auto 0 0;
-    z-index: 4;
+    z-index: 5;
     width: 100%;
     box-sizing: border-box;
     padding: 0 clamp(8px, 2.2vw, 24px) max(clamp(8px, 2vh, 20px), env(safe-area-inset-bottom));
     container-type: inline-size;
     pointer-events: none;
-    transition:
-      opacity 160ms,
-      transform 160ms;
+    transition: opacity 160ms;
   }
   .floating-slot.transport-hidden {
     opacity: 0;
-    transform: translateY(4px);
   }
   .floating-slot.transport-hidden :global([data-transport]) {
     pointer-events: none;

@@ -44,7 +44,7 @@ impl Player {
             source_path: path.clone(),
             language: Default::default(),
         });
-        let session = Session::open(
+        let session = Session::open_for_playback(
             path.clone(),
             self.settings.clone(),
             self.caps.clone(),

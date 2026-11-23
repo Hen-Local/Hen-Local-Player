@@ -53,8 +53,21 @@ pub fn llama_server_path() -> PathBuf {
 pub fn gguf_path() -> PathBuf {
     model_root().join("Hy-MT2-1.8B-Q4_K_M.gguf")
 }
+static BUNDLED_VAD: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn use_bundled_vad(path: &Path) {
+    if let Some(c) = component("vad-silero") {
+        if verified_single_file(path, c) {
+            let _ = BUNDLED_VAD.set(path.to_owned());
+        }
+    }
+}
+
 pub fn vad_path() -> PathBuf {
-    model_root().join("silero-vad/silero_vad.onnx")
+    BUNDLED_VAD
+        .get()
+        .cloned()
+        .unwrap_or_else(|| model_root().join("silero-vad/silero_vad.onnx"))
 }
 // Only the desktop shell opts into its signed, adjacent playback executables.
 // Installer destinations and the CLI continue to use their own component root.
@@ -145,6 +158,35 @@ fn file_len(p: &Path) -> u64 {
         .filter(|m| m.is_file())
         .map_or(0, |m| m.len())
 }
+fn verified_single_file(path: &Path, c: &Component) -> bool {
+    use sha2::{Digest, Sha256};
+    let first = &c.files[0];
+    file_len(path) == first.bytes
+        && fs::read(path).is_ok_and(|bytes| hex::encode(Sha256::digest(bytes)) == first.sha256)
+}
+
+pub fn asr_component_id(model: &str) -> &'static str {
+    match model {
+        "qwen3-asr-0.6b" => "asr-qwen3-0.6b-mlx",
+        "sherpa-qwen3-asr-0.6b" => "asr-qwen3-0.6b-sherpa",
+        _ => "asr-qwen3-1.7b-mlx",
+    }
+}
+
+/// Check only the user's selected engines. URL helpers and alternate ASR
+/// models have no bearing on transcribing local audio.
+pub fn missing_for_transcription(model: &str, translate: bool) -> Vec<String> {
+    let root = ominix_root();
+    let mut ids = vec!["ffmpeg", "vad-silero", asr_component_id(model)];
+    if translate {
+        ids.extend(["mt-hy-mt2-1.8b", "llama-runtime-b11429"]);
+    }
+    ids.into_iter()
+        .filter(|id| !component(id).is_some_and(|c| ready(&root, c)))
+        .map(str::to_owned)
+        .collect()
+}
+
 fn ready(root: &Path, c: &Component) -> bool {
     let dir = if c.id == "ffmpeg" {
         BUNDLED_PLAYBACK_TOOLS
@@ -172,11 +214,10 @@ fn ready(root: &Path, c: &Component) -> bool {
             })
         }
         Check::File => {
-            use sha2::{Digest, Sha256};
-            let path = dir.join(first.name.as_ref().expect("raw filename"));
-            file_len(&path) == first.bytes
-                && fs::read(path)
-                    .is_ok_and(|bytes| hex::encode(Sha256::digest(bytes)) == first.sha256)
+            if c.id == "vad-silero" && BUNDLED_VAD.get().is_some() {
+                return true;
+            }
+            verified_single_file(&dir.join(first.name.as_ref().expect("raw filename")), c)
         }
         Check::Sherpa => [
             "conv_frontend.onnx",

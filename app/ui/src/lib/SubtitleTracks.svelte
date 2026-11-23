@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
+  import { untrack, type Snippet } from 'svelte'
   import { player as p } from './stores.svelte'
-  import { subtitleTracks as tracks, type EmbeddedTrack } from './subtitle-tracks.svelte'
+  import type { EmbeddedTrack } from './backend'
+  import { subtitleTracks as tracks } from './subtitle-tracks.svelte'
 
+  let { children }: { children: Snippet } = $props()
   const labels = {
     en: {
       track: 'Subtitle track',
@@ -62,7 +64,7 @@
   })
 </script>
 
-<div class="subtitle-track-tools">
+<div class="subtitle-track-tools track-picker">
   <label class="track-field">
     <span>{copy.track}</span>
     <select
@@ -99,46 +101,81 @@
         </optgroup>{/if}
     </select>
   </label>
-  <button
-    class="import-subtitle"
-    disabled={!p.media}
-    onclick={() => window.dispatchEvent(new Event('hlp:subtitle-file'))}>{copy.load}</button
-  >
-  <div class="track-field">
-    <label for="track-delay-seconds">{copy.delay}</label>
-    <span class="delay-stepper">
-      <button
-        type="button"
-        disabled={!p.media}
-        title={copy.earlier}
-        aria-label={copy.earlier}
-        onclick={() => delay((tracks.delayMs - 100) / 1000)}>−</button
-      >
-      <input
-        id="track-delay-seconds"
-        type="number"
-        step="0.1"
-        disabled={!p.media}
-        aria-label={copy.delay}
-        value={tracks.delayMs / 1000}
-        onchange={(e) => delay(e.currentTarget.valueAsNumber)}
-      />
-      <button
-        type="button"
-        disabled={!p.media}
-        title={copy.later}
-        aria-label={copy.later}
-        onclick={() => delay((tracks.delayMs + 100) / 1000)}>+</button
-      >
-    </span>
-  </div>
-  {#if tracks.loading}<small role="status">{copy.loading}</small>{/if}
-  {#if tracks.discoveryError}<button onclick={() => tracks.discover(p.media?.sessionId ?? '')}
-      >{copy.again}</button
-    >{/if}
 </div>
+<details class="track-settings">
+  <summary>{p.t('subtitleControls')}</summary>
+  <div class="subtitle-track-tools expanded-tools">
+    <button
+      class="import-subtitle"
+      disabled={!p.media}
+      onclick={() => window.dispatchEvent(new Event('hlp:subtitle-file'))}>{copy.load}</button
+    >
+    <div class="track-field">
+      <label for="track-delay-seconds">{copy.delay}</label>
+      <span class="delay-stepper">
+        <button
+          type="button"
+          disabled={!p.media}
+          title={copy.earlier}
+          aria-label={copy.earlier}
+          onclick={() => delay((tracks.delayMs - 100) / 1000)}>−</button
+        >
+        <input
+          id="track-delay-seconds"
+          type="number"
+          step="0.1"
+          disabled={!p.media}
+          aria-label={copy.delay}
+          value={tracks.delayMs / 1000}
+          onchange={(e) => delay(e.currentTarget.valueAsNumber)}
+        />
+        <button
+          type="button"
+          disabled={!p.media}
+          title={copy.later}
+          aria-label={copy.later}
+          onclick={() => delay((tracks.delayMs + 100) / 1000)}>+</button
+        >
+      </span>
+    </div>
+    {#if tracks.discoveryError}<button onclick={() => tracks.discover(p.media?.sessionId ?? '')}
+        >{copy.again}</button
+      >{/if}
+    {@render children()}
+  </div>
+</details>
+{#if tracks.loading || tracks.discovering}<small class="read-status" role="status"
+    >{copy.loading}</small
+  >{/if}
 
 <style>
+  .track-picker {
+    flex: none;
+    padding: 8px 12px 7px;
+    width: 100%;
+  }
+  .track-settings {
+    flex: none;
+    min-height: 0;
+    max-height: 47%;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .track-settings summary {
+    margin-inline: 4px;
+    padding: 5px 8px 8px;
+    border-radius: 4px;
+    color: var(--sub);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .expanded-tools {
+    padding: 6px 12px 12px;
+  }
+  .read-status {
+    padding-inline: 12px;
+  }
   .subtitle-track-tools {
     display: flex;
     flex-wrap: wrap;

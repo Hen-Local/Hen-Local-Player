@@ -21,3 +21,9 @@ Headless Chrome played real MP4s selected through its file dialog. The smoke tes
 A folder containing `2.mp4`, `10.mp4`, and a text file yielded the two playable entries in natural order. Dropping two files produced a two-entry playlist. Local browser files used their own bytes and carried no demo transcript. The bundled demo restored its position after a full browser reload. The system media session reflected the playing title and state.
 
 The browser entered picture-in-picture with six real timed caption entries on its native text track. Leaving picture-in-picture disabled that track and returned caption rendering to the window.
+
+## Independent sidebars and fixed playback controls
+
+On November 23, 2026, a native macOS window opened the Japanese sample and its adjacent bilingual SRT with an isolated data directory. At 720 × 430, in fullscreen at 2580 × 1080, and back at 720 × 430, the four combinations of Playlist and Player settings produced identical window-relative rectangles for all eight transport buttons and both sliders. Center-point hit tests reached each control. The sidecar cue stayed visible throughout. Both a debug app bundle and the bare executable from `cargo build --locked -p henlocal-player` passed.
+
+Chrome repeated the rectangle and hit tests at 720 × 430, 1280 × 760, and touch viewports of 390 × 680 and 320 × 235. With both panels open, the picture and authored caption stayed clear of both sidebars and the transport. Escape closed the focused panel; the other stayed available. The T shortcut, native transcript event and General preference opened the unified Subtitles tab, and both panels survived a fullscreen round trip. Holding F left fullscreen unchanged. `npm --prefix app/ui run check` returned zero errors and warnings.

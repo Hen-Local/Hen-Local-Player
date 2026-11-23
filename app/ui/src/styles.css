@@ -982,21 +982,22 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
 }
 .app:has(.video-stage.controls-visible) .window-chrome,
 .watching .window-chrome:hover { opacity: 1; }
-.app { --dock-width: clamp(248px, 28vw, 342px); }
-.movie-viewport { position: absolute; inset: 0; }
-.app .video-stage { width: 100%; height: 100%; }
+.app {
+  --left-dock-width: clamp(152px, 22vw, 280px);
+  --right-dock-width: clamp(220px, 27vw, 332px);
+}
+.player-surface, .app .movie-viewport { position: absolute; inset: 0; }
+.app .movie-viewport { width: auto; height: auto; }
 .app .inspector {
   position: absolute;
   z-index: 4;
   top: 0;
   bottom: 0;
-  width: var(--dock-width);
   max-width: calc(100% - 22px);
 }
-.app .left-inspector { left: 0; right: auto; border-radius: 0; border-width: 0 1px 0 0; }
-.app .right-inspector { right: 0; left: auto; border-radius: 0; border-width: 0 0 0 1px; }
+.app .left-inspector { width: var(--left-dock-width); left: 0; right: auto; border-radius: 0; border-width: 0 1px 0 0; }
+.app .right-inspector { width: var(--right-dock-width); right: 0; left: auto; border-radius: 0; border-width: 0 0 0 1px; }
 .app .inspector[hidden], .inspector-page[hidden] { display: none; }
-.native-mac .left-inspector { padding-top: 36px; }
 .inspector-page { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .inspector-tabs {
   display: flex;
@@ -1016,14 +1017,48 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
 }
 .app .inspector-tabs button:hover:not(:disabled) { color: white; background: #ffffff15; }
 @media (min-width: 680px) {
-  .left-dock .movie-viewport, .left-dock .window-chrome { left: var(--dock-width); }
-  .right-dock .movie-viewport, .right-dock .window-chrome { right: var(--dock-width); }
+  .native-mac .app:not(.fullscreen) .left-inspector { padding-top: 36px; }
+  .left-dock .movie-viewport, .left-dock .window-chrome { left: var(--left-dock-width); }
+  .right-dock .movie-viewport, .right-dock .window-chrome { right: var(--right-dock-width); }
+}
+@media (max-width: 1208px) {
+  .app.watching .inspector { bottom: var(--bar-clearance); }
 }
 @media (max-width: 679px) {
-  .app.watching .inspector { top: 42px; bottom: var(--bar-clearance); }
-  .app.watching .right-inspector { border-radius: 12px 0 0 12px; border-width: 1px 0 1px 1px; }
-  .app.watching .left-inspector { border-radius: 0 12px 12px 0; border-width: 1px 1px 1px 0; }
-  .native-mac .watching .left-inspector { padding-top: 0; }
+  .app {
+    --compact-picture-height: min(33dvh, 48vw);
+    --compact-playlist-width: clamp(92px, 32vw, 188px);
+  }
+  .app.watching:is(.left-dock, .right-dock) .movie-viewport {
+    bottom: auto;
+    height: var(--compact-picture-height);
+  }
+  .app.watching .inspector {
+    top: var(--compact-picture-height);
+    width: 100%;
+    max-width: 100%;
+    border-width: 1px 0;
+  }
+  .app.left-dock.right-dock .left-inspector {
+    width: var(--compact-playlist-width);
+    border-right-width: 1px;
+  }
+  .app.left-dock.right-dock .right-inspector {
+    width: calc(100% - var(--compact-playlist-width));
+  }
+  .app.left-dock.right-dock .left-inspector :is(.drawer-footer, .panel-title) { padding-inline: 6px; }
+  .app.left-dock.right-dock .left-inspector .panel-title { gap: 0; }
+  .app.left-dock.right-dock .left-inspector .panel-title h2 { font-size: 13px; }
+  .app.left-dock.right-dock .left-inspector .queue-row { gap: 0; padding-right: 2px; }
+  .app.left-dock.right-dock .left-inspector .queue-number { min-width: 12px; }
+  .app.left-dock.right-dock .left-inspector .drawer-footer button { padding-inline: 6px; }
+}
+@media (max-width: 679px) and (max-height: 400px) {
+  .app { --compact-picture-height: 24dvh; }
+  .app.watching .inspector { display: block; overflow-y: auto; overscroll-behavior: contain; }
+  .app.watching .inspector[hidden] { display: none; }
+  .app.watching .inspector .panel-title { min-height: 30px; padding-block: 2px; }
+  .app.watching .inspector .inspector-tabs button { min-height: 24px; }
 }
 @media (max-width: 530px) {
   .welcome { width: min(360px, calc(100% - 46px)); }
