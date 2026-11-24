@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { player as p, modes, mockMode } from './stores.svelte'
+  import { player as p, mockMode } from './stores.svelte'
   import Icon from './Icon.svelte'
-  import LanguageControls from './LanguageControls.svelte'
   import SubtitleTracks from './SubtitleTracks.svelte'
-  import SubtitleAppearance from './SubtitleAppearance.svelte'
+  import SubtitleSettings from './SubtitleSettings.svelte'
+  import SubtitleProgress from './SubtitleProgress.svelte'
   import TranscriptPanel from './TranscriptPanel.svelte'
   import { subtitleTracks as tracks } from './subtitle-tracks.svelte'
   import { componentNames } from './component-names'
@@ -51,7 +51,10 @@
           !tracks.sidecars.length)) &&
       stage !== 'complete',
   )
-  let cached = $derived(generated && hasLines && !p.transcriptionRequested && stage === 'idle')
+  let cached = $derived(
+    generated && hasLines && !p.transcriptionRequested && p.status?.stage === 'idle' &&
+    (!p.status.vadComplete || p.status.uttDone + p.status.uttNoSpeech < p.status.uttTotal || p.status.trPendingSpans.length > 0),
+  )
   let retry = $derived(
     generated &&
       (stage === 'error' || !!p.subtitleError || stage === 'needs-setup' || stage === 'paused') &&
@@ -61,34 +64,8 @@
 </script>
 
 <div class="subtitle-workspace" tabindex="-1">
-  <SubtitleTracks>
-    {#if tracks.selected === 'generated'}
-      <LanguageControls />
-      <div class="mode-control">
-        <span class="field-label">{p.t('display')}</span>
-        <div class="mode-group">
-          {#each modes as mode}
-            <button
-              class:selected={p.settings.subtitleMode === mode}
-              aria-pressed={p.settings.subtitleMode === mode}
-              onclick={() => p.act(() => tracks.setMode(mode))}>{p.t(mode)}</button
-            >
-          {/each}
-        </div>
-      </div>
-    {/if}
-    <SubtitleAppearance />
-    {#if generated && p.cues.length}
-      <button class="outline wide" onclick={() => (p.dialog = 'export')}>
-        <Icon name="export" size={15} />{p.t('exportSubs')}
-      </button>
-    {/if}
-    <button class="link-action" onclick={() => (p.dialog = 'setup')}
-      ><Icon name="download" size={15} />{p.t('models')}</button
-    >
-  </SubtitleTracks>
-
-  {#if off || canCreate || (generated && (missing.length || cached || retry || p.startingTranscription || (working && stage === 'idle')))}
+  <SubtitleTracks />
+  {#if off || canCreate || (generated && (missing.length || cached || retry))}
     <div class="generation-actions">
       {#if off}<p>{p.t('subtitlesOff')}</p>{/if}
       {#if canCreate}
@@ -130,8 +107,6 @@
               onclick={() => p.startTranscription(true)}>{p.t('originalOnly')}</button
             >
           {/if}
-        {:else if p.startingTranscription || (working && stage === 'idle')}
-          <p role="status">{p.t('startingTranscription')}</p>
         {:else if retry || cached}
           <button class="create-subtitles" onclick={() => p.startTranscription()}
             >{p.t(
@@ -143,8 +118,14 @@
       {/if}
     </div>
   {/if}
-  {#if !off && (hasLines || (generated && (p.transcriptionRequested || stage === 'complete') && !missing.length && stage !== 'idle' && stage !== 'needs-setup'))}
-    <TranscriptPanel />
+  {#if generated && !missing.length && (working || p.startingTranscription || cached || hasLines || stage === 'complete' || stage === 'error' || stage === 'paused')}
+    <SubtitleProgress {cached} />
+  {/if}
+  <SubtitleSettings />
+  {#if !off && (hasLines || (generated && working))}
+    {#key (p.media?.sessionId ?? '') + '/' + tracks.selected}
+      <TranscriptPanel />
+    {/key}
   {/if}
 </div>
 
@@ -156,19 +137,13 @@
     min-height: 0;
     overflow: hidden auto;
   }
-  .subtitle-workspace :global(.subtitle-track-tools) {
-    display: grid;
-    gap: 9px;
-  }
-  .subtitle-workspace :global(.track-picker .track-field) {
-    width: 100%;
-  }
   .generation-actions {
     display: grid;
     align-content: start;
     gap: 9px;
     flex-shrink: 0;
-    padding: 12px;
+    padding: 12px var(--inspector-inset);
+    border-bottom: 1px solid var(--hairline);
     font-size: 12px;
   }
   .generation-actions p {

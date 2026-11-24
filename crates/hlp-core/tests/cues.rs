@@ -38,7 +38,7 @@ fn split_over_pause_and_linger() {
     assert_eq!((cues[1].start_ms, cues[1].end_ms), (5000, 7500));
 }
 #[test]
-fn preserve_words_graphemes_and_punctuation() {
+fn preserve_words_and_graphemes_in_single_line_cues() {
     for (s, separate_words) in [
         ("เด็ก ๆ เดินไปเที่ยวที่แม่น้ำ", false),
         ("आज मौसम बहुत अच्छा है", true),
@@ -60,18 +60,15 @@ fn preserve_words_graphemes_and_punctuation() {
             cues.iter()
                 .flat_map(|c| graphemes(&c.original))
                 .collect::<Vec<_>>(),
-            graphemes(&text)
+            graphemes(&generated_line(&text))
         );
         for c in cues {
             assert!(display_cols(&c.original) <= 84);
-            let wrapped = wrap_lines(&c.original);
-            assert!(wrapped.lines().count() <= 2);
-            assert_eq!(graphemes(&wrapped), graphemes(&c.original));
-            assert!(wrapped.lines().all(|line| display_cols(line) <= 43));
+            assert_eq!(c.original.lines().count(), 1);
         }
     }
     let c = build_cues(&[utterance(1, 0, 1500, "好！再见。")], &HashMap::new());
-    assert_eq!(c[0].original, "好！再见。");
+    assert_eq!(c[0].original, "好 再见");
 }
 #[test]
 fn length_bounds_pending_text_and_tiny_neighbor() {
@@ -93,7 +90,7 @@ fn length_bounds_pending_text_and_tiny_neighbor() {
     let next = utterance(2, 640, 2000, "Next.");
     let cues = build_cues(&[tiny, next], &HashMap::new());
     assert_eq!(cues.len(), 2);
-    assert!(cues[0].original.contains("long. This"));
+    assert!(cues[0].original.contains("long This"));
 }
 #[test]
 fn translations_follow_sentences_then_weights() {
@@ -119,25 +116,25 @@ proptest! {
 #[test]
 fn expanding_translation_pages_at_matching_clauses() {
     let text = "我们先打开窗户，然后一起看看外面的天气。";
-    let target =
-        "First, let us open the windows, then we can take a look at the weather outside together.";
+    let target = "First, let us open the windows, then let's look at the weather outside.";
     let u = utterance(1, 900, 5600, text);
     let originals = build_cues(std::slice::from_ref(&u), &HashMap::new());
     assert_eq!(originals.len(), 1);
     let targets = HashMap::from([(u.id.clone(), target.to_owned())]);
     let pages = build_cues(&[u], &targets);
     assert_eq!(pages.len(), 2);
-    assert_eq!(pages[0].original, "我们先打开窗户，");
+    assert_eq!(pages[0].original, "我们先打开窗户");
     assert_eq!(
         pages[0].translation.as_deref(),
-        Some("First, let us open the windows,")
+        Some("First let us open the windows")
     );
     assert_eq!(
         pages
             .iter()
             .map(|c| c.original.as_str())
-            .collect::<String>(),
-        text
+            .collect::<Vec<_>>()
+            .join(" "),
+        generated_line(text)
     );
     assert_eq!(
         pages
@@ -145,11 +142,11 @@ fn expanding_translation_pages_at_matching_clauses() {
             .map(|c| c.translation.as_deref().unwrap())
             .collect::<Vec<_>>()
             .join(" "),
-        target
+        generated_line(target)
     );
     assert!(pages
         .iter()
-        .all(|c| display_cols(c.translation.as_deref().unwrap()) <= 56));
+        .all(|c| display_cols(c.translation.as_deref().unwrap()) <= 42));
     assert_eq!(pages[0].start_ms, 900);
     assert!(pages[0].end_ms <= pages[1].start_ms);
     assert_eq!(pages[0].id, originals[0].id);
@@ -175,20 +172,17 @@ fn multilingual_paging_preserves_whole_words_and_indivisible_pairs() {
         "A winter migration can take several months across this region, depending on the weather. "
             .repeat(3);
     let u = utterance(2, 0, 7000, "Migration");
-    let cues = build_cues(&[u.clone()], &HashMap::from([(u.id, target.trim().into())]));
-    // One source word has no timed alignment points. Preserve it and wrap the
-    // corresponding translation; never alternate blank captions or half a word.
+    let translations = HashMap::from([(u.id.clone(), target.trim().into())]);
+    let cues = build_cues(&[u], &translations);
+    // A single source word stays with its translation when there are no
+    // alignment points. Neither language gains internal line breaks.
     assert_eq!(cues.len(), 1);
     assert_eq!(cues[0].original, "Migration");
-    assert_eq!(cues[0].translation.as_deref(), Some(target.trim()));
-    let wrapped = wrap_lines(cues[0].translation.as_deref().unwrap());
-    assert_eq!(wrapped.lines().collect::<Vec<_>>().join(" "), target.trim());
-    assert!(wrapped.lines().all(|line| display_cols(line) <= 42));
-
-    let punctuation = "！".repeat(50);
-    assert!(wrap_lines(&punctuation)
-        .lines()
-        .all(|line| display_cols(line) <= 42));
+    assert_eq!(
+        cues[0].translation.as_deref(),
+        Some(generated_line(&target).as_str())
+    );
+    assert_eq!(cues[0].translation.as_deref().unwrap().lines().count(), 1);
 }
 
 #[test]
@@ -196,7 +190,7 @@ fn decimal_stays_whole_and_short_neighbors_cannot_recreate_oversized_cues() {
     let text = "The reading is 3.14 today.";
     let cues = build_cues(&[utterance(1, 0, 2000, text)], &HashMap::new());
     assert_eq!(cues.len(), 1);
-    assert_eq!(cues[0].original, text);
+    assert_eq!(cues[0].original, "The reading is 3.14 today");
 
     let sentence = "Use the first full sentence here. ";
     let source = sentence.repeat(12);
@@ -213,12 +207,52 @@ fn decimal_stays_whole_and_short_neighbors_cannot_recreate_oversized_cues() {
             .map(|c| c.original.as_str())
             .collect::<Vec<_>>()
             .join(" "),
-        source.trim()
+        generated_line(&source)
     );
     assert_eq!(
         cues.iter()
             .map(|c| c.translation.as_deref().unwrap())
-            .collect::<String>(),
-        translation
+            .collect::<String>()
+            .replace(' ', ""),
+        generated_line(&translation).replace(' ', "")
     );
+}
+
+#[test]
+fn generated_punctuation_becomes_spacing_after_alignment() {
+    let source = " “你好”，\n世界！！  ";
+    let target = "Well, yes! I’ll pay 1,000.25 at 10:30; 25% off.";
+    let spoken = utterance(1, 0, 4000, source);
+    let translations = HashMap::from([(spoken.id.clone(), target.into())]);
+    let cues = build_cues(std::slice::from_ref(&spoken), &translations);
+    assert_eq!(
+        cues.iter()
+            .map(|c| c.original.as_str())
+            .collect::<Vec<_>>()
+            .join(" "),
+        "你好 世界"
+    );
+    assert_eq!(
+        cues.iter()
+            .map(|c| c.translation.as_deref().unwrap())
+            .collect::<Vec<_>>()
+            .join(" "),
+        "Well yes I’ll pay 1,000.25 at 10:30 25% off"
+    );
+    assert_eq!(spoken.text.as_deref(), Some(source));
+    assert_eq!(translations[&spoken.id], target);
+    assert_eq!(
+        generated_line("  “Hybrid”  ——  real-time\r\ncaption… "),
+        "Hybrid real-time caption"
+    );
+    assert!(generated_line(" ？！—\n，").is_empty());
+
+    let punctuation = utterance(2, 0, 1300, "……，。");
+    assert!(build_cues(std::slice::from_ref(&punctuation), &HashMap::new()).is_empty());
+    let target_only = build_cues(
+        std::slice::from_ref(&punctuation),
+        &HashMap::from([(punctuation.id.clone(), "Hello!".to_owned())]),
+    );
+    assert_eq!(target_only.len(), 1);
+    assert_eq!(target_only[0].translation.as_deref(), Some("Hello"));
 }

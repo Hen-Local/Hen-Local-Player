@@ -349,7 +349,7 @@ class PlayerState {
       if (revision !== this.fullscreenRevision) return
       if (!mockMode && /Mac/.test(navigator.platform) && (value || this.inPlaceFullscreen)) {
         const win = getCurrentWindow()
-        // The player fills its current display immediately. The green button and
+        // The player animates within its current display. The green button and
         // system menu can still put this window in a separate macOS Space.
         if (value && (this.inPlaceFullscreen || await win.isFullscreen())) return
         await backend.call('set_player_fullscreen', { enabled: value })

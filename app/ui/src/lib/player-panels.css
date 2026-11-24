@@ -87,6 +87,7 @@
 
 /* Side panels */
 .app .inspector {
+  --inspector-inset: 14px;
   overflow: hidden;
   background: rgb(28 30 35 / 83%);
 }
@@ -132,19 +133,138 @@
   color: var(--accent-text);
 }
 
-.app .inspector .coverage-summary {
+.app .right-inspector .panel-title {
+  padding-inline: var(--inspector-inset);
+}
+.app .right-inspector .inspector-tabs {
+  margin: 7px var(--inspector-inset);
+}
+.app .right-inspector {
+  font-size: 13px;
+  line-height: 1.4;
+}
+.app .right-inspector :is(button, select, input) {
+  font-size: 13px;
+}
+.app .right-inspector :is(.track-field > span:first-child, .track-field > label, .select-field > span:first-child, .slider-setting > span) {
+  color: var(--sub);
+  font-size: 12px;
+  font-weight: 560;
+}
+.app .right-inspector .track-picker,
+.app .right-inspector .coverage-summary {
+  flex: none;
+  width: 100%;
+  padding: 12px var(--inspector-inset);
+  border-bottom: 1px solid var(--hairline);
   background: transparent;
 }
-
-.app .inspector .micro-rail,
-.app :is(.inspector, .player-dialog) :is(.file-icon, .component-icon) {
-  background: var(--hover);
+.app .right-inspector .read-status {
+  padding: 0 var(--inspector-inset) 8px;
 }
-
-.app .inspector :is(.micro-rail i, .dot) {
-  background: var(--accent-text);
+.app .right-inspector .track-settings {
+  min-width: 0;
+  flex: none;
 }
-
+.app .right-inspector :is(.settings-disclosure, .subtitle-list-toggle) {
+  display: flex;
+  width: 100%;
+  min-height: 41px;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 7px;
+  padding: 8px var(--inspector-inset);
+  border: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--hairline);
+  color: var(--ink);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  list-style: none;
+  cursor: pointer;
+}
+.settings-disclosure::-webkit-details-marker { display: none; }
+.track-settings[open] > .settings-disclosure svg { transform: rotate(90deg); }
+.app .right-inspector .settings-disclosure:hover { background: var(--hover); }
+.app .right-inspector :is(.settings-disclosure, .subtitle-list-toggle):focus-visible {
+  outline: 2px solid var(--accent-text);
+  outline-offset: -3px;
+}
+.app .right-inspector .expanded-tools {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  padding: 14px var(--inspector-inset);
+  border-bottom: 1px solid var(--hairline);
+}
+.app .right-inspector .track-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.app .right-inspector .languages { gap: 12px; }
+.app .right-inspector .language-arrow { display: none; }
+.app .right-inspector .track-field select { max-width: 100%; text-overflow: ellipsis; }
+.app .right-inspector .delay-stepper {
+  display: flex;
+  gap: 5px;
+}
+.app .right-inspector .delay-stepper :is(input, button) {
+  min-height: 30px;
+  text-align: center;
+}
+.app .right-inspector .delay-stepper input { width: 5.5em; }
+.app .right-inspector .subtitle-file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.app .right-inspector .subtitle-file-actions button { justify-content: flex-start; }
+.app .right-inspector .cue-row {
+  gap: 9px;
+  padding: 10px var(--inspector-inset);
+}
+.app .right-inspector .cue-row strong,
+.app .right-inspector .cue-row > span > span {
+  font-size: 13px;
+  line-height: 1.4;
+  font-weight: 500;
+}
+.app .right-inspector .cue-row time,
+.app .right-inspector .coverage-summary small {
+  font-size: 11px;
+  line-height: 1.4;
+}
+.app .right-inspector .status-line {
+  font-size: 13px;
+  font-weight: 600;
+}
+.app .right-inspector .status-line svg { color: var(--accent-text); }
+.app .right-inspector .progress-value {
+  margin-inline-start: auto;
+  font-variant-numeric: tabular-nums;
+}
+.app .right-inspector .coverage-summary progress {
+  display: block;
+  width: 100%;
+  height: 5px;
+  margin: 8px 0 0;
+  border: none;
+  accent-color: var(--accent-text);
+}
+.app .right-inspector .progress-stages {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 3px 9px;
+  margin: 8px 0 0;
+  color: var(--sub);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.app .right-inspector .progress-stages dd { margin: 0; color: var(--ink); }
+.app .right-inspector .coverage-summary small { margin-top: 6px; }
 .app .inspector .drawer-footer,
 .app .inspector .panel-footer {
   border-color: var(--hairline);
@@ -153,13 +273,6 @@
 .app .inspector .inspector-body {
   gap: 16px;
   padding: 14px 16px;
-}
-
-.app .inspector .subtitle-track-tools {
-  grid-template-columns: minmax(0, 1fr);
-  justify-items: start;
-  gap: 10px;
-  padding-bottom: 14px;
 }
 
 .app .inspector .track-field {
@@ -325,7 +438,7 @@
   flex: 1;
   min-height: 0;
   min-width: 0;
-  padding: 4px 14px 14px;
+  padding: 0 var(--inspector-inset) 14px;
   overflow: hidden auto;
   overscroll-behavior: none contain;
 }
@@ -356,7 +469,7 @@
   padding: 4px 7px;
   min-height: 30px;
   width: auto;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.25;
 }
 

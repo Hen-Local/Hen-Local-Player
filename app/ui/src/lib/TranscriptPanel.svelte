@@ -5,11 +5,14 @@
   import { clock } from './format'
   import { generatedLines, subtitleTracks } from './subtitle-tracks.svelte'
   import { visibleIndices } from './subtitle-tracks'
+
+  let expanded = $state(false)
   let scroller = $state<HTMLDivElement>(),
     scroll = $state(0),
     height = $state(500),
     manualUntil = 0
   let authored = $derived(subtitleTracks.authored)
+  let count = $derived(authored?.cues.length ?? p.cues.length)
   let rows = $derived(
     authored
       ? authored.cues.map((cue, i) => ({
@@ -32,19 +35,11 @@
     virtual ? Math.min(rows.length, start + Math.ceil(height / rowH) + 9) : rows.length,
   )
 
-  let status = $derived(
-    !authored &&
-      p.status &&
-      p.status.stage !== 'idle' &&
-      p.status.stage !== 'needs-setup' &&
-      (p.transcriptionRequested || p.status.stage === 'complete')
-      ? p.status
-      : null,
-  )
-  let pending = $derived(status?.asrPendingSpans ?? [])
+  let pending = $derived(!authored && p.transcriptionRequested ? p.status?.asrPendingSpans ?? [] : [])
   $effect(() => {
+    if (!expanded || !scroller || Date.now() < manualUntil) return
     const index = activeRow
-    if (index < 0 || !scroller || Date.now() < manualUntil) return
+    if (index < 0) return
     if (virtual) {
       if (
         index * rowH < scroller.scrollTop ||
@@ -66,105 +61,90 @@
   }
 </script>
 
-<div class="side-panel transcript">
-  {#if status && status.stage !== 'complete'}<details class="coverage-summary">
-      <summary class="status-line">
-        <span class="dot"></span>
-        {status.stage === 'complete'
-          ? p.t('complete')
-          : status.stage === 'error'
-            ? p.t('errors')
-            : status.stage === 'paused'
-              ? p.t('paused')
-              : status.stage === 'needs-setup'
-                ? p.t('needsSetup')
-                : p.t('processing')}
-        <span class="spacer"></span>
-        <b>{Math.round(p.progress * 100)}%</b>
-      </summary>
-      <div class="micro-rail"><i style:width={p.progress * 100 + '%'}></i></div>
-      <small>
-        {p.t('audio')}
-        {status.vadComplete
-          ? 100
-          : Math.min(100, Math.round((status.extractedUntilMs / (p.duration || 1)) * 100))}% · {p.t(
-          'asr',
-        )}
-        {Math.round(p.progress * 100)}%{#if p.settings.targetLanguage !== 'none'}
-          · {p.t('translated')}
-          {Math.round((status.translatedCount / (status.uttTotal || 1)) * 100)}%{/if}
-      </small>
-      {#if status.asrRtf > 0}<small>
-          ASR {Number(status.asrRtf.toFixed(1))}× {p.t('realtime')}
-        </small>{/if}
-    </details>{/if}
-  <div
-    role="region"
-    aria-label={p.t('lines')}
-    class="cue-list"
-    bind:this={scroller}
-    bind:clientHeight={height}
-    onscroll={(e) => (scroll = e.currentTarget.scrollTop)}
-    onwheel={manual}
-    ontouchstart={manual}
-    onpointerdown={manual}
+<div class="transcript" class:expanded>
+  <button
+    class="subtitle-list-toggle"
+    aria-expanded={expanded}
+    aria-controls="subtitle-list"
+    onclick={() => { expanded = !expanded }}
   >
-    {#if virtual}<div style:height={start * rowH + 'px'}></div>{/if}
-    {#each rows.slice(start, end) as cue, i (cue.id)}
-      {@const text = authored ? [cue.original] : generatedLines(cue, p.settings)}
-      <button
-        class="cue-row"
-        class:active={activeIndices.includes(i + start)}
-        class:virtual
-        aria-current={activeIndices.includes(i + start)}
-        onclick={() =>
-          p.seek(authored ? cue.startMs : Math.max(0, cue.startMs + subtitleTracks.delayMs))}
+    <Icon name={expanded ? 'down' : 'right'} size={14} />
+    {p.t('subtitleList')}
+    <span class="row-count" aria-label={count + ' ' + p.t('lines')}>{count}</span>
+  </button>
+  <div id="subtitle-list" hidden={!expanded}>
+    {#if expanded}
+      <div
+        role="region"
+        aria-label={p.t('subtitleList')}
+        class="cue-list"
+        bind:this={scroller}
+        bind:clientHeight={height}
+        onscroll={(e) => (scroll = e.currentTarget.scrollTop)}
+        onwheel={manual}
+        ontouchstart={manual}
+        onpointerdown={manual}
       >
-        <time
-          >{clock(authored ? cue.startMs : Math.max(0, cue.startMs + subtitleTracks.delayMs))}</time
-        >
-        <span>
-          <strong dir="auto" style:white-space={authored ? 'pre-line' : undefined}
-            >{text[0] ?? p.t('translating')}</strong
+        {#if virtual}<div style:height={start * rowH + 'px'}></div>{/if}
+        {#each rows.slice(start, end) as cue, i (cue.id)}
+          {@const text = authored ? [cue.original] : generatedLines(cue, p.settings)}
+          <button
+            class="cue-row"
+            class:active={activeIndices.includes(i + start)}
+            class:virtual
+            aria-current={activeIndices.includes(i + start)}
+            onclick={() =>
+              p.seek(authored ? cue.startMs : Math.max(0, cue.startMs + subtitleTracks.delayMs))}
           >
-          {#if text[1]}<span dir="auto">{text[1]}</span>{/if}{#if cue.stale}<small>
-              {p.t('stale')}
-            </small>{/if}
-        </span>
-      </button>
-    {/each}
-    {#if virtual}<div style:height={(rows.length - end) * rowH + 'px'}></div>{/if}
-    {#each pending.slice(0, 4) as span}<button
-        class="cue-row pending"
-        onclick={() => p.seek(span[0])}
-      >
-        <time>{clock(span[0])}</time>
-        <span>{p.t('transcribing')}</span>
-      </button>{/each}
-    {#if !rows.length && !pending.length && status && ['processing', 'complete'].includes(status.stage)}<p
-        class="empty-note subtle"
-      >
-        {status?.stage === 'complete' ? p.t('noSpeech') : p.t('waiting')}
-      </p>{/if}
-  </div>
-  <div class="panel-footer">
-    <Icon name="clock" size={13} />
-    <span>{rows.length} {p.t('lines')}</span>
-    <span class="spacer"></span>
-    {#if status?.stage === 'complete'}<span>{p.t('complete')}</span>{/if}
-    <kbd>,</kbd>
-    <kbd>.</kbd>
+            <time
+              >{clock(authored ? cue.startMs : Math.max(0, cue.startMs + subtitleTracks.delayMs))}</time
+            >
+            <span>
+              <strong dir="auto" style:white-space={authored ? 'pre-line' : undefined}
+                >{text[0] ?? p.t('translating')}</strong
+              >
+              {#if text[1]}<span dir="auto">{text[1]}</span>{/if}{#if cue.stale}<small>
+                  {p.t('stale')}
+                </small>{/if}
+            </span>
+          </button>
+        {/each}
+        {#if virtual}<div style:height={(rows.length - end) * rowH + 'px'}></div>{/if}
+        {#each pending.slice(0, 4) as span}<button
+            class="cue-row pending"
+            onclick={() => p.seek(span[0])}
+          >
+            <time>{clock(span[0])}</time>
+            <span>{p.t('transcribing')}</span>
+          </button>{/each}
+        {#if !rows.length && !pending.length}<p class="empty-note">
+          {p.t('waiting')}
+        </p>{/if}
+      </div>
+    {/if}
   </div>
 </div>
 
 <style>
   .transcript {
-    min-height: clamp(116px, 32vh, 166px);
+    flex: none;
+    min-width: 0;
   }
-  .transcript .coverage-summary {
-    padding: 7px 12px;
+  .transcript.expanded,
+  #subtitle-list:not([hidden]) {
+    display: flex;
+    flex: 1 0 auto;
+    flex-direction: column;
   }
-  .transcript .coverage-summary summary {
-    cursor: pointer;
+  .cue-list {
+    min-height: 3rem;
+    max-height: 54dvh;
+    overscroll-behavior: none contain;
+  }
+  .row-count {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
   }
 </style>

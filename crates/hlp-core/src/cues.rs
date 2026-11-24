@@ -1,10 +1,16 @@
 use crate::types::*;
+use icu_properties::{
+    props::{GeneralCategory, GeneralCategoryGroup},
+    CodePointMapData,
+};
 use std::collections::HashMap;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-const MAX_LINE_COLS: usize = 42;
-const MAX_CUE_COLS: usize = 2 * MAX_LINE_COLS;
+// Aim for a single line in each language. Fast speech can share a longer
+// timed cue when an individual phrase would otherwise flash for under 500 ms.
+const PAGE_COLS: usize = 42;
+const MAX_CUE_COLS: usize = 2 * PAGE_COLS;
 const MIN_CUE_MS: Ms = 1000;
 const MAX_CUE_MS: Ms = 7000;
 const MIN_GAP_MS: Ms = 80;
@@ -17,10 +23,6 @@ const CLOSE: &str = "”’'\"）)]}】》」』»";
 pub fn display_cols(text: &str) -> usize {
     UnicodeWidthStr::width(text)
 }
-
-// A page can wrap to two short lines. Check the budget independently in
-// each language because translation can expand a short spoken phrase.
-const PAGE_COLS: usize = 56;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Break {
@@ -58,8 +60,11 @@ fn boundaries(text: &str) -> Vec<Boundary> {
         if prev.is_whitespace() {
             continue;
         }
-        let internal_period = prev == '.' && next_ch.is_ascii_alphanumeric();
-        let kind = if (END.contains(prev) && !internal_period) || CLAUSE.contains(prev) {
+        // Never treat a numeric separator as a clause, e.g. 10:30 or 1,000.
+        let before = text[..byte - prev.len_utf8()].chars().next_back();
+        let internal = lexical_mark(prev, before, Some(next_ch))
+            || (prev == '.' && next_ch.is_ascii_alphanumeric());
+        let kind = if !internal && (END.contains(prev) || CLAUSE.contains(prev)) {
             Break::Clause
         } else if next_ch.is_whitespace() || words.binary_search(&byte).is_ok() {
             Break::Word
@@ -201,68 +206,44 @@ fn paired_pages<'a>(original: &'a str, translation: &'a str) -> Vec<(&'a str, &'
     pages
 }
 
-pub fn wrap_lines(text: &str) -> String {
-    let mut text = text.trim();
-    let flattened;
-    if text.contains(['\r', '\n']) {
-        let lines: Vec<_> = text
-            .lines()
-            .map(str::trim)
-            .filter(|s| !s.is_empty())
-            .collect();
-        if lines.len() <= 2 && lines.iter().all(|s| display_cols(s) <= MAX_LINE_COLS) {
-            return lines.join("\n");
+// These marks carry information inside a word, identifier or number.
+fn lexical_mark(mark: char, before: Option<char>, after: Option<char>) -> bool {
+    let word_before = before.is_some_and(char::is_alphanumeric);
+    let word_after = after.is_some_and(char::is_alphanumeric);
+    let number_before = before.is_some_and(char::is_numeric);
+    let number_after = after.is_some_and(char::is_numeric);
+    match mark {
+        '\'' | '’' | '_' | '&' | '@' => word_before && word_after,
+        '-' | '‐' | '‑' => (word_before && word_after) || number_after,
+        '.' | ',' | ':' | '/' | '٫' | '٬' => number_before && number_after,
+        '%' | '％' | '‰' | '‱' => number_before,
+        '#' => word_before || word_after,
+        _ => false,
+    }
+}
+
+/// Format a single language after the original punctuation has guided timing.
+/// Never write this presentation text back into the transcription or MT cache.
+pub fn generated_line(text: &str) -> String {
+    let categories = CodePointMapData::<GeneralCategory>::new();
+    let mut line = String::with_capacity(text.len());
+    let mut space = false;
+    let mut before = None;
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        let punctuation = GeneralCategoryGroup::Punctuation.contains(categories.get(ch));
+        if ch.is_whitespace() || (punctuation && !lexical_mark(ch, before, chars.peek().copied())) {
+            space = !line.is_empty();
+        } else {
+            if space {
+                line.push(' ');
+                space = false;
+            }
+            line.push(ch);
         }
-        flattened = lines.into_iter().fold(String::new(), |mut joined, line| {
-            if !joined.is_empty() && !(joined.ends_with(unspaced) && line.starts_with(unspaced)) {
-                joined.push(' ');
-            }
-            joined.push_str(line);
-            joined
-        });
-        text = &flattened;
+        before = Some(ch);
     }
-    let mut lines = Vec::new();
-    while display_cols(text) > MAX_LINE_COLS {
-        let width = display_cols(text);
-        let target = width.div_ceil(width.div_ceil(MAX_LINE_COLS));
-        let choices = boundaries(text);
-        // Where a two-line layout fits, keep both lines inside the limit.
-        let at = choices
-            .iter()
-            .filter(|b| b.cols <= MAX_LINE_COLS)
-            .min_by_key(|b| {
-                let overflow = if width <= MAX_CUE_COLS {
-                    display_cols(text[b.byte..].trim_start()).saturating_sub(MAX_LINE_COLS)
-                } else {
-                    0
-                };
-                let dist = b.cols.abs_diff(target);
-                (
-                    b.kind == Break::Grapheme,
-                    overflow,
-                    dist.saturating_sub(target / 4),
-                    b.kind,
-                    dist,
-                )
-            })
-            .map(|b| b.byte);
-        let at = at.or_else(|| {
-            let mut cols = 0;
-            for (byte, grapheme) in text.grapheme_indices(true) {
-                cols += display_cols(grapheme);
-                if cols > MAX_LINE_COLS {
-                    return (byte > 0).then_some(byte);
-                }
-            }
-            None
-        });
-        let Some(at) = at else { break };
-        lines.push(text[..at].trim_end());
-        text = text[at..].trim_start();
-    }
-    lines.push(text);
-    lines.join("\n")
+    line
 }
 
 fn speech_time(regions: &[SpeechRegion], mut offset: Ms, is_start: bool) -> Ms {
@@ -408,11 +389,14 @@ pub fn build_cues(utterances: &[Utterance], translations: &HashMap<String, Strin
         }
         i += 1;
     }
-    for cue in &mut cues {
-        cue.original = cue.original.trim().to_owned();
-        if let Some(tr) = &mut cue.translation {
-            *tr = tr.trim().to_owned();
-        }
-    }
+    cues.retain_mut(|cue| {
+        cue.original = generated_line(&cue.original);
+        cue.translation = cue
+            .translation
+            .as_deref()
+            .map(generated_line)
+            .filter(|s| !s.is_empty());
+        !cue.original.is_empty() || cue.translation.is_some()
+    });
     cues
 }

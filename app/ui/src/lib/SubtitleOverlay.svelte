@@ -9,6 +9,20 @@
     $props()
   let picker: HTMLInputElement
   let lines = $derived(tracks.linesAt(p.ms, p.cues, p.settings))
+  function fitLine(row: HTMLElement) {
+    const label = row.querySelector('span')!
+    // Transforms do not change the observed layout widths. A longer cue can
+    // fit before paint without triggering another resize or moving its partner.
+    function fit() {
+      const scale = Math.min(1, row.clientWidth / Math.max(1, label.offsetWidth))
+      label.style.transform = scale < 1 ? `scale(${scale})` : ''
+    }
+    const observer = new ResizeObserver(fit)
+    observer.observe(row)
+    observer.observe(label)
+    fit()
+    return { destroy: () => observer.disconnect() }
+  }
   $effect(() => {
     const id = p.media?.sessionId ?? ''
     untrack(() => {
@@ -54,8 +68,10 @@
       style:--sub-size={box.height * 0.034 * p.settings.subtitleScale + 'px'}
       style:--sub-bg={p.settings.subtitleBackground}
     >
-      {#each lines as line, i}{#if line}<div dir="auto" class:secondary={!tracks.timeline && i > 0}>
-            <span>{line}</span>
-          </div>{/if}{/each}
+      {#each lines as line, i}
+        <div dir="auto" class:secondary={!tracks.timeline && i > 0} use:fitLine>
+          <span>{line}</span>
+        </div>
+      {/each}
     </div>
   </div>{/if}

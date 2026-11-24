@@ -15,23 +15,23 @@ import mediaExtensions from '../../../media-formats.json'
 
 const demoPath = 'fixture_ja.mp4'
 const sample = [
-  [500, 2750, '今日はとてもいい天気です。', 'The weather is lovely today.', '今天的天气很好。'],
+  [500, 2750, '今日はとてもいい天気です', 'The weather is lovely today', '今天的天气很好'],
   [
     4056,
     6300,
-    '駅の前で友達と会いました。',
-    'I met a friend outside the station.',
-    '我在车站前见到了朋友。',
+    '駅の前で友達と会いました',
+    'I met a friend outside the station',
+    '我在车站前见到了朋友',
   ],
-  [7767, 10300, '私たちは公園まで歩きました。', 'We walked to the park.', '我们步行去了公园。'],
-  [11866, 14100, '小さな子供が遊んでいます。', 'A little child is playing.', '一个小孩正在玩耍。'],
-  [15499, 17600, '夕方には家に帰ります。', 'I will go home this evening.', '傍晚我会回家。'],
+  [7767, 10300, '私たちは公園まで歩きました', 'We walked to the park', '我们步行去了公园'],
+  [11866, 14100, '小さな子供が遊んでいます', 'A little child is playing', '一个小孩正在玩耍'],
+  [15499, 17600, '夕方には家に帰ります', 'I will go home this evening', '傍晚我会回家'],
   [
     19072,
     21000,
-    '明日もここに来たいです。',
-    'I would like to come back tomorrow.',
-    '明天我还想来这里。',
+    '明日もここに来たいです',
+    'I would like to come back tomorrow',
+    '明天我还想来这里',
   ],
 ] as const
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -175,8 +175,7 @@ export class MockBackend implements Backend {
       await document.documentElement.requestFullscreen().catch(() => {})
     } else if (!enabled && document.fullscreenElement) await document.exitFullscreen()
   }
-  private cues(target: string): Cue[] {
-    const duration = this.current?.durationMs ?? 22500
+  private cues(target: string, duration = this.current?.durationMs ?? 22500): Cue[] {
     return Array.from({ length: Math.ceil(duration / 22500) }, (_, loop) =>
       sample.flatMap(([begin, end, original, en, zh], i) => {
         const startMs = loop * 22500 + begin
@@ -205,6 +204,12 @@ export class MockBackend implements Backend {
         ]
       }),
     ).flat()
+  }
+  // Only completed sample runs are cached. Rebuild their fixed display text
+  // when reading an older preview cache, just as the desktop rebuilds cues.
+  private cachedCues(path: string, duration = this.current?.durationMs) {
+    const key = JSON.stringify([path, this.settings.sourceLanguage, this.settings.targetLanguage])
+    if (this.cueCache.has(key)) return this.cues(this.settings.targetLanguage, duration)
   }
   private stream(path: string, restored: Cue[] = []) {
     const session = this.current
@@ -318,10 +323,7 @@ export class MockBackend implements Backend {
         : /\.avi$/i.test(title)
           ? 'transcode'
           : 'direct'
-    const cached =
-      this.cueCache.get(
-        JSON.stringify([path, this.settings.sourceLanguage, this.settings.targetLanguage]),
-      ) || []
+    const cached = this.cachedCues(path, durationMs) ?? []
     const sessionId = String(turn)
     const info: MediaOpened = {
       sessionId,
@@ -463,13 +465,7 @@ export class MockBackend implements Backend {
               : this.settings.sourceLanguage,
           }
           this.emit('pipeline://language', s.language)
-          const cached = this.cueCache.get(
-            JSON.stringify([
-              this.currentPath,
-              this.settings.sourceLanguage,
-              this.settings.targetLanguage,
-            ]),
-          )
+          const cached = this.cachedCues(this.currentPath)
           this.emit('pipeline://cues', {
             sessionId: s.sessionId,
             removedIds: [],
@@ -672,7 +668,7 @@ export class MockBackend implements Backend {
       })
     const body =
       format === 'ass'
-        ? '[Script Info]\nScriptType: v4.00+\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,32,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,20,20,20,1\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n' +
+        ? '[Script Info]\nScriptType: v4.00+\nWrapStyle: 2\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,32,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,20,20,20,1\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n' +
           blocks
             .map(
               ({ cue: c, lines }) =>

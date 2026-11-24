@@ -2240,6 +2240,7 @@ dependencies = [
  "anyhow",
  "dirs 5.0.1",
  "hex",
+ "icu_properties",
  "icu_segmenter",
  "proptest",
  "regex",

@@ -1,4 +1,4 @@
-use crate::{cues::wrap_lines, types::*};
+use crate::{cues::generated_line, types::*};
 use std::fmt::Write;
 
 fn timestamp(ms: Ms, format: &SubtitleFormat) -> String {
@@ -31,7 +31,7 @@ fn ass_header() -> String {
     } else {
         "PingFang SC"
     };
-    format!("[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nScaledBorderAndShadow: yes\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Trans,{font},64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3,0,2,60,60,60,1\nStyle: Orig,{font},46,&H00E0E0E0,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,60,60,60,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+    format!("[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nScaledBorderAndShadow: yes\nWrapStyle: 2\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Trans,{font},64,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,3,0,2,60,60,60,1\nStyle: Orig,{font},46,&H00E0E0E0,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,60,60,60,1\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
 }
 pub fn render(cues: &[Cue], format: &SubtitleFormat, variant: &SubtitleVariant) -> String {
     let mut out = match format {
@@ -41,22 +41,23 @@ pub fn render(cues: &[Cue], format: &SubtitleFormat, variant: &SubtitleVariant) 
     };
     let mut index = 0;
     for cue in cues {
-        let original = ("Orig", cue.original.as_str());
+        let original = generated_line(&cue.original);
+        let original = (!original.is_empty()).then_some(("Orig", original));
         let translation = cue
             .translation
             .as_deref()
-            .filter(|s| !s.trim().is_empty())
-            .map(|t| ("Trans", t));
+            .map(generated_line)
+            .filter(|s| !s.is_empty())
+            .map(|s| ("Trans", s));
         let lines: Vec<_> = match variant {
-            SubtitleVariant::Original => vec![original],
+            SubtitleVariant::Original => original.into_iter().collect(),
             SubtitleVariant::Translation => translation.into_iter().collect(),
             SubtitleVariant::Bilingual(BilingualOrder::OriginalFirst) => {
-                std::iter::once(original).chain(translation).collect()
+                original.into_iter().chain(translation).collect()
             }
-            SubtitleVariant::Bilingual(BilingualOrder::TranslationFirst) => translation
-                .into_iter()
-                .chain(std::iter::once(original))
-                .collect(),
+            SubtitleVariant::Bilingual(BilingualOrder::TranslationFirst) => {
+                translation.into_iter().chain(original).collect()
+            }
         };
         if lines.is_empty() {
             continue;
@@ -68,13 +69,7 @@ pub fn render(cues: &[Cue], format: &SubtitleFormat, variant: &SubtitleVariant) 
             let style = lines[0].0;
             let text = lines
                 .into_iter()
-                .map(|(style, text)| {
-                    let escaped = wrap_lines(text)
-                        .replace('{', "｛")
-                        .replace('}', "｝")
-                        .replace('\n', "\\N");
-                    format!("{{\\r{style}}}{escaped}")
-                })
+                .map(|(style, text)| format!("{{\\r{style}}}{text}"))
                 .collect::<Vec<_>>()
                 .join("\\N");
             writeln!(out, "Dialogue: 0,{start},{end},{style},,0,0,0,,{text}").unwrap();
@@ -83,8 +78,7 @@ pub fn render(cues: &[Cue], format: &SubtitleFormat, variant: &SubtitleVariant) 
                 writeln!(out, "{index}").unwrap();
             }
             writeln!(out, "{start} --> {end}").unwrap();
-            for (_, text) in lines {
-                let mut text = wrap_lines(text);
+            for (_, mut text) in lines {
                 if matches!(format, SubtitleFormat::Vtt) {
                     text = text
                         .replace('&', "&amp;")

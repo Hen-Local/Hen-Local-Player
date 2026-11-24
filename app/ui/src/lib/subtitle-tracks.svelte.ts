@@ -15,18 +15,25 @@ import {
   type TrackPreference,
   type FileEntry,
 } from './subtitle-tracks-history'
-import type { Cue, Settings } from './types'
+import type { Cue, LanguageEvent, Settings } from './types'
 import type { EmbeddedTrack } from './backend'
+
+export function displaySourceLanguage(settings: Settings, language: LanguageEvent | null) {
+  if (settings.sourceLanguage === 'auto-per-line') return null
+  if (settings.sourceLanguage !== 'auto') return settings.sourceLanguage
+  return language?.mode === 'mixed' ? null : language?.detected ?? null
+}
 
 export function generatedLines(
   cue: (Pick<Cue, 'original' | 'translation'> & { lang?: string | null }) | undefined,
   settings: Settings,
+  reserveRows = false,
 ): string[] {
   if (!cue || settings.subtitleMode === 'off') return []
   if (
     settings.subtitleMode === 'original' ||
     settings.targetLanguage === 'none' ||
-    settings.targetLanguage === cue.lang
+    settings.targetLanguage === (cue.lang ?? displaySourceLanguage(settings, player.language))
   )
     return [cue.original]
   if (settings.subtitleMode === 'translation') return cue.translation ? [cue.translation] : []
@@ -34,7 +41,8 @@ export function generatedLines(
     settings.bilingualOrder === 'translation-first'
       ? [cue.translation, cue.original]
       : [cue.original, cue.translation]
-  return pair.filter((line): line is string => !!line)
+  // Keep the original on its chosen row while its translation is arriving.
+  return reserveRows ? pair.map((line) => line ?? '') : pair.filter((line): line is string => !!line)
 }
 
 class SubtitleTracks {
@@ -251,8 +259,8 @@ class SubtitleTracks {
   linesAt(ms: number, cues: Cue[], settings: Settings) {
     if (this.selected === 'off') return []
     const at = ms - this.delayMs
-    if (this.authored) return visibleText(this.authored, ms)
-    return generatedLines(cues[cueAt(cues, at)], settings)
+    if (this.authored) return visibleText(this.authored, ms).flatMap((text) => text.split('\n'))
+    return generatedLines(cues[cueAt(cues, at)], settings, true)
   }
 
   pipCues(cues: Cue[], settings: Settings): TimedText[] {

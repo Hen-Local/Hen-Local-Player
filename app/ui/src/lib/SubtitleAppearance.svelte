@@ -21,6 +21,7 @@
         value={p.settings[control.key]}
         aria-label={p.t(control.label)}
         aria-valuetext={percent}
+        oninput={(e) => { p.settings[control.key] = e.currentTarget.valueAsNumber }}
         onchange={(e) => {
           const value = e.currentTarget.valueAsNumber
           void p.act(() => p.update({ [control.key]: value }))

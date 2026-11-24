@@ -7,7 +7,7 @@ fn cues() -> Vec<Cue> {
         id: "u000001-0".into(),
         utterance_id: "u000001".into(),
         original: "你好｛朋友｝！".into(),
-        translation: Some("مرحبا & <أهلا>".into()),
+        translation: Some("مرحبا R&D <أهلا>".into()),
         start_ms: 3723456,
         end_ms: 3725995,
         lang: Some(LangCode("zh".into())),
@@ -48,7 +48,7 @@ fn golden_files() {
 fn variants_and_filenames() {
     let c = cues();
     let tr = render(&c, &SubtitleFormat::Srt, &SubtitleVariant::Translation);
-    assert_eq!(tr, "1\n01:02:03,456 --> 01:02:05,995\nمرحبا & <أهلا>\n\n");
+    assert_eq!(tr, "1\n01:02:03,456 --> 01:02:05,995\nمرحبا R&D <أهلا>\n\n");
     let orig = render(&c, &SubtitleFormat::Srt, &SubtitleVariant::Original);
     assert!(!orig.contains("مرحبا"));
     let both = render(
@@ -56,7 +56,7 @@ fn variants_and_filenames() {
         &SubtitleFormat::Ass,
         &SubtitleVariant::Bilingual(BilingualOrder::OriginalFirst),
     );
-    assert!(both.contains(r"{\rOrig}你好｛朋友｝！\N{\rTrans}"));
+    assert!(both.contains(r"{\rOrig}你好 朋友\N{\rTrans}"));
     for (variant, format, name) in [
         (
             SubtitleVariant::Original,
@@ -75,5 +75,39 @@ fn variants_and_filenames() {
         ),
     ] {
         assert_eq!(filename("movie", "ja", "zh", &format, &variant), name);
+    }
+}
+
+#[test]
+fn one_row_per_language_in_every_generated_export() {
+    let original = "每一行很短，\n并保留原来的词语。";
+    let translation =
+        "I’ll read 3.14, followed by a sentence with enough words to exceed the old line limit.";
+    let cue = Cue {
+        original: original.into(),
+        translation: Some(translation.into()),
+        ..cues().remove(0)
+    };
+    let rows = [
+        "每一行很短 并保留原来的词语",
+        "I’ll read 3.14 followed by a sentence with enough words to exceed the old line limit",
+    ];
+    for format in [
+        SubtitleFormat::Srt,
+        SubtitleFormat::Vtt,
+        SubtitleFormat::Ass,
+    ] {
+        let rendered = render(
+            std::slice::from_ref(&cue),
+            &format,
+            &SubtitleVariant::Bilingual(BilingualOrder::OriginalFirst),
+        );
+        if matches!(format, SubtitleFormat::Ass) {
+            assert!(rendered.contains("WrapStyle: 2"));
+            assert_eq!(rendered.matches(r"\N").count(), 1);
+            assert!(rows.iter().all(|row| rendered.contains(row)));
+        } else {
+            assert!(rendered.ends_with(&format!("{}\n{}\n\n", rows[0], rows[1])));
+        }
     }
 }

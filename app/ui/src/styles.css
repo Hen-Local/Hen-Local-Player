@@ -289,20 +289,18 @@ time, kbd {
   color: white;
 }
 .subtitle-overlay > div {
-  /* Keep each language near 21 full-width characters even on a wide screen. */
-  max-inline-size: 22em;
-  margin-inline: auto;
-  white-space: pre-line;
-  text-wrap: balance;
-  line-break: strict;
-  overflow-wrap: anywhere;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-block-size: 1.28em;
+  white-space: nowrap;
 }
 .subtitle-overlay span {
+  flex: none;
   background: rgba(0, 0, 0, var(--sub-bg));
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
   padding: 0 0.1em;
 }
+.subtitle-overlay span:empty { padding: 0; }
 .subtitle-overlay .secondary {
   color: #efefef;
   font-size: var(--sub-size);
