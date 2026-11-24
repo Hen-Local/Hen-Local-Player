@@ -329,6 +329,8 @@ mod playback_tests {
         assert!(!track.join("audio.pcm").exists());
         h.send(SessionCommand::StartTranscription {
             components_ready: false,
+            regenerate: false,
+            audio_track_order: None,
         })
         .await?;
         wait_for(&mut events, "needs-setup").await?;
@@ -336,6 +338,8 @@ mod playback_tests {
         for _ in 0..2 {
             h.send(SessionCommand::StartTranscription {
                 components_ready: true,
+                regenerate: false,
+                audio_track_order: None,
             })
             .await?;
         }
@@ -374,15 +378,17 @@ mod playback_tests {
             opened: AtomicUsize::new(0),
             status,
         });
-        let session = Session::open_in(
-            fixture,
-            settings.clone(),
-            hlp_media::default_caps("wkwebview"),
-            sink,
-            engines.clone(),
-            root.path().into(),
-        )
-        .await?;
+        let open = |settings| {
+            Session::open_in(
+                fixture.clone(),
+                settings,
+                hlp_media::default_caps("wkwebview"),
+                sink.clone(),
+                engines.clone(),
+                root.path().into(),
+            )
+        };
+        let session = open(settings.clone()).await?;
         assert_eq!(wait_for(&mut events, "complete").await?.utt_done, 6);
         assert_eq!(session.request_counts(), (6, 0));
         session
@@ -401,11 +407,47 @@ mod playback_tests {
         settings.target_language = "en".into();
         settings.process_whole_file = true;
         session
-            .send(SessionCommand::UpdateSettings(settings))
+            .send(SessionCommand::UpdateSettings(settings.clone()))
             .await?;
         assert_eq!(wait_for(&mut events, "complete").await?.translated_count, 6);
         assert_eq!(session.request_counts(), (6, 6));
+
+        let track = root
+            .path()
+            .join("media")
+            .join(&session.fingerprint)
+            .join("track-0");
+        let pcm = track.join("audio.pcm");
+        let modified = std::fs::metadata(&pcm)?.modified()?;
+        let regenerate = |order, ready| SessionCommand::StartTranscription {
+            components_ready: ready,
+            regenerate: true,
+            audio_track_order: Some(order),
+        };
+        assert!(session.send(regenerate(1, true)).await.is_err());
+        session.send(regenerate(0, false)).await?;
+        assert_eq!(
+            wait_for(&mut events, "needs-setup").await?.translated_count,
+            6
+        );
+        assert_eq!(session.request_counts(), (6, 6));
+        session.send(regenerate(0, true)).await?;
+        session.send(regenerate(0, true)).await?;
+        assert_eq!(wait_for(&mut events, "complete").await?.translated_count, 6);
+        assert_eq!(
+            session.request_counts(),
+            (12, 12),
+            "one complete second pass"
+        );
+        assert_eq!(std::fs::metadata(&pcm)?.modified()?, modified);
+        assert_eq!(sink.opened.load(Ordering::Relaxed), 1);
         session.shutdown().await?;
+
+        sink.status.send_replace(None);
+        let restored = open(settings).await?;
+        assert_eq!(wait_for(&mut events, "complete").await?.translated_count, 6);
+        assert_eq!(restored.request_counts(), (0, 0));
+        restored.shutdown().await?;
         engines.shutdown().await;
         Ok(())
     }

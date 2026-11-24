@@ -35,7 +35,7 @@ export interface Commands {
   select_audio_track: [ { order: number }, void ]
   report_playback_error: [ { sessionId: string; code: number }, void ]
   retry_failed: [ undefined, void ]
-  start_transcription: [{ sessionId: string }, { missing: string[] }]
+  start_transcription: [{ sessionId: string; regenerate?: boolean; audioTrackOrder?: number }, { missing: string[] }]
   list_subtitle_tracks: [{ sessionId: string }, SubtitleInventory]
   read_embedded_subtitle: [{ sessionId: string; order: number }, string]
   read_sidecar_subtitle: [{ sessionId: string; name: string }, string]

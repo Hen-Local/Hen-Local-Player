@@ -334,6 +334,10 @@
     </aside>
   {/if}
   {#if p.media}
+    {#if rightTab}
+      <button class="settings-dismiss-surface" tabindex="-1" aria-label={p.t('close')}
+        aria-controls="player-settings" onclick={() => closePanel('right')}></button>
+    {/if}
     <PlayerSettings tab={rightTab} onselect={setRight} onfocus={() => (lastSide = 'right')}
       onclose={() => closePanel('right')} />
   {/if}

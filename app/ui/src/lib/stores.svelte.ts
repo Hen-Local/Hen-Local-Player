@@ -23,6 +23,7 @@ import type {
 export const mockMode = !('__TAURI_INTERNALS__' in window)
 export const backend: Backend = mockMode ? new MockBackend() : new TauriBackend()
 export type Dialog = 'settings' | 'setup' | 'url' | 'export' | null
+export const playbackSpeedPresets = [0.5, 0.75, 1, 1.25, 1.5, 2, 4]
 export const modes = ['original', 'translation', 'both', 'off'] as const
 export function cueAt(cues: Cue[], ms: number) {
   const index = lastStartedCue(cues, ms)
@@ -41,6 +42,13 @@ class PlayerState {
   missingSubtitleComponents = $state<string[]>([])
   subtitleError = $state('')
   installingSubtitleComponent = $state('')
+  private regenerationTrack: number | null = null
+  canRegenerate = $derived(!!this.media?.audioTracks.length && !this.startingTranscription &&
+    !this.missingSubtitleComponents.length && !this.subtitleError &&
+    (this.status?.stage === 'complete' ||
+      (this.status?.stage === 'idle' && this.status.vadComplete &&
+        this.status.uttDone + this.status.uttNoSpeech === this.status.uttTotal &&
+        !this.status.trPendingSpans.length)))
 
   language = $state<LanguageEvent | null>(null)
   cues = $state.raw<Cue[]>([])
@@ -113,24 +121,39 @@ class PlayerState {
   async update(patch: Partial<Settings>) {
     this.settings = await backend.call('update_settings', { patch })
   }
-  async startTranscription(originalOnly = false) {
-    const id = this.media?.sessionId
-    if (!id || this.startingTranscription) return
+  async startTranscription(options: { originalOnly?: boolean; regenerate?: boolean } = {}) {
+    const media = this.media
+    if (!media || this.startingTranscription) return
+    if (options.regenerate && !this.canRegenerate) return
+    if (options.regenerate) this.regenerationTrack = this.track
     this.startingTranscription = true
     this.subtitleError = ''
     try {
-      if (originalOnly) await this.setTarget('none')
-      if (!this.own(id)) return
+      if (options.originalOnly) await this.setTarget('none')
+      if (this.media !== media) return
       if (subtitleTracks.selected !== 'generated' || this.settings.subtitleMode === 'off')
         await subtitleTracks.select('generated')
-      if (!this.own(id) || subtitleTracks.selected !== 'generated') return
+      if (this.media !== media || subtitleTracks.selected !== 'generated') return
       this.transcriptionRequested = true
-      const { missing } = await backend.call('start_transcription', { sessionId: id })
-      if (this.own(id)) this.missingSubtitleComponents = missing
+      const track = this.regenerationTrack
+      const previousStatus = this.status
+      const { missing } = await backend.call('start_transcription', track === null
+        ? { sessionId: media.sessionId }
+        : { sessionId: media.sessionId, regenerate: true, audioTrackOrder: track })
+      if (this.media === media) {
+        this.missingSubtitleComponents = missing
+        if (!missing.length) {
+          this.regenerationTrack = null
+          // Silence can finish immediately. For queued speech, wait for the new
+          // run's first status unless it already arrived before the command reply.
+          if (track !== null && previousStatus?.uttTotal && this.status === previousStatus)
+            this.status = null
+        }
+      }
     } catch (error) {
-      if (this.own(id)) this.subtitleError = String(error instanceof Error ? error.message : error)
+      if (this.media === media) this.subtitleError = String(error instanceof Error ? error.message : error)
     } finally {
-      if (this.own(id)) this.startingTranscription = false
+      if (this.media === media) this.startingTranscription = false
     }
   }
   private componentReady(id: string) {
@@ -259,6 +282,7 @@ class PlayerState {
       this.ms = this.duration = 0
       this.playing = false
       this.replace([])
+      this.recent = await backend.call('list_recent')
     })
   }
   resumePosition(path: string) {
@@ -401,6 +425,7 @@ class PlayerState {
         this.media = e
         subtitleTracks.attach(e.sessionId)
         this.transcriptionRequested = false
+        this.regenerationTrack = null
         this.startingTranscription = false
         this.missingSubtitleComponents = []
         this.subtitleError = ''

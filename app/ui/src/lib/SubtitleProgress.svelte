@@ -2,7 +2,7 @@
   import { player as p } from './stores.svelte'
 
   let { cached }: { cached: boolean } = $props()
-  let status = $derived(p.status)
+  let status = $derived(p.startingTranscription && p.status?.stage === 'complete' ? null : p.status)
   let stage = $derived(status?.stage)
   let paused = $derived(cached || stage === 'paused')
   let failed = $derived(stage === 'error' || !!p.subtitleError)

@@ -159,6 +159,10 @@ pub enum SessionCommand {
     PlaybackError(u16),
     StartTranscription {
         components_ready: bool,
+        #[serde(default)]
+        regenerate: bool,
+        #[serde(default)]
+        audio_track_order: Option<usize>,
     },
     RetryFailed,
     UpdateSettings(crate::settings::Settings),

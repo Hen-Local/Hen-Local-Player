@@ -32,3 +32,9 @@ The initial Wikimedia Apollo clip returned HTTP 429 from the upstream service du
 `cargo check --locked -p hlp-core -p hlp-media -p hlp-models -p hlp-pipeline -p hlp-cli -p henlocal-player`, `cargo clippy -p henlocal-player --no-deps`, `npm --prefix app/ui run check` and `npm --prefix app/ui run build` passed. Svelte reported zero errors and warnings. The tests used `CARGO_TARGET_DIR="$TMPDIR/hlp-target-f"`, `HLP_OMINIX_ROOT` and `HLP_DATA_DIR` overrides. Launch the player with `bash scripts/dev.sh` to repeat the interactive checks in PLAN §8.4.
 
 The preparation screenshot uses a 180-second repeat of the French fixture to keep the progress state visible during capture. The cached-remux screenshot shows restored transcript rows before the first video frame. The YouTube screenshots show the live preview and the downloaded video with its real overlay. [Native screenshots](../screenshots/native/)
+
+## Regenerating saved subtitles
+
+On November 23, 2026, `cargo test --offline --locked -p hlp-pipeline -- --include-ignored --test-threads=1 --nocapture` passed all nine tests with the installed Mac speech and translation models. The Japanese clip completed six speech requests and six English translations. Two consecutive regeneration requests took those totals to twelve each. The decoded PCM kept its original modification time and the media session emitted a single open event. Reopening the clip restored all six translated utterances with zero model calls.
+
+Requesting regeneration with missing components preserved all six translations. A request naming a different audio track returned an error. A separate cache test reopened the track immediately after the regeneration checkpoint and recovered the existing speech regions as pending work. It checked both English and French caches so switching the target language also uses the new transcript. The desktop command passed `cargo check --offline --locked -p henlocal-player`.

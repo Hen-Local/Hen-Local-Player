@@ -1,5 +1,7 @@
 export default {
   createSubtitles: 'Transcribe',
+  regenerate: 'Regenerate',
+  regenerateSubtitles: 'Regenerate Subtitles',
   subtitleSettings: 'Subtitle Settings',
   subtitleList: 'Subtitle List',
   subtitleProgress: 'Subtitle Progress',

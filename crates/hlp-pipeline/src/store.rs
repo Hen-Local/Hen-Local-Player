@@ -119,6 +119,8 @@ pub struct Segments {
 pub struct Transcript {
     #[serde(default)]
     pub source_mode: String,
+    #[serde(default)]
+    pub generation: u64,
     pub asr_model: String,
     pub vad_params_hash: String,
     pub items: BTreeMap<String, Utterance>,
@@ -137,21 +139,25 @@ pub struct Translations {
     pub translator_id: String,
     pub prompt_version: u32,
     #[serde(default)]
+    pub generation: u64,
+    #[serde(default)]
     pub context: bool,
     pub items: BTreeMap<String, Translation>,
 }
 impl Translations {
-    pub fn load(path: &Path, context: bool) -> Self {
+    pub fn load(path: &Path, context: bool, generation: u64) -> Self {
         let version = hlp_core::prompts::PROMPT_VERSION;
         read::<Self>(path)
             .filter(|t| {
                 t.translator_id == "hy-mt2-1.8b-q4km"
                     && t.prompt_version == version
                     && t.context == context
+                    && t.generation == generation
             })
             .unwrap_or_else(|| Self {
                 translator_id: "hy-mt2-1.8b-q4km".into(),
                 prompt_version: version,
+                generation,
                 context,
                 items: BTreeMap::new(),
             })

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte'
-  import { player as p } from './stores.svelte'
+  import { playbackSpeedPresets, player as p } from './stores.svelte'
   import { clock } from './format'
   import Icon from './Icon.svelte'
   import SeekCoverage from './SeekCoverage.svelte'
@@ -99,7 +99,7 @@
       aria-label={p.volume ? p.t('mute') : p.t('unmute')}
       onclick={() => p.mute()}
     >
-      <Icon name={p.volume ? 'volume' : 'mute'} size={18} />
+      <Icon name={p.volume ? 'volume' : 'mute'} size={21} />
     </button>
     <input
       class="level"
@@ -130,7 +130,7 @@
             bind:this={speedSlider} bind:value={p.rate} aria-label={p.t('speed')} aria-valuetext={'×' + p.rate}
             style:--level={(p.rate - 0.25) / 4.75 * 100 + '%'} />
           <div class="speed-presets">
-            {#each [0.5, 1, 2, 3, 5] as rate}
+            {#each playbackSpeedPresets as rate}
               <button aria-pressed={p.rate === rate} onclick={() => p.rate = rate}>×{rate}</button>
             {/each}
           </div>
@@ -145,7 +145,7 @@
       title={p.t('skipBack')}
       aria-label={p.t('skipBack')}
       disabled={!p.video}
-      onclick={() => p.skip(-10000)}><Icon name="rewind" size={21} /></button
+      onclick={() => p.skip(-10000)}><Icon name="rewind" size={25} /></button
     >
     <button
       class="float-button play-button"
@@ -154,14 +154,14 @@
       disabled={!p.video}
       onclick={() => p.toggle()}
     >
-      <Icon name={p.playing ? 'pause' : 'play'} size={23} />
+      <Icon name={p.playing ? 'pause' : 'play'} size={29} />
     </button>
     <button
       class="float-button skip-control"
       title={p.t('skipForward')}
       aria-label={p.t('skipForward')}
       disabled={!p.video}
-      onclick={() => p.skip(10000)}><Icon name="fast-forward" size={21} /></button
+      onclick={() => p.skip(10000)}><Icon name="fast-forward" size={25} /></button
     >
   </div>
 
@@ -172,7 +172,7 @@
       aria-label={p.t('playlist')}
       aria-controls={playlistOpen ? 'playlist-sidebar' : undefined}
       aria-expanded={playlistOpen}
-      onclick={onplaylist}><Icon name="list" size={19} /></button
+      onclick={onplaylist}><Icon name="list" size={22} /></button
     >
     <button
       class="float-button settings-trigger"
@@ -180,21 +180,21 @@
       aria-label={p.t('playerSettings')}
       aria-controls="player-settings"
       aria-expanded={subtitlesOpen}
-      onclick={onsettings}><Icon name="settings" size={18} /></button
+      onclick={onsettings}><Icon name="settings" size={21} /></button
     >
     <button
       class="float-button full-trigger"
       title={p.fullscreen ? p.t('exitFullscreen') : p.t('fullscreen')}
       aria-label={p.fullscreen ? p.t('exitFullscreen') : p.t('fullscreen')}
       onclick={() => p.act(() => p.full(!p.fullscreen))}
-      ><Icon name={p.fullscreen ? 'collapse' : 'full'} size={17} /></button
+      ><Icon name={p.fullscreen ? 'collapse' : 'full'} size={20} /></button
     >
     <button
       class="float-button more-trigger"
       title={p.t('more')}
       aria-label={p.t('more')}
       aria-haspopup="menu"
-      onclick={onmore}><Icon name="more" size={19} /></button
+      onclick={onmore}><Icon name="more" size={22} /></button
     >
   </div>
 
@@ -245,13 +245,13 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    gap: 2px 4px;
-    width: min(100%, 520px);
+    gap: 3px 6px;
+    width: min(100%, 600px);
     margin: 0 auto;
-    padding: 7px 14px 6px;
+    padding: 9px 18px 8px;
     box-sizing: border-box;
     color: #fafbfd;
-    border-radius: 19px;
+    border-radius: 21px;
     isolation: isolate;
     pointer-events: auto;
     user-select: none;
@@ -266,19 +266,19 @@
     z-index: -1;
     pointer-events: none;
     border-radius: inherit;
-    border: 1px solid rgb(255 255 255 / 23%);
-    background: linear-gradient(155deg, rgb(63 68 78 / 65%), rgb(26 30 39 / 66%));
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 14%), inset 0 -1px 0 rgb(255 255 255 / 6%),
-      0 5px 20px rgb(0 0 0 / 24%);
-    -webkit-backdrop-filter: saturate(155%) blur(18px);
-    backdrop-filter: saturate(155%) blur(18px);
+    border: 1px solid rgb(255 255 255 / 30%);
+    background: linear-gradient(155deg, rgb(62 69 84 / 43%), rgb(17 21 30 / 54%));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 22%), inset 0 -1px 0 rgb(255 255 255 / 7%),
+      0 5px 22px rgb(0 0 0 / 27%);
+    -webkit-backdrop-filter: saturate(165%) blur(20px);
+    backdrop-filter: saturate(165%) blur(20px);
   }
   .playback-buttons,
   .tool-buttons,
   .sound {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: 3px;
   }
   .tool-buttons {
     justify-self: end;
@@ -287,8 +287,8 @@
     display: inline-grid;
     place-items: center;
     flex: none;
-    width: 31px;
-    height: 34px;
+    width: 40px;
+    height: 42px;
     min-width: 0;
     min-height: 0;
     margin: 0;
@@ -300,15 +300,15 @@
     box-shadow: none;
   }
   .float-bar button.play-button {
-    width: 39px;
+    width: 48px;
     color: #fff;
   }
   .float-bar button.speed-trigger {
-    width: 46px;
-    height: 27px;
+    width: 51px;
+    height: 33px;
     border: 1px solid rgb(255 255 255 / 16%);
     border-radius: 20px;
-    font: 600 11px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font: 600 12px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-variant-numeric: tabular-nums;
   }
   .speed-control {
@@ -322,14 +322,14 @@
     isolation: isolate;
     display: grid;
     gap: 6px;
-    width: min(218px, 100%);
+    width: min(352px, calc(100% - 4px));
     padding: 13px 14px 10px;
     border-radius: 15px;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
   }
   .speed-popover::before {
-    background: linear-gradient(160deg, rgb(59 64 73 / 85%), rgb(33 36 43 / 90%));
+    background: linear-gradient(160deg, rgb(52 58 71 / 62%), rgb(27 30 39 / 71%));
   }
   .speed-popover label,
   .speed-presets {
@@ -346,8 +346,9 @@
   .speed-presets button {
     min-width: 0;
     flex: 1;
-    padding: 4px 0;
-    border-radius: 6px;
+    padding: 6px 0;
+    min-height: 28px;
+    border-radius: 7px;
     border: none;
     background: transparent;
     color: #e3e4e8;
@@ -382,7 +383,7 @@
   .timeline,
   .time-tip {
     font:
-      500 11px/1.25 -apple-system,
+      500 12px/1.25 -apple-system,
       BlinkMacSystemFont,
       'Segoe UI',
       sans-serif;
@@ -399,7 +400,7 @@
   }
   .scrubber {
     position: relative;
-    height: 21px;
+    height: 25px;
     min-width: 0;
     border-radius: 4px;
   }
@@ -408,8 +409,8 @@
     top: 50%;
     left: 0;
     right: 0;
-    height: 4px;
-    margin-top: -2px;
+    height: 5px;
+    transform: translateY(-50%);
     border-radius: 4px;
     background: rgb(255 255 255 / 22%);
   }
@@ -427,8 +428,8 @@
   .scrub-track b {
     position: absolute;
     top: 50%;
-    width: 12px;
-    height: 8px;
+    width: 15px;
+    height: 10px;
     border-radius: 6px;
     background: #fff;
     box-shadow: 0 1px 3px #0004;
@@ -462,8 +463,8 @@
   .level, .speed-popover input {
     appearance: none;
     -webkit-appearance: none;
-    width: 45px;
-    height: 26px;
+    width: 56px;
+    height: 32px;
     min-height: 0;
     margin: 0;
     padding: 0;
@@ -471,62 +472,67 @@
     background: transparent;
     cursor: pointer;
   }
-  .speed-popover input { width: 100%; height: 20px; }
+  .speed-popover input { width: 100%; height: 24px; }
   :is(.level, .speed-popover input)::-webkit-slider-runnable-track {
-    height: 3px;
+    height: 4px;
     border-radius: 4px;
     background: linear-gradient(to right, #eee var(--level), rgb(255 255 255 / 27%) var(--level));
   }
   :is(.level, .speed-popover input)::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 7px;
-    height: 7px;
-    margin-top: -2px;
+    width: 10px;
+    height: 10px;
+    margin-top: -3px;
     border-radius: 50%;
     background: white;
   }
   :is(.level, .speed-popover input)::-moz-range-track {
-    height: 3px;
+    height: 4px;
     border-radius: 4px;
     background: rgb(255 255 255 / 27%);
   }
   :is(.level, .speed-popover input)::-moz-range-progress {
-    height: 3px;
+    height: 4px;
     background: #eee;
   }
   :is(.level, .speed-popover input)::-moz-range-thumb {
-    width: 7px;
-    height: 7px;
+    width: 10px;
+    height: 10px;
     border: 0;
     border-radius: 50%;
     background: white;
   }
 
-  @container (max-width: 450px) {
-    .float-bar {
-      padding-inline: 8px;
-    }
-    .float-bar button.float-button {
-      width: 28px;
-    }
-    .tool-buttons {
-      gap: 0;
-    }
+  @container (max-width: 530px) {
+    .float-bar { padding-inline: 12px; }
+    .float-bar button.float-button { width: 34px; }
+    .float-bar button.play-button { width: 42px; }
+    .float-bar button.speed-trigger { width: 46px; }
+    .tool-buttons { gap: 1px; }
     .speed-control { margin-left: 3px; }
-    .float-bar button.speed-trigger { width: 39px; }
-    .level { width: 32px; }
+    .level { width: 39px; }
   }
-  @container (max-width: 370px) {
-    .float-bar button.float-button {
-      width: 25px;
+  @container (max-width: 420px) {
+    .float-bar {
+      grid-template-columns: auto 1fr auto;
+      gap: 2px 4px;
+      padding: 7px 9px 6px;
     }
-    .float-bar button.speed-trigger { width: 35px; }
-    .level {
-      width: 25px;
-    }
-    .playback-buttons {
-      gap: 0;
-    }
+    .float-bar button.float-button { width: 30px; height: 38px; }
+    .float-bar button.play-button { width: 35px; }
+    .float-bar button.speed-trigger { width: 43px; height: 30px; }
+    .playback-buttons { justify-content: center; gap: 1px; }
+    .level { width: 32px; }
+    .sound { margin-right: 0; }
+  }
+  @container (max-width: 356px) {
+    .float-bar { padding-inline: 7px; gap: 2px; }
+    .float-bar button.float-button { width: 26px; }
+    .float-bar button.play-button { width: 32px; }
+    .float-bar button.speed-trigger { width: 39px; }
+    .speed-control { margin-left: 1px; }
+    .level { width: 24px; }
+    .tool-buttons, .playback-buttons { gap: 0; }
   }
   @media (prefers-reduced-transparency: reduce) {
     .float-bar::before, .speed-popover::before {

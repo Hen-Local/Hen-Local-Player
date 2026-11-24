@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { untrack } from 'svelte'
-  import { backend, mockMode, player as p } from './stores.svelte'
+  import { tick, untrack } from 'svelte'
+  import { backend, mockMode, playbackSpeedPresets, player as p } from './stores.svelte'
   import { clock } from './format'
   import Icon from './Icon.svelte'
   import { inPiP, supportsPiP, togglePiP } from './picture-in-picture'
@@ -23,7 +23,6 @@
   let chapters = $state<{ startMs: number; title: string }[]>([])
   let loadedSession = ''
   let session = $derived(p.media?.sessionId ?? '')
-  const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]
   let repeatLabel = $derived(
     p.t(p.repeat === 'all' ? 'repeatAll' : p.repeat === 'one' ? 'repeatOne' : 'repeatOff'),
   )
@@ -166,15 +165,30 @@
     end = p.ms
     error = ''
   }
+
+  async function regenerate() {
+    onselect('subtitles')
+    const request = p.startTranscription({ regenerate: true })
+    await tick()
+    document.querySelector<HTMLElement>('#pane-subtitles .subtitle-workspace')?.focus({ preventScroll: true })
+    await request
+  }
 </script>
+
+{#snippet regenerateButton()}
+  <button class="regenerate-button" aria-label={p.t('regenerateSubtitles')}
+    title={p.t('regenerateSubtitles')} onclick={regenerate}>
+    <Icon name="refresh" size={15}/>{p.t('regenerate')}
+  </button>
+{/snippet}
 
 {#snippet playbackControls()}
   <div class="playback-sheet" role="group" aria-label={p.t('playbackOptions')}>
     <label class="option-row"
       >{p.t('speed')}
       <select bind:value={p.rate} aria-label={p.t('speed')}>
-        {#if !speeds.includes(p.rate)}<option value={p.rate}>{p.rate}×</option>{/if}
-        {#each speeds as speed}<option value={speed}>{speed}×</option>{/each}
+        {#if !playbackSpeedPresets.includes(p.rate)}<option value={p.rate}>{p.rate}×</option>{/if}
+        {#each playbackSpeedPresets as speed}<option value={speed}>{speed}×</option>{/each}
       </select>
     </label>
     <div class="option-row" role="group" aria-label={p.t('playlist')}>
@@ -322,5 +336,53 @@
     {:else}<div class="inspector-page" id="pane-playback" role="tabpanel" aria-labelledby="tab-playback">
       {@render playbackControls()}
     </div>{/if}
+    {#if p.canRegenerate}
+      <div class="regenerate-footer">{@render regenerateButton()}</div>
+    {/if}
   </aside>
+{:else if p.canRegenerate}
+  <div class="regenerate-corner">{@render regenerateButton()}</div>
 {/if}
+
+<style>
+  .regenerate-footer {
+    display: flex;
+    flex: none;
+    justify-content: flex-end;
+    padding: 8px var(--inspector-inset);
+    border-top: 1px solid var(--hairline);
+  }
+  .regenerate-corner {
+    position: absolute;
+    right: max(14px, env(safe-area-inset-right));
+    bottom: max(clamp(18px, 4.6vh, 38px), env(safe-area-inset-bottom));
+    z-index: 5;
+  }
+  .regenerate-button {
+    gap: 6px;
+    min-height: 32px;
+    padding: 5px 11px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .regenerate-corner .regenerate-button {
+    color: #f2f3f6;
+    background: rgb(24 27 34 / 70%);
+    border: 1px solid rgb(255 255 255 / 27%);
+    border-radius: 18px;
+    box-shadow: inset 0 1px rgb(255 255 255 / 9%), 0 2px 8px rgb(0 0 0 / 22%);
+    -webkit-backdrop-filter: blur(14px) saturate(145%);
+    backdrop-filter: blur(14px) saturate(145%);
+  }
+  .regenerate-corner .regenerate-button:hover {
+    background: rgb(47 51 62 / 85%);
+  }
+  @media (max-width: 900px) {
+    .regenerate-corner {
+      bottom: var(--bar-clearance);
+    }
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    .regenerate-corner .regenerate-button { background: #202228; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  }
+</style>

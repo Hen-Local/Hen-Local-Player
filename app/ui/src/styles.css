@@ -1043,36 +1043,50 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
   background: #ffffff12; color: var(--glass-accent);
 }
 .app .inspector-tabs button:hover:not(:disabled) { color: white; background: #ffffff15; }
+.settings-dismiss-surface { display: none; }
 @media (max-width: 1208px) {
   .app.watching .inspector { bottom: var(--bar-clearance); }
 }
-/* At small sizes the inspectors get their own space above the transport.
-   Wider windows keep the edge-to-edge movie with captions in the clear area. */
+/* The compact settings drawer slides over the picture and transport together.
+   Its transparent dismiss surface consumes the first click outside the drawer. */
 @media (max-width: 980px), (max-height: 540px) {
-  .app.watching:has(> .inspector) .movie-viewport {
+  .app.watching { --settings-width: min(clamp(260px, 56vw, 350px), calc(100% - 58px)); }
+  .app.watching:has(> .right-inspector) { --occupied-right: 0px; }
+  .app.watching:has(> .left-inspector) .movie-viewport {
     left: var(--occupied-left);
-    right: var(--occupied-right);
     bottom: var(--bar-clearance);
     --caption-left: 0px;
     --caption-right: 0px;
     --stage-footer-gap: 0px;
   }
-  .app.watching .inspector { bottom: var(--bar-clearance); }
+  .app.watching .left-inspector { bottom: var(--bar-clearance); }
+  .app.watching .right-inspector {
+    z-index: 7;
+    bottom: 0;
+  }
+  .app .settings-dismiss-surface,
+  .app .settings-dismiss-surface:hover:not(:disabled) {
+    display: block;
+    position: absolute;
+    z-index: 6;
+    inset: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    cursor: default;
+  }
   .app.watching .window-chrome {
     left: var(--occupied-left);
-    right: var(--occupied-right);
   }
+  .app.watching:has(> .right-inspector) .window-chrome { right: var(--settings-width); }
   .window-title { max-width: calc(100% - 24px); }
   .native-mac .app.watching:not(:has(> .left-inspector)) .window-title {
     max-width: calc(100% - 152px);
   }
 }
 @media (max-width: 679px) {
-  .app { --playlist-width: clamp(122px, 33vw, 190px); --settings-width: clamp(170px, 47vw, 246px); }
-  .app:has(> .right-inspector):has(> .left-inspector) {
-    --playlist-width: clamp(84px, 23vw, 146px);
-    --settings-width: clamp(143px, 39vw, 222px);
-  }
+  .app { --playlist-width: clamp(122px, 33vw, 190px); }
   .app .left-inspector :is(.drawer-footer, .panel-title) { padding-inline: 6px; }
   .app .left-inspector .panel-title { gap: 0; }
   .app .left-inspector .panel-title h2 { font-size: 13px; }
@@ -1080,18 +1094,15 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
   .app .left-inspector .queue-number { min-width: 12px; }
   .app .left-inspector .drawer-footer button { padding-inline: 6px; }
 }
-/* In portrait leave the full width for the picture. Both open inspectors
-   share the band between the picture and the fixed transport. */
+/* The portrait playlist sits below the movie. Settings can cover either. */
 @media (max-width: 600px) and (min-height: 500px) and (orientation: portrait) {
-  .app.watching:has(> .inspector) { --portrait-stage: min(43%, 340px); }
-  .app.watching:has(> .inspector) .movie-viewport {
+  .app.watching:has(> .left-inspector) { --portrait-stage: min(43%, 340px); }
+  .app.watching:has(> .left-inspector) .movie-viewport {
     inset: 0 0 auto;
     height: var(--portrait-stage);
   }
   .app.watching .window-chrome { left: 0; right: 0; }
-  .app.watching .inspector { top: var(--portrait-stage); width: 100%; max-width: 100%; }
-  .app.watching:has(> .right-inspector):has(> .left-inspector) .left-inspector { width: 38%; }
-  .app.watching:has(> .right-inspector):has(> .left-inspector) .right-inspector { width: 62%; }
+  .app.watching .left-inspector { top: var(--portrait-stage); width: 100%; max-width: 100%; }
   .native-mac .app.watching:not(.fullscreen) .left-inspector { padding-top: 0; }
 }
 @media (max-height: 400px) {

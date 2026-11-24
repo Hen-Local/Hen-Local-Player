@@ -105,6 +105,7 @@ struct Running {
     tasks: JoinSet<()>,
     cancel: CancellationToken,
     generate: bool,
+    regenerating: bool,
     extracting: bool,
     asr: bool,
     mt: bool,
@@ -421,6 +422,7 @@ pub(super) async fn serve(ctx: &mut Context, mut requests: mpsc::Receiver<Reques
             generate: ctx.automatic_transcription
                 || timeline.track.join("generate.requested").is_file()
                 || !timeline.rows.is_empty(),
+            regenerating: false,
             extracting: false,
             asr: false,
             mt: false,
@@ -590,6 +592,9 @@ async fn drive(
             "processing"
         };
         let changed = stage_before != stage;
+        if matches!(stage, "complete" | "error") {
+            run.regenerating = false;
+        }
         if t.dirty && (last_cues.elapsed() >= Duration::from_millis(250) || stage == "complete") {
             diff_cues(ctx, t, &mut previous);
             t.dirty = false;
@@ -858,7 +863,15 @@ fn handle_command(
             &path,
             hlp_core::subs::render(&t.cues(), &format, &variant).as_bytes(),
         )?,
-        SessionCommand::StartTranscription { components_ready } => {
+        SessionCommand::StartTranscription {
+            components_ready,
+            regenerate,
+            audio_track_order,
+        } => {
+            anyhow::ensure!(
+                audio_track_order.is_none_or(|order| order == ctx.project.audio_track_order),
+                "The selected audio track changed. Try again."
+            );
             if !components_ready {
                 run.setup = true;
                 return Ok(None);
@@ -870,6 +883,12 @@ fn handle_command(
             // Persist only an accepted request. Reopening resumes a partial
             // transcription; visiting the subtitles panel alone never starts one.
             store::atomic_write(&t.track.join("generate.requested"), b"1")?;
+            if regenerate && !run.regenerating {
+                t.regenerate(&ctx.settings.source_language)?;
+                run.asr_epoch += 1;
+                run.tr_epoch += 1;
+                run.regenerating = true;
+            }
             run.generate = true;
             resume_transcription(ctx, t, run)?;
         }

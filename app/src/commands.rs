@@ -98,6 +98,8 @@ pub struct TranscriptionStart {
 pub async fn start_transcription(
     state: State<'_, Desktop>,
     session_id: String,
+    regenerate: Option<bool>,
+    audio_track_order: Option<usize>,
 ) -> Reply<TranscriptionStart> {
     let (model, target, source) = {
         let p = state.player.lock().await;
@@ -130,6 +132,8 @@ pub async fn start_transcription(
     f.session
         .send(SessionCommand::StartTranscription {
             components_ready: missing.is_empty(),
+            regenerate: regenerate.unwrap_or(false),
+            audio_track_order,
         })
         .await
         .map_err(err)?;

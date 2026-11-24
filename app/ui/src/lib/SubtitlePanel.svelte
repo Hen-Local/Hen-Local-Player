@@ -44,6 +44,7 @@
     empty &&
       !tracks.authored &&
       !p.transcriptionRequested &&
+      !p.canRegenerate &&
       (!off ||
         (!p.cues.length &&
           !tracks.files.length &&
@@ -62,8 +63,8 @@
       !p.startingTranscription,
   )
   let showActions = $derived(off || canCreate || (generated && (missing.length > 0 || cached || retry)))
-  let showProgress = $derived(generated && !missing.length && stage !== 'complete' &&
-    (working || p.startingTranscription || cached || stage === 'error' || stage === 'paused'))
+  let showProgress = $derived(generated && !missing.length &&
+    (p.startingTranscription || (stage !== 'complete' && (working || cached || stage === 'error' || stage === 'paused'))))
 </script>
 
 <div class="subtitle-workspace" tabindex="-1">
@@ -120,7 +121,7 @@
               {#if translationOnly && p.settings.targetLanguage !== 'none'}
                 <button
                   disabled={installing || p.startingTranscription}
-                  onclick={() => p.startTranscription(true)}>{p.t('originalOnly')}</button
+                  onclick={() => p.startTranscription({ originalOnly: true })}>{p.t('originalOnly')}</button
                 >
               {/if}
             {:else if retry || cached}

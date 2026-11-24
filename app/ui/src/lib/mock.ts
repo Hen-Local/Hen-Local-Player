@@ -211,6 +211,9 @@ export class MockBackend implements Backend {
     const key = JSON.stringify([path, this.settings.sourceLanguage, this.settings.targetLanguage])
     if (this.cueCache.has(key)) return this.cues(this.settings.targetLanguage, duration)
   }
+  private saveSampleCache() {
+    persist('samples', [...this.cueCache].filter(([k]) => JSON.parse(k)[0] === demoPath))
+  }
   private stream(path: string, restored: Cue[] = []) {
     const session = this.current
     if (!session) return
@@ -264,11 +267,7 @@ export class MockBackend implements Backend {
       })
       if (done) {
         this.cueCache.set(key, all)
-        if (path === demoPath)
-          persist(
-            'samples',
-            [...this.cueCache].filter(([k]) => JSON.parse(k)[0] === demoPath),
-          )
+        if (path === demoPath) this.saveSampleCache()
         clearInterval(this.timer)
         const recent = this.recent.find((r) => r.path === path)
         if (recent) {
@@ -382,6 +381,10 @@ export class MockBackend implements Backend {
     this.emit('media://opened', info)
     this.emit('pipeline://language', info.language)
     if (this.sources.has(path)) return
+    if (cached.length) {
+      this.generating = true
+      this.stream(path, cached)
+    }
     if (plan !== 'direct')
       for (const progress of [0.2, 0.6, 1]) {
         await wait(400)
@@ -610,6 +613,22 @@ export class MockBackend implements Backend {
         )
         reply = { missing }
         if (!missing.length) {
+          if ('regenerate' in a && a.regenerate) {
+            if (a.audioTrackOrder !== undefined && a.audioTrackOrder !== 0)
+              throw Error('Audio track changed')
+            this.emit('pipeline://cues', {
+              sessionId: a.sessionId,
+              removedIds: [...this.visibleCues.keys()],
+              upserts: [],
+            })
+            this.visibleCues.clear()
+            for (const key of this.cueCache.keys()) {
+              const [path, source] = JSON.parse(key)
+              if (path === this.currentPath && source === this.settings.sourceLanguage)
+                this.cueCache.delete(key)
+            }
+            if (this.currentPath === demoPath) this.saveSampleCache()
+          }
           this.generating = true
           this.stream(this.currentPath, [...this.visibleCues.values()])
         }

@@ -45,6 +45,19 @@ pub fn speech_ms(u: &Utterance) -> u64 {
         .map(|r| r.end_ms.saturating_sub(r.start_ms))
         .sum()
 }
+fn speech_segment(u: &Utterance) -> Utterance {
+    Utterance {
+        id: u.id.clone(),
+        start_ms: u.start_ms,
+        end_ms: u.end_ms,
+        regions: u.regions.clone(),
+        status: UttStatus::Pending,
+        text: None,
+        language: None,
+        forced_language: None,
+        asr_model: None,
+    }
+}
 pub fn guessed(text: &str) -> Option<(LangCode, f64)> {
     if hlp_core::cues::display_cols(text) < 10 {
         return None;
@@ -112,10 +125,12 @@ impl Timeline {
             transcript = store::read(&track.join(format!("transcript.{}.json", s.asr_model)));
         }
         let mut previous_mode = String::new();
+        let mut generation = 0;
         if let Some(t) =
             transcript.filter(|v| v.asr_model == s.asr_model && v.vad_params_hash == hash)
         {
             previous_mode = t.source_mode;
+            generation = t.generation;
             for (id, u) in t.items {
                 if let Some(row) = rows.get_mut(&id) {
                     if row.regions == u.regions {
@@ -127,6 +142,7 @@ impl Timeline {
         let translations = Translations::load(
             &Self::tr_path(&track, &s.target_language),
             s.translation_context,
+            generation,
         );
         let mut t = Self {
             track,
@@ -172,7 +188,11 @@ impl Timeline {
     pub fn set_target(&mut self, target: &str, context: bool) -> Result<()> {
         self.save_translations()?;
         self.target = target.into();
-        self.translations = Translations::load(&Self::tr_path(&self.track, target), context);
+        self.translations = Translations::load(
+            &Self::tr_path(&self.track, target),
+            context,
+            self.translations.generation,
+        );
         self.dirty = true;
         Ok(())
     }
@@ -186,18 +206,7 @@ impl Timeline {
         Ok(())
     }
     pub fn persist(&self) -> Result<()> {
-        let utterances = self
-            .rows
-            .values()
-            .map(|u| Utterance {
-                status: UttStatus::Pending,
-                text: None,
-                language: None,
-                forced_language: None,
-                asr_model: None,
-                ..u.clone()
-            })
-            .collect();
+        let utterances = self.rows.values().map(speech_segment).collect();
         store::write_json(
             &self.track.join("segments.json"),
             &Segments {
@@ -216,10 +225,36 @@ impl Timeline {
                 },
                 asr_model: self.model.clone(),
                 vad_params_hash: self.vad_hash.clone(),
+                generation: self.translations.generation,
                 items: self.rows.clone(),
             },
         )?;
         self.save_translations()
+    }
+    pub fn regenerate(&mut self, source_mode: &str) -> Result<()> {
+        // A single atomic write requeues recognition and invalidates translations
+        // in every language, including after a quit before the next checkpoint.
+        let transcript = Transcript {
+            source_mode: source_mode.into(),
+            asr_model: self.model.clone(),
+            vad_params_hash: self.vad_hash.clone(),
+            generation: rand::random(),
+            items: BTreeMap::new(),
+        };
+        store::write_json(&self.track.join("transcript.json"), &transcript)?;
+        for row in self.rows.values_mut() {
+            *row = speech_segment(row);
+        }
+        self.translations.items.clear();
+        self.translations.generation = transcript.generation;
+        self.language = initial_language(&self.language.session_id, source_mode);
+        self.language_dirty = true;
+        self.dirty = true;
+        self.asr_ms = 0;
+        self.audio_ms = 0;
+        self.tr_ms = 0;
+        self.tr_count = 0;
+        Ok(())
     }
     pub fn set_source(&mut self, mode: &str) {
         self.language = initial_language(&self.language.session_id, mode);
@@ -546,5 +581,60 @@ mod tests {
         assert_eq!(t.rows.values().next().unwrap().status, UttStatus::Pending);
         assert!(t.language.detected.is_none());
         assert!(t.cues()[0].stale);
+    }
+
+    #[test]
+    fn regeneration_checkpoint_requeues_segments_and_invalidates_all_translation_targets(
+    ) -> Result<()> {
+        let temp = tempfile::tempdir()?;
+        let track = temp.path().join("track-0");
+        let settings = Settings {
+            target_language: "en".into(),
+            ..Settings::default()
+        };
+        store::atomic_write(&track.join("audio.pcm"), &[0; 32])?;
+        store::write_json(
+            &track.join("audio.json"),
+            &Audio {
+                sample_rate: 16000,
+                total_samples: 16,
+                complete: true,
+                dialogue_focus: settings.dialogue_channel_focus,
+            },
+        )?;
+        let mut t = Timeline::load(track.clone(), &settings, "test")?;
+        t.vad_complete = true;
+        let u = utterance(0, "ja");
+        t.rows.insert(u.id.clone(), u.clone());
+        for target in ["fr", "en"] {
+            t.set_target(target, settings.translation_context)?;
+            t.translations.items.insert(
+                u.id.clone(),
+                store::Translation {
+                    source_hash: store::hash(u.text.as_ref().unwrap()),
+                    text: target.into(),
+                    failed: false,
+                },
+            );
+        }
+        t.persist()?;
+        assert_eq!(
+            Timeline::load(track.clone(), &settings, "test")?
+                .translations
+                .items
+                .len(),
+            1
+        );
+
+        t.regenerate(&settings.source_language)?;
+        assert!(t.cues().is_empty());
+        // Simulate a quit immediately after the request, before a periodic save.
+        let mut reopened = Timeline::load(track, &settings, "test")?;
+        assert!(reopened.vad_complete && reopened.audio_complete);
+        assert_eq!(reopened.rows[&u.id], speech_segment(&u));
+        assert!(reopened.translations.items.is_empty());
+        reopened.set_target("fr", settings.translation_context)?;
+        assert!(reopened.translations.items.is_empty());
+        Ok(())
     }
 }

@@ -1,6 +1,8 @@
 import type en from './en'
 export default {
   createSubtitles: '转录',
+  regenerate: '重新生成',
+  regenerateSubtitles: '重新生成字幕',
   subtitleSettings: '字幕设置',
   subtitleList: '字幕列表',
   subtitleProgress: '字幕生成进度',
