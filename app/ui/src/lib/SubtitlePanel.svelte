@@ -61,71 +61,83 @@
       !missing.length &&
       !p.startingTranscription,
   )
+  let showActions = $derived(off || canCreate || (generated && (missing.length > 0 || cached || retry)))
+  let showProgress = $derived(generated && !missing.length && stage !== 'complete' &&
+    (working || p.startingTranscription || cached || stage === 'error' || stage === 'paused'))
 </script>
 
 <div class="subtitle-workspace" tabindex="-1">
-  <SubtitleTracks />
-  {#if off || canCreate || (generated && (missing.length || cached || retry))}
-    <div class="generation-actions">
-      {#if off}<p>{p.t('subtitlesOff')}</p>{/if}
-      {#if canCreate}
-        <button
-          class="create-subtitles"
-          disabled={!!unavailable || p.startingTranscription}
-          onclick={() => p.startTranscription()}
-        >
-          <Icon name="cc" size={16} />{p.t('createSubtitles')}
-        </button>
-        {#if unavailable}<p>{unavailable}</p>{/if}
-      {:else if generated}
-        {#if missing.length}
-          <strong>{p.t('neededComponents')}</strong>
-          {#each missing as id}
-            {@const component = p.components.find((c) => c.id === id)}
-            {@const state = component?.state}
-            <div class="missing-component">
-              <span
-                >{componentNames[id] || id}{#if component}<small>{size(component.bytesTotal)}</small
-                  >{/if}</span
-              >
-              <button
-                disabled={installing}
-                aria-label={p.t('downloadOne') + ' · ' + (componentNames[id] || id)}
-                onclick={() => p.installSubtitleComponent(id)}
-                >{typeof state === 'object' ? p.t('retry') : p.t('download')}</button
-              >
-            </div>
-            {#if state === 'downloading' || state === 'verifying'}
-              <small role="status">{p.t(state)} · {size(component?.bytesDone ?? 0)}</small>
-            {:else if typeof state === 'object'}<small class="form-error" role="alert"
-                >{state.failed}</small
-              >{/if}
-          {/each}
-          {#if translationOnly && p.settings.targetLanguage !== 'none'}
+  <div class="subtitle-options">
+    <SubtitleTracks />
+    <SubtitleSettings />
+    {#if !off && (hasLines || (generated && working))}
+      {#key (p.media?.sessionId ?? '') + '/' + tracks.selected}
+        <TranscriptPanel />
+      {/key}
+    {/if}
+    {#if generated && stage === 'complete' && !hasLines}
+      <p class="empty-note" role="status">{p.t('noSpeech')}</p>
+    {/if}
+  </div>
+  {#if showActions || showProgress}
+    <div class="generation-footer">
+      {#if showActions}
+        <div class="generation-actions">
+          {#if off}<p>{p.t('subtitlesOff')}</p>{/if}
+          {#if canCreate}
             <button
-              disabled={installing || p.startingTranscription}
-              onclick={() => p.startTranscription(true)}>{p.t('originalOnly')}</button
+              class="create-subtitles"
+              disabled={!!unavailable || p.startingTranscription}
+              onclick={() => p.startTranscription()}
             >
+              <Icon name="cc" size={16} />{p.t('createSubtitles')}
+            </button>
+            {#if unavailable}<p>{unavailable}</p>{/if}
+          {:else if generated}
+            {#if missing.length}
+              <strong>{p.t('neededComponents')}</strong>
+              {#each missing as id}
+                {@const component = p.components.find((c) => c.id === id)}
+                {@const state = component?.state}
+                <div class="missing-component">
+                  <span
+                    >{componentNames[id] || id}{#if component}<small>{size(component.bytesTotal)}</small
+                      >{/if}</span
+                  >
+                  <button
+                    disabled={installing}
+                    aria-label={p.t('downloadOne') + ' · ' + (componentNames[id] || id)}
+                    onclick={() => p.installSubtitleComponent(id)}
+                    >{typeof state === 'object' ? p.t('retry') : p.t('download')}</button
+                  >
+                </div>
+                {#if state === 'downloading' || state === 'verifying'}
+                  <small role="status">{p.t(state)} · {size(component?.bytesDone ?? 0)}</small>
+                {:else if typeof state === 'object'}<small class="form-error" role="alert"
+                    >{state.failed}</small
+                  >{/if}
+              {/each}
+              {#if translationOnly && p.settings.targetLanguage !== 'none'}
+                <button
+                  disabled={installing || p.startingTranscription}
+                  onclick={() => p.startTranscription(true)}>{p.t('originalOnly')}</button
+                >
+              {/if}
+            {:else if retry || cached}
+              <button class="create-subtitles" onclick={() => p.startTranscription()}
+                >{p.t(
+                  cached || stage === 'paused' ? 'continueTranscription' : 'retryTranscription',
+                )}</button
+              >
+            {/if}
+            {#if p.subtitleError}<small class="form-error" role="alert">{p.subtitleError}</small>{/if}
           {/if}
-        {:else if retry || cached}
-          <button class="create-subtitles" onclick={() => p.startTranscription()}
-            >{p.t(
-              cached || stage === 'paused' ? 'continueTranscription' : 'retryTranscription',
-            )}</button
-          >
-        {/if}
-        {#if p.subtitleError}<small class="form-error" role="alert">{p.subtitleError}</small>{/if}
+        </div>
+      {/if}
+      {#if showProgress}
+        <SubtitleProgress {cached} />
       {/if}
     </div>
-  {/if}
-  {#if generated && !missing.length && (working || p.startingTranscription || cached || hasLines || stage === 'complete' || stage === 'error' || stage === 'paused')}
-    <SubtitleProgress {cached} />
-  {/if}
-  <SubtitleSettings />
-  {#if !off && (hasLines || (generated && working))}
-    {#key (p.media?.sessionId ?? '') + '/' + tracks.selected}
-      <TranscriptPanel />
-    {/key}
   {/if}
 </div>
 
@@ -135,7 +147,26 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    overflow: hidden;
+  }
+  .subtitle-options {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+    min-width: 0;
     overflow: hidden auto;
+    overscroll-behavior: contain;
+  }
+  .generation-footer {
+    flex: none;
+    max-height: 49%;
+    overflow: hidden auto;
+    border-top: 1px solid var(--hairline);
+    overscroll-behavior: contain;
+  }
+  .subtitle-options .empty-note {
+    padding-inline: var(--inspector-inset);
   }
   .generation-actions {
     display: grid;
@@ -143,7 +174,6 @@
     gap: 9px;
     flex-shrink: 0;
     padding: 12px var(--inspector-inset);
-    border-bottom: 1px solid var(--hairline);
     font-size: 12px;
   }
   .generation-actions p {

@@ -2162,7 +2162,6 @@ name = "henlocal-player"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "cc",
  "dirs 5.0.1",
  "hlp-core",
  "hlp-media",

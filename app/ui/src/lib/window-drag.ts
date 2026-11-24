@@ -11,7 +11,8 @@ export function enableWindowDragging(shell: HTMLElement, canDrag: () => boolean,
     suppressClick = false
     if (!canDrag() || !event.isPrimary || event.pointerType !== 'mouse' || event.button !== 0) return
     const target = event.target
-    if (!(target instanceof Element) || target.closest(
+    if (!(target instanceof Element)) return
+    if (!target.closest('[data-drag-surface]') && target.closest(
       'button, a, input, textarea, select, label, summary, [contenteditable], [data-transport], ' +
       '[data-tauri-drag-region], [role="menu"], dialog, [draggable="true"]',
     )) return

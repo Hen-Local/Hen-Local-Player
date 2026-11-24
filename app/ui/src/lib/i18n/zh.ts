@@ -1,6 +1,6 @@
 import type en from './en'
 export default {
-  createSubtitles: '转录并生成字幕',
+  createSubtitles: '转录',
   subtitleSettings: '字幕设置',
   subtitleList: '字幕列表',
   subtitleProgress: '字幕生成进度',
@@ -9,7 +9,6 @@ export default {
   bothLanguages: '双语',
   originalLanguage: '原始语言',
   creatingSubtitles: '正在生成字幕…',
-  subtitlesReady: '字幕已就绪',
   generationPaused: '生成已暂停',
   transcriptionSpeed: '转录速度',
   subtitleDelay: '字幕延迟（秒）',

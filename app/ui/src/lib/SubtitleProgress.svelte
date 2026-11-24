@@ -1,11 +1,9 @@
 <script lang="ts">
   import { player as p } from './stores.svelte'
-  import Icon from './Icon.svelte'
 
   let { cached }: { cached: boolean } = $props()
   let status = $derived(p.status)
   let stage = $derived(status?.stage)
-  let ready = $derived(stage === 'complete' || ((!status || stage === 'idle') && !p.transcriptionRequested && !cached && p.cues.length > 0))
   let paused = $derived(cached || stage === 'paused')
   let failed = $derived(stage === 'error' || !!p.subtitleError)
   let audio = $derived(status?.vadComplete ? 100 : percent(status?.extractedUntilMs ?? 0, p.duration))
@@ -13,7 +11,7 @@
   let translated = $derived(status?.trPendingSpans.length
     ? percent(status.translatedCount + status.uttNoSpeech, status.uttTotal) : transcribed)
   let translate = $derived(p.settings.targetLanguage !== 'none')
-  let progress = $derived(ready ? 100 : status?.uttTotal ? Math.min(audio, transcribed, translate ? translated : 100) : undefined)
+  let progress = $derived(status?.uttTotal ? Math.min(audio, transcribed, translate ? translated : 100) : undefined)
 
   function percent(value: number, whole: number) {
     return whole ? Math.min(100, Math.round(100 * value / whole)) : 0
@@ -22,17 +20,10 @@
 
 <section class="coverage-summary" aria-label={p.t('subtitleProgress')}>
   <div class="status-line">
-    {#if ready}<Icon name="check" size={14} />{/if}
-    <span role="status">{ready ? (p.cues.length ? p.t('subtitlesReady') : p.t('noSpeech'))
-      : failed ? p.t('errors') : paused ? p.t('generationPaused') : p.t('creatingSubtitles')}</span>
+    <span role="status">{failed ? p.t('errors') : paused ? p.t('generationPaused') : p.t('creatingSubtitles')}</span>
     {#if progress !== undefined}<span class="progress-value">{progress}%</span>{/if}
   </div>
-  {#if progress === undefined}
-    <progress max="100" aria-label={p.t('subtitleProgress')}></progress>
-  {:else}
-    <progress max="100" value={progress} aria-label={p.t('subtitleProgress')}></progress>
-  {/if}
-  {#if !ready && status && (stage !== 'idle' || cached)}
+  {#if status && (stage !== 'idle' || cached)}
     <dl class="progress-stages">
       <div><dt>{p.t('audio')}</dt><dd>{audio}%</dd></div>
       <div><dt>{p.t('asr')}</dt><dd>{transcribed}%</dd></div>
@@ -40,4 +31,16 @@
     </dl>
     {#if status.asrRtf > 0}<small>{p.t('transcriptionSpeed')} · {Number(status.asrRtf.toFixed(1))}×</small>{/if}
   {/if}
+  {#if progress === undefined}
+    <progress max="100" aria-label={p.t('subtitleProgress')}></progress>
+  {:else}
+    <progress max="100" value={progress} aria-label={p.t('subtitleProgress')}></progress>
+  {/if}
 </section>
+
+<style>
+  @media (max-height: 350px) {
+    :global(.app .right-inspector) .progress-stages,
+    small { display: none; }
+  }
+</style>

@@ -4,7 +4,6 @@
 )]
 mod commands;
 mod events;
-mod fullscreen;
 mod playback;
 mod player_menu;
 mod state;
@@ -63,7 +62,6 @@ fn main() {
         .on_menu_event(|app, event| player_menu::handle(app, event.id().as_ref()))
         .invoke_handler(tauri::generate_handler![
             set_playback_capabilities,
-            fullscreen::set_player_fullscreen,
             open_media,
             close_media,
             playback::choose_media_folder,

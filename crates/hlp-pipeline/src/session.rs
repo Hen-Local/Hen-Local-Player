@@ -447,6 +447,7 @@ pub(super) async fn serve(ctx: &mut Context, mut requests: mpsc::Receiver<Reques
             .map(|p| ctx.shared.server.register(&p))
             .transpose()?;
         let cached = timeline.cues();
+        timeline.dirty = false;
         ctx.events.media_opened(MediaOpened {
             session_id: ctx.id.clone(),
             title: ctx.project.title.clone(),
@@ -512,7 +513,7 @@ enum Next {
         focus: bool,
     },
 }
-fn diff_cues(ctx: &Context, t: &Timeline, previous: &mut BTreeMap<String, Cue>) {
+fn diff_cues(ctx: &Context, t: &mut Timeline, previous: &mut BTreeMap<String, Cue>) {
     let next: BTreeMap<_, _> = t.cues().into_iter().map(|c| (c.id.clone(), c)).collect();
     let upserts: Vec<_> = next
         .iter()
@@ -550,7 +551,12 @@ async fn drive(
     let mut ticker = tokio::time::interval(Duration::from_millis(100));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
-        run.schedule(ctx, t);
+        // Once complete, idle ticks and playhead reports cannot add work. Transcript,
+        // audio, language and translation changes all mark the timeline dirty.
+        let completed = stage_before == "complete" && !t.dirty;
+        if !completed {
+            run.schedule(ctx, t);
+        }
         let stage = if run.prep_failed || run.engine_failed {
             "error"
         } else if run.setup {
@@ -558,7 +564,10 @@ async fn drive(
         } else if !run.generate {
             "idle"
         } else if t.vad_complete && !run.asr && !run.mt && !run.prep {
-            if t.rows
+            if completed {
+                "complete"
+            } else if t
+                .rows
                 .values()
                 .any(|u| u.status == UttStatus::Pending || t.tr_needed(u))
             {

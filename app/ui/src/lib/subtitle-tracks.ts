@@ -70,8 +70,7 @@ export function indexTimeline(cues: TimedText[]): SubtitleTimeline {
   return { cues, latestEnd: cues.map((cue) => (end = Math.max(end, cue.endMs))) }
 }
 
-export function visibleIndices(timeline: SubtitleTimeline, ms: number): number[] {
-  const { cues, latestEnd } = timeline
+export function lastStartedCue(cues: readonly { startMs: number }[], ms: number): number {
   let low = 0,
     high = cues.length
   while (low < high) {
@@ -79,10 +78,15 @@ export function visibleIndices(timeline: SubtitleTimeline, ms: number): number[]
     if (cues[mid].startMs <= ms) low = mid + 1
     else high = mid
   }
+  return low - 1
+}
+
+export function visibleIndices(timeline: SubtitleTimeline, ms: number): number[] {
+  const { cues, latestEnd } = timeline
   const result = []
   // A long caption can span several shorter ones. The prefix ends let us stop
   // at the first point before which no cue can still be on screen.
-  for (let i = low - 1; i >= 0 && latestEnd[i] > ms; i--) {
+  for (let i = lastStartedCue(cues, ms); i >= 0 && latestEnd[i] > ms; i--) {
     if (cues[i].endMs > ms) result.push(i)
   }
   return result.reverse()

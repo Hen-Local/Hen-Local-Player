@@ -2,27 +2,15 @@
   import { onMount, untrack } from 'svelte'
   import { player as p, mockMode } from './stores.svelte'
   import { subtitleTracks as tracks } from './subtitle-tracks.svelte'
+  import { fitCaption } from './fit-caption'
   let {
     box,
     clearance,
-  }: { box: { width: number; height: number; left: number; top: number }; clearance: number } =
+    audioOnly,
+  }: { box: { width: number; height: number; left: number; top: number }; clearance: number; audioOnly: boolean } =
     $props()
   let picker: HTMLInputElement
-  let lines = $derived(tracks.linesAt(p.ms, p.cues, p.settings))
-  function fitLine(row: HTMLElement) {
-    const label = row.querySelector('span')!
-    // Transforms do not change the observed layout widths. A longer cue can
-    // fit before paint without triggering another resize or moving its partner.
-    function fit() {
-      const scale = Math.min(1, row.clientWidth / Math.max(1, label.offsetWidth))
-      label.style.transform = scale < 1 ? `scale(${scale})` : ''
-    }
-    const observer = new ResizeObserver(fit)
-    observer.observe(row)
-    observer.observe(label)
-    fit()
-    return { destroy: () => observer.disconnect() }
-  }
+  let lines = $derived(audioOnly ? [] : tracks.linesAt(p.ms, p.cues, p.settings))
   $effect(() => {
     const id = p.media?.sessionId ?? ''
     untrack(() => {
@@ -56,6 +44,7 @@
 
 {#if lines.length && box.height > 0}<div
     class="content-area"
+    style:--picture-gutter={box.left + 'px'}
     style:width={box.width + 'px'}
     style:height={box.height + 'px'}
     style:left={box.left + 'px'}
@@ -69,7 +58,7 @@
       style:--sub-bg={p.settings.subtitleBackground}
     >
       {#each lines as line, i}
-        <div dir="auto" class:secondary={!tracks.timeline && i > 0} use:fitLine>
+        <div dir="auto" class:secondary={!tracks.timeline && i > 0} use:fitCaption>
           <span>{line}</span>
         </div>
       {/each}

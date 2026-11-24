@@ -357,4 +357,56 @@ mod playback_tests {
         engines.shutdown().await;
         Ok(())
     }
+
+    #[tokio::test]
+    #[ignore = "requires the Japanese fixture, native ASR and translation models"]
+    async fn completed_track_schedules_a_new_translation_and_respects_lookahead() -> Result<()> {
+        let root = tempfile::tempdir()?;
+        let fixture =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/fixture_ja.mp4");
+        let mut settings = Settings {
+            target_language: "none".into(),
+            ..Settings::default()
+        };
+        let engines = SharedEngines::new(&settings).await?;
+        let (status, mut events) = watch::channel(None);
+        let sink = Arc::new(Events {
+            opened: AtomicUsize::new(0),
+            status,
+        });
+        let session = Session::open_in(
+            fixture,
+            settings.clone(),
+            hlp_media::default_caps("wkwebview"),
+            sink,
+            engines.clone(),
+            root.path().into(),
+        )
+        .await?;
+        assert_eq!(wait_for(&mut events, "complete").await?.utt_done, 6);
+        assert_eq!(session.request_counts(), (6, 0));
+        session
+            .send(SessionCommand::Playhead {
+                ms: 22_500,
+                playing: false,
+            })
+            .await?;
+        settings.process_whole_file = false;
+        session
+            .send(SessionCommand::UpdateSettings(settings.clone()))
+            .await?;
+        session.send(SessionCommand::SetTarget("en".into())).await?;
+        assert_eq!(wait_for(&mut events, "paused").await?.translated_count, 0);
+        assert_eq!(session.request_counts(), (6, 0));
+        settings.target_language = "en".into();
+        settings.process_whole_file = true;
+        session
+            .send(SessionCommand::UpdateSettings(settings))
+            .await?;
+        assert_eq!(wait_for(&mut events, "complete").await?.translated_count, 6);
+        assert_eq!(session.request_counts(), (6, 6));
+        session.shutdown().await?;
+        engines.shutdown().await;
+        Ok(())
+    }
 }

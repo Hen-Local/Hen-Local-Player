@@ -1,5 +1,5 @@
 export default {
-  createSubtitles: 'Transcribe and Create Subtitles',
+  createSubtitles: 'Transcribe',
   subtitleSettings: 'Subtitle Settings',
   subtitleList: 'Subtitle List',
   subtitleProgress: 'Subtitle Progress',
@@ -8,7 +8,6 @@ export default {
   bothLanguages: 'Both',
   originalLanguage: 'Original Language',
   creatingSubtitles: 'Generating subtitles…',
-  subtitlesReady: 'Subtitles Ready',
   generationPaused: 'Generation Paused',
   transcriptionSpeed: 'Transcription speed',
   subtitleDelay: 'Subtitle Delay (s)',
@@ -187,7 +186,7 @@ export default {
   track: 'Audio Track',
   cache: 'Media cache',
   panel: 'Toggle subtitles panel',
-  audioOnly: 'Audio playback',
+  audioOnly: 'Audio Playback',
   dismiss: 'Dismiss',
   local: 'Local playback',
   save: 'Save',

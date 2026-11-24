@@ -68,6 +68,7 @@ pub struct Timeline {
     pub extracted: Ms,
     pub language_dirty: bool,
     pub dirty: bool,
+    cue_builder: hlp_core::cues::CueBuilder,
     pub asr_ms: u64,
     pub audio_ms: u64,
     pub tr_ms: u64,
@@ -143,6 +144,7 @@ impl Timeline {
                 0
             },
             dirty: true,
+            cue_builder: Default::default(),
             language_dirty: true,
             asr_ms: 0,
             audio_ms: 0,
@@ -402,13 +404,15 @@ impl Timeline {
             .filter(|v| !v.failed && v.source_hash == store::hash(source))
             .map(|v| &v.text)
     }
-    pub fn cues(&self) -> Vec<Cue> {
-        let texts = self
-            .rows
-            .values()
-            .filter_map(|u| self.translation(u).map(|v| (u.id.clone(), v.clone())))
-            .collect();
-        hlp_core::cues::build_cues(&self.rows.values().cloned().collect::<Vec<_>>(), &texts)
+    pub fn cues(&mut self) -> Vec<Cue> {
+        let mut builder = std::mem::take(&mut self.cue_builder);
+        let cues = builder.update(
+            self.rows
+                .values()
+                .map(|row| (row, self.translation(row).map_or("", String::as_str))),
+        );
+        self.cue_builder = builder;
+        cues
     }
     pub fn status(&self, stage: &str) -> PipelineStatus {
         fn append(spans: &mut Vec<[Ms; 2]>, u: &Utterance) {

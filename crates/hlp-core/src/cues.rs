@@ -353,10 +353,57 @@ fn finish_timing(cues: &mut [Cue]) {
 }
 
 pub fn build_cues(utterances: &[Utterance], translations: &HashMap<String, String>) -> Vec<Cue> {
-    let mut cues: Vec<_> = utterances
-        .iter()
-        .flat_map(|u| utterance_cues(u, translations.get(&u.id).map_or("", String::as_str)))
-        .collect();
+    finish_cues(
+        utterances
+            .iter()
+            .flat_map(|u| utterance_cues(u, translations.get(&u.id).map_or("", String::as_str)))
+            .collect(),
+    )
+}
+
+#[derive(Default)]
+pub struct CueBuilder {
+    pages: HashMap<String, CachedPages>,
+}
+struct CachedPages {
+    utterance: Utterance,
+    translation: String,
+    cues: Vec<Cue>,
+}
+impl CueBuilder {
+    /// Reuse phrase segmentation between successive recognition and translation batches.
+    /// Timing and merges still see every neighbor, including overlapping or out-of-order speech.
+    pub fn update<'a>(
+        &mut self,
+        rows: impl IntoIterator<Item = (&'a Utterance, &'a str)>,
+    ) -> Vec<Cue> {
+        let mut previous = std::mem::take(&mut self.pages);
+        let mut cues = Vec::new();
+        for (row, translation) in rows {
+            if row.text.is_none() {
+                continue;
+            }
+            let (id, pages) = previous
+                .remove_entry(&row.id)
+                .filter(|(_, p)| &p.utterance == row && p.translation == translation)
+                .unwrap_or_else(|| {
+                    (
+                        row.id.clone(),
+                        CachedPages {
+                            utterance: row.clone(),
+                            translation: translation.to_owned(),
+                            cues: utterance_cues(row, translation),
+                        },
+                    )
+                });
+            cues.extend_from_slice(&pages.cues);
+            self.pages.insert(id, pages);
+        }
+        finish_cues(cues)
+    }
+}
+
+fn finish_cues(mut cues: Vec<Cue>) -> Vec<Cue> {
     cues.sort_by_key(|cue| cue.start_ms);
     finish_timing(&mut cues);
     let mut i = 0;

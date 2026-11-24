@@ -212,7 +212,7 @@
       case ']':
         p.rate = Math.max(
           0.25,
-          Math.min(4, p.rate + (k === '[' ? -0.25 : 0.25)),
+          Math.min(5, p.rate + (k === '[' ? -0.25 : 0.25)),
         )
         break
       default:

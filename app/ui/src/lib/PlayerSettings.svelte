@@ -23,7 +23,7 @@
   let chapters = $state<{ startMs: number; title: string }[]>([])
   let loadedSession = ''
   let session = $derived(p.media?.sessionId ?? '')
-  const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4]
+  const speeds = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5]
   let repeatLabel = $derived(
     p.t(p.repeat === 'all' ? 'repeatAll' : p.repeat === 'one' ? 'repeatOne' : 'repeatOff'),
   )

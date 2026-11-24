@@ -5,6 +5,7 @@ import { subtitleTracks } from './subtitle-tracks.svelte'
 import { defaults } from './defaults'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { capMimes } from './format'
+import { lastStartedCue } from './subtitle-tracks'
 import en from './i18n/en'
 import zh from './i18n/zh'
 import type {
@@ -24,20 +25,17 @@ export const backend: Backend = mockMode ? new MockBackend() : new TauriBackend(
 export type Dialog = 'settings' | 'setup' | 'url' | 'export' | null
 export const modes = ['original', 'translation', 'both', 'off'] as const
 export function cueAt(cues: Cue[], ms: number) {
-  let lo = 0,
-    hi = cues.length
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1
-    if (cues[mid].startMs <= ms) lo = mid + 1
-    else hi = mid
-  }
-  return lo > 0 && ms < cues[lo - 1].endMs ? lo - 1 : -1
+  const index = lastStartedCue(cues, ms)
+  return index >= 0 && ms < cues[index].endMs ? index : -1
+}
+function compareCues(a: Cue, b: Cue) {
+  return a.startMs - b.startMs || a.id.localeCompare(b.id)
 }
 class PlayerState {
   settings = $state<Settings>(defaults())
   media = $state<MediaOpened | null>(null)
   prep = $state<PlaybackPrep | null>(null)
-  status = $state<PipelineStatus | null>(null)
+  status = $state.raw<PipelineStatus | null>(null)
   transcriptionRequested = $state(false)
   startingTranscription = $state(false)
   missingSubtitleComponents = $state<string[]>([])
@@ -46,7 +44,7 @@ class PlayerState {
 
   language = $state<LanguageEvent | null>(null)
   cues = $state.raw<Cue[]>([])
-  cueIndex = new Map<string, number>()
+  private cueIndex = new Map<string, number>()
   components = $state<ComponentStatus[]>([])
   recent = $state<RecentItem[]>([])
   download = $state<DownloadProgress | null>(null)
@@ -57,7 +55,7 @@ class PlayerState {
   volume = $state(0.85)
   rate = $state(1)
   fullscreen = $state(false)
-  private inPlaceFullscreen = false
+  private requestedFullscreen: boolean | null = null
   private fullscreenRevision = 0
   private fullscreenOperation = Promise.resolve()
   track = $state(0)
@@ -345,26 +343,19 @@ class PlayerState {
     const revision = ++this.fullscreenRevision
     const previous = this.fullscreen
     this.fullscreen = value
-    const operation = this.fullscreenOperation.then(async () => {
-      if (revision !== this.fullscreenRevision) return
-      if (!mockMode && /Mac/.test(navigator.platform) && (value || this.inPlaceFullscreen)) {
-        const win = getCurrentWindow()
-        // The player animates within its current display. The green button and
-        // system menu can still put this window in a separate macOS Space.
-        if (value && (this.inPlaceFullscreen || await win.isFullscreen())) return
-        await backend.call('set_player_fullscreen', { enabled: value })
-        this.inPlaceFullscreen = value
-      } else {
-        await backend.fullscreen(value)
-      }
+    if (!mockMode) this.requestedFullscreen = value
+    const operation = this.fullscreenOperation.then(() => {
+      if (revision === this.fullscreenRevision) return backend.fullscreen(value)
     })
     this.fullscreenOperation = operation.catch(() => {})
     try {
       await operation
     } catch (error) {
-      const actual = mockMode ? previous :
-        this.inPlaceFullscreen || await getCurrentWindow().isFullscreen().catch(() => previous)
-      if (revision === this.fullscreenRevision) this.fullscreen = actual
+      const actual = mockMode ? previous : await getCurrentWindow().isFullscreen().catch(() => previous)
+      if (revision === this.fullscreenRevision) {
+        this.requestedFullscreen = null
+        this.fullscreen = actual
+      }
       throw error
     }
   }
@@ -383,7 +374,7 @@ class PlayerState {
     if (this.media) this.queued = { sessionId: this.media.sessionId, action }
   }
   private replace(cues: Cue[]) {
-    this.cues = [...cues].sort((a, b) => a.startMs - b.startMs || a.id.localeCompare(b.id))
+    this.cues = [...cues].sort(compareCues)
     this.cueIndex = new Map(this.cues.map((c, i) => [c.id, i]))
   }
   private own(id: string) {
@@ -435,14 +426,25 @@ class PlayerState {
       }),
       this.listen('pipeline://cues', (e) => {
         if (!this.own(e.sessionId)) return
-        const rows = [...this.cues]
+        const rows = this.cues.slice()
+        let orderChanged = false
         for (const c of e.upserts) {
           const index = this.cueIndex.get(c.id)
-          if (index === undefined) rows.push(c)
-          else rows[index] = c
+          if (index === undefined) {
+            const last = rows.at(-1)
+            if (last && compareCues(last, c) > 0) orderChanged = true
+            this.cueIndex.set(c.id, rows.length)
+            rows.push(c)
+          } else {
+            if (rows[index].startMs !== c.startMs) orderChanged = true
+            rows[index] = c
+          }
         }
-        const removed = new Set(e.removedIds)
-        this.replace(rows.filter((c) => !removed.has(c.id)))
+        if (e.removedIds.length) {
+          const removed = new Set(e.removedIds)
+          this.replace(rows.filter((c) => !removed.has(c.id)))
+        } else if (orderChanged) this.replace(rows)
+        else this.cues = rows
       }),
       this.listen('pipeline://status', (s) => {
         if (!this.own(s.sessionId)) return
@@ -564,19 +566,11 @@ class PlayerState {
     } else {
       const win = getCurrentWindow()
       if (/Mac/.test(navigator.platform)) {
-        const closeWindow = () => void this.act(() => win.close())
-        window.addEventListener('hlp:close-player-window', closeWindow)
-        this.cleanups.push(() => window.removeEventListener('hlp:close-player-window', closeWindow))
-        this.cleanups.push(await win.onCloseRequested(async () => {
+        this.cleanups.push(await win.onCloseRequested(() => {
           this.video?.pause()
           this.remember(true)
-          if (this.inPlaceFullscreen) await this.act(() => this.full(false))
         }))
       }
-      const exitPlayerFullscreen = () => {
-        if (this.inPlaceFullscreen) void this.act(() => this.full(false))
-      }
-      window.addEventListener('hlp:exit-player-fullscreen', exitPlayerFullscreen)
       let resizeTimer = 0
       let resizeRevision = 0
       const reflectFullscreen = async () => {
@@ -584,9 +578,13 @@ class PlayerState {
         const request = this.fullscreenRevision
         await this.fullscreenOperation
         if (request !== this.fullscreenRevision || this.disposed) return
-        const active = this.inPlaceFullscreen || await win.isFullscreen()
-        if (request === this.fullscreenRevision && resize === resizeRevision && !this.disposed)
-          this.fullscreen = active
+        const active = await win.isFullscreen()
+        if (request !== this.fullscreenRevision || resize !== resizeRevision || this.disposed) return
+        // A resize can belong to an earlier transition. Keep the latest
+        // requested state until the native window reaches that destination.
+        if (this.requestedFullscreen !== null && active !== this.requestedFullscreen) return
+        this.requestedFullscreen = null
+        this.fullscreen = active
       }
       const unlisten = await win.onResized(() => {
         window.clearTimeout(resizeTimer)
@@ -594,7 +592,6 @@ class PlayerState {
       })
       this.cleanups.push(() => {
         window.clearTimeout(resizeTimer)
-        window.removeEventListener('hlp:exit-player-fullscreen', exitPlayerFullscreen)
         unlisten()
       })
       await this.act(reflectFullscreen)

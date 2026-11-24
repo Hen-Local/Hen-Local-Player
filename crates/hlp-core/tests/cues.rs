@@ -256,3 +256,41 @@ fn generated_punctuation_becomes_spacing_after_alignment() {
     assert_eq!(target_only.len(), 1);
     assert_eq!(target_only[0].translation.as_deref(), Some("Hello"));
 }
+
+#[test]
+fn streaming_updates_match_full_layout_when_neighbors_and_languages_change() {
+    let mut builder = hlp_core::cues::CueBuilder::default();
+    let mut rows = vec![
+        utterance(1, 0, 2600, "The first line"),
+        utterance(3, 4000, 5100, "The final line"),
+    ];
+    let mut translations = HashMap::from([(rows[0].id.clone(), "第一句话".to_owned())]);
+    let mut check = |rows: &[Utterance], translations: &HashMap<String, String>| {
+        let actual = builder.update(
+            rows.iter()
+                .map(|row| (row, translations.get(&row.id).map_or("", String::as_str))),
+        );
+        assert_eq!(actual, build_cues(rows, translations));
+    };
+    check(&rows, &translations);
+    rows.push(utterance(
+        2,
+        1500,
+        4700,
+        "An overlapping caption that was recognized later",
+    ));
+    check(&rows, &translations);
+    translations.insert(
+        rows[0].id.clone(),
+        "Une première ligne beaucoup plus longue que la traduction précédente".into(),
+    );
+    rows[1].status = UttStatus::Pending;
+    check(&rows, &translations);
+    rows.remove(2);
+    rows[0].text = None;
+    check(&rows, &translations);
+    rows[0].text = Some("A corrected line".into());
+    rows[1].language = Some(LangCode("es".into()));
+    check(&rows, &HashMap::new());
+    check(&[], &HashMap::new());
+}

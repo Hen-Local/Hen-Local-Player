@@ -13,27 +13,26 @@
     manualUntil = 0
   let authored = $derived(subtitleTracks.authored)
   let count = $derived(authored?.cues.length ?? p.cues.length)
-  let rows = $derived(
+  // Generated lists grow during playback. Use the same row geometry from the
+  // first batch onward so the scrollbar stays anchored as captions arrive.
+  const rowH = 88
+  let virtual = $derived(!authored || count > 32)
+  let start = $derived(virtual ? Math.min(count, Math.max(0, Math.floor(scroll / rowH) - 4)) : 0)
+  let end = $derived(virtual ? Math.min(count, start + Math.ceil(height / rowH) + 9) : count)
+  let rows = $derived.by(() =>
     authored
-      ? authored.cues.map((cue, i) => ({
-          id: 'authored-' + i,
+      ? authored.cues.slice(start, end).map((cue, i) => ({
+          id: 'authored-' + (start + i),
           startMs: cue.startMs,
           original: cue.text,
           translation: null,
           stale: false,
         }))
-      : p.cues,
+      : p.cues.slice(start, end),
   )
-  let activeIndices = $derived(
-    authored ? visibleIndices(authored, p.ms) : [cueAt(p.cues, p.ms - subtitleTracks.delayMs)],
-  )
-  let activeRow = $derived(activeIndices.at(-1) ?? -1)
-  const rowH = 88
-  let virtual = $derived(rows.length > 500),
-    start = $derived(virtual ? Math.max(0, Math.floor(scroll / rowH) - 4) : 0)
-  let end = $derived(
-    virtual ? Math.min(rows.length, start + Math.ceil(height / rowH) + 9) : rows.length,
-  )
+  let activeAuthored = $derived(expanded && authored ? visibleIndices(authored, p.ms) : [])
+  let activeRow = $derived(!expanded ? -1 : authored ? activeAuthored.at(-1) ?? -1
+    : cueAt(p.cues, p.ms - subtitleTracks.delayMs))
 
   let pending = $derived(!authored && p.transcriptionRequested ? p.status?.asrPendingSpans ?? [] : [])
   $effect(() => {
@@ -66,7 +65,11 @@
     class="subtitle-list-toggle"
     aria-expanded={expanded}
     aria-controls="subtitle-list"
-    onclick={() => { expanded = !expanded }}
+    onclick={() => {
+      scroll = 0
+      manualUntil = 0
+      expanded = !expanded
+    }}
   >
     <Icon name={expanded ? 'down' : 'right'} size={14} />
     {p.t('subtitleList')}
@@ -86,13 +89,14 @@
         onpointerdown={manual}
       >
         {#if virtual}<div style:height={start * rowH + 'px'}></div>{/if}
-        {#each rows.slice(start, end) as cue, i (cue.id)}
+        {#each rows as cue, i (cue.id)}
+          {@const active = authored ? activeAuthored.includes(start + i) : activeRow === start + i}
           {@const text = authored ? [cue.original] : generatedLines(cue, p.settings)}
           <button
             class="cue-row"
-            class:active={activeIndices.includes(i + start)}
+            class:active
             class:virtual
-            aria-current={activeIndices.includes(i + start)}
+            aria-current={active}
             onclick={() =>
               p.seek(authored ? cue.startMs : Math.max(0, cue.startMs + subtitleTracks.delayMs))}
           >
@@ -109,7 +113,7 @@
             </span>
           </button>
         {/each}
-        {#if virtual}<div style:height={(rows.length - end) * rowH + 'px'}></div>{/if}
+        {#if virtual}<div style:height={(count - end) * rowH + 'px'}></div>{/if}
         {#each pending.slice(0, 4) as span}<button
             class="cue-row pending"
             onclick={() => p.seek(span[0])}
@@ -117,7 +121,7 @@
             <time>{clock(span[0])}</time>
             <span>{p.t('transcribing')}</span>
           </button>{/each}
-        {#if !rows.length && !pending.length}<p class="empty-note">
+        {#if !count && !pending.length}<p class="empty-note">
           {p.t('waiting')}
         </p>{/if}
       </div>
@@ -130,15 +134,22 @@
     flex: none;
     min-width: 0;
   }
-  .transcript.expanded,
+  .transcript.expanded {
+    display: flex;
+    flex: 1 0 9rem;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .subtitle-list-toggle { flex: none; }
   #subtitle-list:not([hidden]) {
     display: flex;
-    flex: 1 0 auto;
+    flex: 1;
     flex-direction: column;
+    min-height: 0;
   }
   .cue-list {
-    min-height: 3rem;
-    max-height: 54dvh;
+    min-height: 0;
+    overflow-anchor: none;
     overscroll-behavior: none contain;
   }
   .row-count {

@@ -20,7 +20,6 @@ export interface SubtitleInventory {
 }
 export interface Commands {
   set_playback_capabilities: [ { caps: Caps }, void ]
-  set_player_fullscreen: [ { enabled: boolean }, void ]
   close_media: [ undefined, void ]
   choose_media_folder: [ undefined, string[] ]
   save_video_frame: [ { sessionId: string; ms: number }, boolean ]

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { backend, mockMode, player as p } from './stores.svelte'
+  import AudioLyrics from './AudioLyrics.svelte'
   import SubtitleOverlay from './SubtitleOverlay.svelte'
   import Controls from './Controls.svelte'
   import Icon from './Icon.svelte'
@@ -299,6 +300,7 @@
     bind:this={stage}
     bind:clientHeight={stageHeight}
     class="video-stage movie-viewport"
+    class:audio-only={audioOnly}
     class:controls-visible={controlsVisible}
     class:hide-cursor={!controlsVisible}
     role="presentation"
@@ -339,10 +341,7 @@
           >
             <track kind="captions" />
           </video>
-          {#if audioOnly}<div class="stage-state">
-              <Icon name="audio" size={54} />
-              <span>{p.t('audioOnly')}</span>
-            </div>{/if}
+          {#if audioOnly}<AudioLyrics />{/if}
         {:else}<div class="stage-state">
             <Icon name="film" size={40} />
             <strong>{p.t('preparing')}</strong>
@@ -352,9 +351,8 @@
       {/key}
       <SubtitleOverlay
         {box}
-        clearance={controlsVisible
-          ? Math.max(0, controlsHeight + 8 - stageBottomGap - (stageHeight - box.top - box.height))
-          : 0}
+        {audioOnly}
+        clearance={Math.max(0, controlsHeight + 12 - stageBottomGap - (stageHeight - box.top - box.height))}
       />
       {#if p.status?.stage === 'needs-setup' && !url && subtitleTracks.selected === 'generated' && p.settings.subtitleMode !== 'off'}<button
           class="stage-chip"
@@ -397,7 +395,7 @@
     z-index: 5;
     width: 100%;
     box-sizing: border-box;
-    padding: 0 clamp(8px, 2.2vw, 24px) max(clamp(8px, 2vh, 20px), env(safe-area-inset-bottom));
+    padding: 0 clamp(8px, 2.2vw, 24px) max(clamp(18px, 4.6vh, 38px), env(safe-area-inset-bottom));
     container-type: inline-size;
     pointer-events: none;
     transition: opacity 160ms;
@@ -407,6 +405,11 @@
   }
   .floating-slot.transport-hidden :global([data-transport]) {
     pointer-events: none;
+  }
+  @media (max-height: 340px) {
+    .floating-slot {
+      padding-bottom: max(clamp(10px, 3.6vh, 16px), env(safe-area-inset-bottom));
+    }
   }
   @media (prefers-reduced-motion: reduce) {
     .floating-slot {
