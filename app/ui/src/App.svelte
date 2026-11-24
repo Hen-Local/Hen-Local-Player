@@ -136,17 +136,24 @@
       closePanel(side)
       return
     }
-    if (menuOpen) return
     const cmd = e.metaKey || e.ctrlKey,
       k = e.key.toLowerCase()
-    if (cmd && (['o', 'l', 'e'].includes(k) || (k === 'd' && e.shiftKey))) {
+    if (cmd && e.shiftKey && !e.altKey && k === 'd') {
+      // Some webviews forward the keystroke instead of invoking the native menu.
+      e.preventDefault()
+      menuOpen = false
+      p.findOnlineSubtitles()
+      return
+    }
+    if (menuOpen) return
+    if (cmd && ['o', 'l', 'e'].includes(k)) {
       if (!mockMode) return // The desktop menu handles these accelerators.
       e.preventDefault()
       if (k === 'o') {
         if (e.shiftKey) void p.chooseFolder()
         else void p.choose()
       } else if (k === 'l') p.dialog = 'url'
-      else if (p.media) p.dialog = k === 'd' ? 'online-subtitles' : 'export'
+      else if (p.media) p.dialog = 'export'
       return
     }
     const el = e.target as HTMLElement | null

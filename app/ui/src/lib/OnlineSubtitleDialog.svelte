@@ -3,7 +3,7 @@
   import mediaExtensions from '../../../media-formats.json'
   import Dialog from './Dialog.svelte'
   import Icon from './Icon.svelte'
-  import { backend, player as p } from './stores.svelte'
+  import { backend, mockMode, player as p } from './stores.svelte'
   import { subtitleTracks } from './subtitle-tracks.svelte'
   import type { OnlineSubtitleResult } from './backend'
 
@@ -54,6 +54,9 @@
   let matches = $state<HTMLUListElement>()
   let open = true
   let enabled = $derived(!!query.trim() && working === null)
+  let offerTranscription = $derived(!!media?.audioTracks.length && !p.cues.length &&
+    !p.canRegenerate && !p.transcriptionRequested && !p.startingTranscription &&
+    !(mockMode && p.currentPath.startsWith('browser:')))
 
   function languageLabel(code: string) {
     try { return names.of(languageTags[code] ?? code) || code }
@@ -62,6 +65,15 @@
   function close() {
     open = false
     p.dialog = null
+  }
+  function importSubtitle() {
+    close()
+    window.dispatchEvent(new Event('hlp:subtitle-file'))
+  }
+  function transcribe() {
+    close()
+    window.dispatchEvent(new CustomEvent('player:panel', { detail: 'subtitles' }))
+    void p.startTranscription()
   }
   $effect(() => { if (p.media !== media) close() })
 
@@ -118,13 +130,16 @@
 <Dialog title={p.t('findOnlineSubtitles')} icon="search" {close}>
   <form class="online-search" onsubmit={(e) => { e.preventDefault(); void search() }}>
     <label>{p.t('movieTitle')}
-      <input type="search" bind:this={titleField} maxlength="250" required bind:value={query} oninput={resetResults} disabled={working !== null} />
+      <input class="search-field" type="search" bind:this={titleField} maxlength="250" required bind:value={query} oninput={resetResults} disabled={working !== null} />
     </label>
     <label>{p.t('language')}
-      <select bind:value={language} onchange={resetResults} disabled={working !== null}>
-        <option value="">{p.t('allLanguages')}</option>
-        {#each languageCodes as code}<option value={code}>{languageLabel(code)}</option>{/each}
-      </select>
+      <span class="select-box">
+        <select class="search-field" bind:value={language} onchange={resetResults} disabled={working !== null}>
+          <option value="">{p.t('allLanguages')}</option>
+          {#each languageCodes as code}<option value={code}>{languageLabel(code)}</option>{/each}
+        </select>
+        <Icon name="down" size={13} />
+      </span>
     </label>
     <div class="dialog-actions">
       <button class="primary" type="submit" disabled={!enabled}>
@@ -150,14 +165,21 @@
           </li>
         {/each}
       </ul>
-    {:else}<p class="empty-note" role="status">{p.t('noSubtitleMatches')}</p>{/if}
+    {:else}
+      <p class="empty-note" role="status">{p.t('noSubtitleMatches')}</p>
+      <div class="offline-actions">
+        <button onclick={importSubtitle}><Icon name="folder" size={14}/>{p.t('openSubtitleFile')}</button>
+        {#if offerTranscription}<button onclick={transcribe}><Icon name="cc" size={14}/>{p.t('transcribeThisAudio')}</button>{/if}
+      </div>
+    {/if}
   {/if}
 </Dialog>
 
 <style>
-  .online-search { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 10px; }
+  .online-search { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: end; gap: 10px; }
   .online-search > label { min-width: 0; margin: 0; }
-  .online-search :is(select, input) { display: block; width: 100%; }
+  .online-search .search-field { display: block; box-sizing: border-box; width: 100%; height: 36px; padding-block: 0; padding-inline-start: 11px; font: inherit; }
+  .online-search select.search-field { padding-inline-end: 30px; }
   .online-search .dialog-actions { grid-column: 1 / -1; margin: 0; }
   .online-results { margin: 14px 0 0; padding: 0; list-style: none; }
   .online-results li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--hairline); }
@@ -166,4 +188,6 @@
   .online-results strong { font-size: 13px; }
   .online-results small { margin-top: 3px; }
   .online-results button { flex: none; gap: 4px; padding: 4px 8px; }
+  .offline-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .offline-actions button { gap: 5px; }
 </style>

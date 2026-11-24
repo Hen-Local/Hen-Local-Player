@@ -15,8 +15,22 @@ static MEDIA_FORMATS: LazyLock<Vec<String>> = LazyLock::new(|| {
 
 fn folder_files(path: &Path) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
-    for entry in std::fs::read_dir(path).context("Read the selected folder")? {
-        let path = entry?.path();
+    // A bare CLI filename has an empty parent. Keep its relative spelling in
+    // the playlist so the open item and the directory entry share an identity.
+    let directory = if path.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        path
+    };
+    for entry in std::fs::read_dir(directory)
+        .context("Read the selected folder")?
+        .flatten()
+    {
+        let name = entry.file_name();
+        if name.to_str().is_none() {
+            continue;
+        }
+        let path = path.join(name);
         if path
             .extension()
             .and_then(|s| s.to_str())
@@ -31,6 +45,64 @@ fn folder_files(path: &Path) -> Result<Vec<PathBuf>> {
         }
     }
     Ok(files)
+}
+
+#[derive(Serialize)]
+pub struct FolderMedia {
+    folder: PathBuf,
+    files: Vec<PathBuf>,
+}
+
+fn siblings(source: &Path) -> Result<FolderMedia> {
+    let folder = source.parent().context("Media has no folder")?;
+    let mut files = folder_files(folder)?;
+    files.retain(|p| {
+        !p.file_name()
+            .is_some_and(|s| s.to_string_lossy().starts_with('.'))
+    });
+    // Keep the spelling from the opener as the active row's identity on the UI.
+    let exact = files.iter().position(|file| file == source);
+    let selected = exact.or_else(|| {
+        let name = source.file_name()?.to_str()?;
+        files.iter().position(|file| {
+            file.file_name()
+                .and_then(|s| s.to_str())
+                .is_some_and(|s| name.eq_ignore_ascii_case(s))
+        })
+    });
+    if let Some(index) = selected {
+        files[index] = source.to_owned();
+    } else {
+        // All Files can open hidden media or a playable file with an unusual extension.
+        files.push(source.to_owned());
+    }
+    let directory = if folder.as_os_str().is_empty() {
+        Path::new(".")
+    } else {
+        folder
+    };
+    Ok(FolderMedia {
+        folder: std::path::absolute(directory)?,
+        files,
+    })
+}
+
+#[tauri::command]
+pub async fn list_media_siblings(
+    state: State<'_, Desktop>,
+    path: PathBuf,
+) -> Result<Option<FolderMedia>, String> {
+    {
+        let player = state.player.lock().await;
+        if !player.active.as_ref().is_some_and(|file| file.path == path) {
+            return Ok(None);
+        }
+    }
+    tauri::async_runtime::spawn_blocking(move || siblings(&path))
+        .await
+        .map_err(|e| e.to_string())?
+        .map(Some)
+        .map_err(|e| format!("{e:#}"))
 }
 
 #[tauri::command]
@@ -233,4 +305,47 @@ pub async fn save_video_frame(
     .await
     .map_err(|e| e.to_string())?
     .map_err(|e| format!("{e:#}"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn sibling_playlist_lists_playable_neighbors_and_keeps_the_open_file() {
+        let dir =
+            std::env::temp_dir().join(format!("hlp-playlist-siblings-{}", std::process::id()));
+        fs::create_dir(&dir).unwrap();
+        fs::create_dir(dir.join("subfolder.mkv")).unwrap();
+        for name in [
+            "01.mp4",
+            "02.MOV",
+            "音乐.flac",
+            "01.srt",
+            "notes.txt",
+            "._01.mp4",
+            "subfolder.mkv/nested.mp4",
+            "odd-extension",
+        ] {
+            fs::write(dir.join(name), []).unwrap();
+        }
+        let folder = siblings(&dir.join("02.MOV")).unwrap();
+        assert_eq!(folder.folder, dir);
+        let mut files = folder.files;
+        files.sort();
+        assert_eq!(
+            files,
+            ["01.mp4", "02.MOV", "音乐.flac"].map(|s| dir.join(s))
+        );
+        let alternate = dir.join("02.mov");
+        if alternate.is_file() {
+            let files = siblings(&alternate).unwrap().files;
+            assert_eq!(files.len(), 3);
+            assert!(files.contains(&alternate));
+        }
+        let unusual = dir.join("odd-extension");
+        assert!(siblings(&unusual).unwrap().files.contains(&unusual));
+        fs::remove_dir_all(dir).unwrap();
+    }
 }

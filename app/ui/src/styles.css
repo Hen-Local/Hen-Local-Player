@@ -1044,11 +1044,6 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
 }
 .app .inspector-tabs button:hover:not(:disabled) { color: white; background: #ffffff15; }
 .panel-dismiss-surface { display: none; }
-@media (max-width: 1208px) {
-  .app.watching .inspector { bottom: var(--bar-clearance); }
-}
-/* Compact drawers cover the picture and transport. Clicking the clear area
-   dismisses a drawer; exposed sidebar buttons can still open the other one. */
 @media (max-width: 980px), (max-height: 540px) {
   .app.watching {
     --settings-width: min(clamp(260px, 56vw, 350px), calc(100% - 58px));
@@ -1058,10 +1053,11 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
   .app.watching:has(> .left-inspector):has(> .right-inspector) {
     --settings-width: min(clamp(260px, 56vw, 350px), calc(100% - var(--playlist-width) - 28px));
   }
-  .app.watching .inspector {
-    z-index: 7;
-    bottom: 0;
-  }
+}
+/* The centered 600px transport clears the 332px settings drawer at 1264px.
+   Below that width either drawer can cover the transport all the way down. */
+@media (max-width: 1264px), (max-height: 540px) {
+  .app.watching .inspector { z-index: 7; }
   .app .panel-dismiss-surface,
   .app .panel-dismiss-surface:hover:not(:disabled) {
     display: block;

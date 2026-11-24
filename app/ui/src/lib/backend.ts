@@ -28,6 +28,7 @@ export interface Commands {
   set_playback_capabilities: [ { caps: Caps }, void ]
   close_media: [ undefined, void ]
   choose_media_folder: [ undefined, string[] ]
+  list_media_siblings: [{ path: string }, { folder: string; files: string[] } | null]
   save_video_frame: [ { sessionId: string; ms: number }, boolean ]
   get_sample_media: [ undefined, string | null ]
   list_chapters: [ { sessionId: string }, { startMs: number; title: string }[] ]
@@ -81,6 +82,12 @@ export interface Backend {
   fullscreen(enabled: boolean): Promise<void>
   onDrop(receive: (paths: string[]) => void): Promise<() => void>
 }
+
+export function sortMediaPaths(paths: string[]) {
+  const order = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+  return paths.sort(order.compare)
+}
+
 export class TauriBackend implements Backend {
   call<K extends keyof Commands>(command: K, args?: Commands[K][0]): Promise<Commands[K][1]> {
     return invoke(command, args)
@@ -89,12 +96,10 @@ export class TauriBackend implements Backend {
     return listen<Events[K]>(event, ({ payload }) => receive(payload))
   }
   async openFiles() {
-    return (await open({ multiple: true, directory: false, filters: [{ name: 'Media', extensions: mediaExtensions }, { name: 'All files', extensions: ['*'] }] })) ?? []
+    return (await open({ multiple: true, directory: false, filters: [{ name: 'Media', extensions: mediaExtensions }, { name: 'All Files', extensions: ['*'] }] })) ?? []
   }
   async openFolder() {
-    const paths = await this.call('choose_media_folder')
-    const order = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
-    return paths.sort(order.compare)
+    return sortMediaPaths(await this.call('choose_media_folder'))
   }
   saveFile(defaultPath: string) { return save({ defaultPath }) }
   fullscreen(enabled: boolean) { return getCurrentWindow().setFullscreen(enabled) }

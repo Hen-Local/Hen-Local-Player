@@ -91,7 +91,9 @@
       onclick={() => window.dispatchEvent(new Event('hlp:subtitle-file'))}>
       <Icon name="folder" size={14} />{p.t('openSubtitleFile')}
     </button>
-    <button class="online-subtitles" aria-haspopup="dialog" onclick={() => (p.dialog = 'online-subtitles')}>
+    <button class="online-subtitles" aria-haspopup="dialog" aria-keyshortcuts="Meta+Shift+D Control+Shift+D"
+      title={p.t('findOnlineSubtitles') + (/Mac/.test(navigator.platform) ? ' (⇧⌘D)' : ' (Ctrl+Shift+D)')}
+      onclick={() => p.findOnlineSubtitles()}>
       <Icon name="search" size={14} />{p.t('findOnlineSubtitles')}…
     </button>
   </div>

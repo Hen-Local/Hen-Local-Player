@@ -35,7 +35,7 @@
   hidden
   bind:this={picker}
   accept=".srt,.vtt,text/vtt,application/x-subrip"
-  aria-label={p.locale === 'zh' ? '字幕文件' : 'Subtitle file'}
+  aria-label={p.locale === 'zh' ? '字幕文件' : 'Subtitle File'}
   onchange={(event) => {
     const file = event.currentTarget.files?.[0]
     event.currentTarget.value = ''

@@ -68,6 +68,7 @@ fn main() {
             open_media,
             close_media,
             playback::choose_media_folder,
+            playback::list_media_siblings,
             playback::get_sample_media,
             playback::list_chapters,
             playback::save_video_frame,

@@ -66,3 +66,15 @@ After `npm --prefix app/ui run build` and `cargo build --locked --offline --rele
 At 720 × 430, opening Playlist in `cca556d` narrowed the movie to 540 × 315 CSS pixels and reserved the bottom strip for the transport. In the updated player the movie stayed at 720 × 430, the left drawer spanned the full height, and the transport held its 600 × 87 bounds while the drawer covered its left end.
 
 `node /tmp/hen-symmetric-drawers.cjs` exercised Chrome and WebKit at nine sizes from 320 × 235 to 1440 × 900. The checks opened the playlist, opened settings alongside it, and compared the video, play button, sidebar toggles and transport geometry through both operations. In compact windows, clicking over the exposed More button dismissed the playlist and returned focus to its toggle. A second click opened the menu. With both sidebars open, an outside click closed the most recently used panel and kept the other one open. Escape, the playlist shortcut and the close buttons remained functional. Portrait and short landscape windows kept the movie edge to edge. The Svelte check passed with zero errors and warnings.
+
+## Drawer height at intermediate window sizes
+
+At 1112 × 586 CSS pixels in `d318c3d`, both sidebars ended at y=464, leaving a 122-pixel gap underneath them. At 1209 pixels wide, the drawers reached the bottom but the transport intercepted clicks over the right drawer. The updated layout gives the drawers the full window height. When the centered 600-pixel transport and a 332-pixel side panel would overlap, the drawer takes precedence in their shared area. At 1112 × 586 the playlist covered the leftmost 22 pixels of the transport and Settings covered the rightmost 76. The picture retained its full 1112 × 586 bounds and the transport stayed at (256, 472) with its 600 × 87 size.
+
+`node /tmp/hen-drawer-boundaries.cjs` tested Chrome and WebKit at 19 viewport sizes from 320 × 235 through 1440 × 900. The test opened each drawer alone and both together, compared video and transport bounds, checked the footer edge and hit-tested the overlapping regions. With both drawers open, 358 further resize samples per engine swept from 1440 to 906 pixels and back. Every sample kept both panels full-height and retained the video's bounds. An outside click at 1112 × 586 closed the last-opened drawer and kept the other visible.
+
+## Floating playback controls
+
+The transport's right group now contains Playlist, Player Settings and More. Removing the fullscreen button freed enough space to center Play even at the minimum window width.
+
+`node /tmp/hen-player-transport-actions.cjs` played the sample in Chrome and WebKit and checked eight viewport sizes from 320 × 235 through 1440 × 900. Every visible control fit within the window, accepted pointer hit tests, and had a separate click target. Play remained centered to the pixel at all eight sizes. In each browser, F entered fullscreen, Escape exited, and double-clicking the video entered and exited fullscreen.

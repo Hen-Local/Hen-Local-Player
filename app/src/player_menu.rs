@@ -34,7 +34,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     for (index, (id, label, key)) in [
         ("open", "Open File…", Some("CmdOrCtrl+O")),
         ("open-folder", "Open Folder…", Some("CmdOrCtrl+Shift+O")),
-        ("url", "Open Link…", Some("CmdOrCtrl+L")),
+        ("url", "Open URL…", Some("CmdOrCtrl+L")),
         ("close-media", "Close File", None),
     ]
     .into_iter()
@@ -69,7 +69,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     audio.append(&item(app, "audio-tracks", "Audio Tracks…", None)?)?;
     let subtitles = Submenu::new(app, "Subtitles", true)?;
     for (id, label, key) in [
-        ("subtitle-file", "Open Subtitle File…", None),
+        ("subtitle-file", "Import Subtitles…", None),
         (
             "find-subtitles",
             "Find Online Subtitles…",

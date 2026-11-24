@@ -183,13 +183,6 @@
       onclick={onsettings}><Icon name="settings" size={21} /></button
     >
     <button
-      class="float-button full-trigger"
-      title={p.fullscreen ? p.t('exitFullscreen') : p.t('fullscreen')}
-      aria-label={p.fullscreen ? p.t('exitFullscreen') : p.t('fullscreen')}
-      onclick={() => p.act(() => p.full(!p.fullscreen))}
-      ><Icon name={p.fullscreen ? 'collapse' : 'full'} size={20} /></button
-    >
-    <button
       class="float-button more-trigger"
       title={p.t('more')}
       aria-label={p.t('more')}
@@ -514,7 +507,6 @@
   }
   @container (max-width: 420px) {
     .float-bar {
-      grid-template-columns: auto 1fr auto;
       gap: 2px 4px;
       padding: 7px 9px 6px;
     }

@@ -452,6 +452,10 @@ export class MockBackend implements Backend {
       case 'open_media':
         if (a && 'path' in a) await this.open(a.path)
         break
+      case 'list_media_siblings':
+        // A browser file picker grants access to selected files only.
+        reply = null
+        break
       case 'set_target_language':
       case 'set_source_language': {
         if (a && 'modeOrCode' in a) this.settings.sourceLanguage = a.modeOrCode

@@ -1,4 +1,4 @@
-import { TauriBackend, type Backend, type Events } from './backend'
+import { TauriBackend, sortMediaPaths, type Backend, type Events } from './backend'
 import { MockBackend } from './mock'
 import { ResumeHistory } from './resume'
 import { subtitleTracks } from './subtitle-tracks.svelte'
@@ -71,7 +71,8 @@ class PlayerState {
   notice = $state('')
   video = $state.raw<HTMLVideoElement | null>(null)
   videoFit = $state<'contain' | 'cover'>('contain')
-  queue = $state<{ path: string; title: string }[]>([])
+  queue = $state.raw<{ path: string; title: string }[]>([])
+  queueFolder = $state('')
   currentPath = $state('')
   queueIndex = $derived(this.queue.findIndex((item) => item.path === this.currentPath))
   repeat = $state<'off' | 'all' | 'one'>('off')
@@ -120,6 +121,11 @@ class PlayerState {
   }
   async update(patch: Partial<Settings>) {
     this.settings = await backend.call('update_settings', { patch })
+  }
+  findOnlineSubtitles() {
+    if (this.dialog) return
+    if (this.media) this.dialog = 'online-subtitles'
+    else this.toast(this.t('openMediaToFindSubtitles'))
   }
   async startTranscription(options: { originalOnly?: boolean; regenerate?: boolean } = {}) {
     const media = this.media
@@ -190,18 +196,40 @@ class PlayerState {
     this.fileOperations = this.fileOperations.then(() => this.act(operation))
     return this.fileOperations
   }
-  async openPaths(paths: string[]) {
+  private async loadSiblings(path: string) {
+    const pending = this.queue
+    try {
+      const folder = await backend.call('list_media_siblings', { path })
+      if (!folder) return
+      // Apply after any in-flight file open has committed or rolled back.
+      // Explicit opens and edits own the newer list if a slow drive finishes late.
+      await this.fileOperation(async () => {
+        if (this.queue !== pending || this.disposed) return
+        this.queue = this.queueItems(sortMediaPaths(folder.files))
+        this.queueFolder = folder.folder
+      })
+    } catch {
+      // The file itself can be readable without permission to list its parent.
+    }
+  }
+  async openPaths(paths: string[], browseFolder = true) {
     const items = this.queueItems(paths)
     if (!items.length) return
     await this.fileOperation(async () => {
       this.remember(true)
       const previous = this.queue
+      const previousFolder = this.queueFolder
       this.queue = items
+      this.queueFolder = ''
       try {
         await backend.call('open_media', { path: items[0].path })
       } catch (error) {
         this.queue = previous
+        this.queueFolder = previousFolder
         throw error
+      }
+      if (browseFolder && items.length === 1 && this.queue === items) {
+        void this.loadSiblings(items[0].path)
       }
     })
   }
@@ -213,15 +241,17 @@ class PlayerState {
     await this.act(async () => this.openPaths(await backend.openFiles()))
   }
   async chooseFolder() {
-    await this.act(async () => this.openPaths(await backend.openFolder()))
+    await this.act(async () => this.openPaths(await backend.openFolder(), false))
   }
   async addToQueue() {
     await this.act(async () => {
       const paths = await backend.openFiles()
-      if (!this.media) return this.openPaths(paths)
-      this.queue.push(
-        ...this.queueItems(paths).filter((item) => !this.queue.some((q) => q.path === item.path)),
-      )
+      if (!this.media) return this.openPaths(paths, false)
+      const additions = this.queueItems(paths).filter((item) => !this.queue.some((q) => q.path === item.path))
+      if (additions.length) {
+        this.queue = [...this.queue, ...additions]
+        this.queueFolder = ''
+      }
     })
   }
   async openQueueIndex(index: number) {
@@ -242,8 +272,12 @@ class PlayerState {
         this.remember(true)
         await backend.call('open_media', { path: replacement.path })
         this.queue = this.queue.filter((entry) => entry.path !== item.path)
+        this.queueFolder = ''
       })
-    } else this.queue = this.queue.filter((entry) => entry.path !== item.path)
+    } else {
+      this.queue = this.queue.filter((entry) => entry.path !== item.path)
+      this.queueFolder = ''
+    }
   }
   next() {
     const index = this.queueIndex + 1
@@ -274,6 +308,7 @@ class PlayerState {
       this.media = null
       this.prep = this.status = this.language = null
       this.queue = []
+      this.queueFolder = ''
       this.currentPath = ''
       subtitleTracks.attach('')
       this.switchPosition = null
@@ -418,8 +453,10 @@ class PlayerState {
       this.listen('media://opened', (e) => {
         this.remember(true)
         const path = e.sourcePath
-        if (path && !this.queue.some((item) => item.path === path))
-          this.queue.push({ path, title: e.title })
+        if (path && !this.queue.some((item) => item.path === path)) {
+          this.queue = [...this.queue, { path, title: e.title }]
+          this.queueFolder = ''
+        }
         this.currentPath = path || ''
         this.playing = false
         this.media = e
@@ -552,7 +589,7 @@ class PlayerState {
             if (this.media) window.dispatchEvent(new Event('hlp:' + action))
             break
           case 'find-subtitles':
-            if (this.media) this.dialog = 'online-subtitles'
+            this.findOnlineSubtitles()
             break
           case 'transcript':
           case 'playlist':
