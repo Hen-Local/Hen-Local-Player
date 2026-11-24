@@ -11,3 +11,9 @@ Explicit track choices and timing offsets are kept per movie. Imported subtitle 
 - Chrome's file picker imported a multiline SRT and a UTF-16 Japanese WebVTT. The browser test verified entity decoding, overlapping cues, exclusive end times, a 1-second timing shift, generated/Off switching, both active transcript highlights, and an authored-row click that sought to 2.5 seconds.
 - Reloading the browser restored explicit Off. The subtitle shortcut restored the last imported Japanese track and its timing offset. Another reload restored the same captions before the subtitle drawer opened.
 - A second native run used fresh media and an empty model directory. Forced Japanese was selected automatically over the English default. Opening a separate MP4 immediately displayed its adjacent bilingual SRT, with six authored transcript rows. Clicking the third row sought to 7.767 seconds. The two movies subsequently reopened with their separate explicit Off and Generated choices.
+
+## Subtitle line length on screen
+
+On November 23, 2026, headless Chrome played the bundled sample with a Chinese cue and an English translation. In a 720 × 430 window the previous layout displayed the two languages on single lines 468 and 487 pixels wide. With each language limited to 22 times its own font size, the same text wrapped into two lines per language, with longest lines of 234 and 262 pixels. A 450 × 300 window and a 1920 × 1080 fullscreen session also displayed two lines per language. DOM range measurements placed every glyph inside the picture.
+
+An imported SRT retained its explicit line break. A separate 132-letter string without spaces wrapped into four lines in all three viewports and retained every character. The production Vite build and `npm --prefix app/ui run check` passed with zero Svelte errors or warnings.

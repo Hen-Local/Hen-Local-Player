@@ -10,3 +10,4 @@ pub mod schedule;
 pub mod settings;
 pub mod subs;
 pub mod types;
+mod word_boundaries;

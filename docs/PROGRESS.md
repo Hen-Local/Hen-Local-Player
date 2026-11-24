@@ -2,6 +2,13 @@
 
 A checked item has been exercised. Worktree branches and tags are local until publication is requested.
 
+## Readable bilingual subtitles · November 23, 2026
+
+- [x] Opened the same 8-minute 12-second movie in the previous and updated Mac releases using separate copies of its saved Chinese transcription and English translation. Both runs used zero recognition and translation requests. The 68 utterances produced 104 timed subtitle pairs before and 204 after. The longest English cue in the player fell from 179 to 56 characters. The Chinese and English exports each retained the same non-whitespace text in the same order. The longest English SRT line fell from 90 to 42 display columns.
+- [x] Mounted the updated disk image, copied out the app, opened the movie and selected its longest English cue from the subtitle list. At 720 × 430, its widest rendered English line measured 368 pixels, down from 638 for the previous release's longest cue. At 2580 × 1080 fullscreen, the corresponding measurements were 982 and 1700 pixels. The updated English cue occupied two lines and its Chinese counterpart one line in both windows. All glyphs stayed inside the picture. [Additional window sizes and imported subtitles](progress/player-subtitles.md#subtitle-line-length-on-screen).
+- [x] `cargo test --locked --workspace` passed 47 tests. Two additional fixture-backed tests passed for embedded subtitle tracks and on-demand transcription and cache reuse. New regressions cover English translation expansion, unspaced word boundaries, decimal numbers, very short speech and an indivisible source word. The release CLI passed all 81 checks across nine fixtures, including export decoding and cache reuse. [Fixture results](../tests/results/2026-11-23-darwin-readable-captions.json).
+- [x] Svelte checks passed with zero diagnostics, the production UI built, and the local Windows x64 cross-check passed for the desktop app, CLI and speech worker. The Apple Silicon disk image and app passed disk-image and strict signature verification. Both bundled ICU notices matched their source files. Installer size 126,251,704 bytes, SHA-256 `43de8a9017d922557e8e42b9de5b6b741d00034fe1f277fd0bb1cd24278ad619`.
+
 ## Scrolling and window dragging · November 23, 2026
 
 - [x] A sideways trackpad gesture previously displaced the whole Mac player by up to 38 pixels. An unbroken subtitle also allowed the list to scroll sideways by 528 pixels. In the fixed player, horizontal movement stayed at zero while vertical scrolling still moved the list. Focused seek and volume sliders retained their values during horizontal input. [Wheel and trackpad checks](progress/player-transport.md#horizontal-scrolling).

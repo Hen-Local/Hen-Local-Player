@@ -115,3 +115,110 @@ proptest! {
         prop_assert!(cues.windows(2).all(|w|w[0].end_ms<=w[1].start_ms));
     }
 }
+
+#[test]
+fn expanding_translation_pages_at_matching_clauses() {
+    let text = "我们先打开窗户，然后一起看看外面的天气。";
+    let target =
+        "First, let us open the windows, then we can take a look at the weather outside together.";
+    let u = utterance(1, 900, 5600, text);
+    let originals = build_cues(std::slice::from_ref(&u), &HashMap::new());
+    assert_eq!(originals.len(), 1);
+    let targets = HashMap::from([(u.id.clone(), target.to_owned())]);
+    let pages = build_cues(&[u], &targets);
+    assert_eq!(pages.len(), 2);
+    assert_eq!(pages[0].original, "我们先打开窗户，");
+    assert_eq!(
+        pages[0].translation.as_deref(),
+        Some("First, let us open the windows,")
+    );
+    assert_eq!(
+        pages
+            .iter()
+            .map(|c| c.original.as_str())
+            .collect::<String>(),
+        text
+    );
+    assert_eq!(
+        pages
+            .iter()
+            .map(|c| c.translation.as_deref().unwrap())
+            .collect::<Vec<_>>()
+            .join(" "),
+        target
+    );
+    assert!(pages
+        .iter()
+        .all(|c| display_cols(c.translation.as_deref().unwrap()) <= 56));
+    assert_eq!(pages[0].start_ms, 900);
+    assert!(pages[0].end_ms <= pages[1].start_ms);
+    assert_eq!(pages[0].id, originals[0].id);
+}
+
+#[test]
+fn multilingual_paging_preserves_whole_words_and_indivisible_pairs() {
+    let words = ["今天", "我们", "学习", "中文", "一起", "阅读"];
+    let source = words.repeat(6).join("");
+    let pages = build_cues(&[utterance(1, 0, 16000, &source)], &HashMap::new());
+    assert!(pages.len() >= 3);
+    assert_eq!(
+        pages
+            .iter()
+            .map(|c| c.original.as_str())
+            .collect::<String>(),
+        source
+    );
+    assert!(pages
+        .iter()
+        .all(|c| words.iter().any(|w| c.original.ends_with(w))));
+    let target =
+        "A winter migration can take several months across this region, depending on the weather. "
+            .repeat(3);
+    let u = utterance(2, 0, 7000, "Migration");
+    let cues = build_cues(&[u.clone()], &HashMap::from([(u.id, target.trim().into())]));
+    // One source word has no timed alignment points. Preserve it and wrap the
+    // corresponding translation; never alternate blank captions or half a word.
+    assert_eq!(cues.len(), 1);
+    assert_eq!(cues[0].original, "Migration");
+    assert_eq!(cues[0].translation.as_deref(), Some(target.trim()));
+    let wrapped = wrap_lines(cues[0].translation.as_deref().unwrap());
+    assert_eq!(wrapped.lines().collect::<Vec<_>>().join(" "), target.trim());
+    assert!(wrapped.lines().all(|line| display_cols(line) <= 42));
+
+    let punctuation = "！".repeat(50);
+    assert!(wrap_lines(&punctuation)
+        .lines()
+        .all(|line| display_cols(line) <= 42));
+}
+
+#[test]
+fn decimal_stays_whole_and_short_neighbors_cannot_recreate_oversized_cues() {
+    let text = "The reading is 3.14 today.";
+    let cues = build_cues(&[utterance(1, 0, 2000, text)], &HashMap::new());
+    assert_eq!(cues.len(), 1);
+    assert_eq!(cues[0].original, text);
+
+    let sentence = "Use the first full sentence here. ";
+    let source = sentence.repeat(12);
+    let translation = "这是完整的中文句子，需要保留全部字词。".repeat(12);
+    let fast = utterance(1, 0, 2100, source.trim_end());
+    let id = fast.id.clone();
+    let cues = build_cues(&[fast], &HashMap::from([(id, translation.clone())]));
+    assert!(cues.len() > 1);
+    assert!(cues.iter().all(|c| display_cols(&c.original) <= 84
+        && display_cols(c.translation.as_deref().unwrap()) <= 84));
+    assert!(cues.windows(2).all(|w| w[0].end_ms <= w[1].start_ms));
+    assert_eq!(
+        cues.iter()
+            .map(|c| c.original.as_str())
+            .collect::<Vec<_>>()
+            .join(" "),
+        source.trim()
+    );
+    assert_eq!(
+        cues.iter()
+            .map(|c| c.translation.as_deref().unwrap())
+            .collect::<String>(),
+        translation
+    );
+}

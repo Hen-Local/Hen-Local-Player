@@ -284,11 +284,18 @@ time, kbd {
   font-size: var(--main-size);
   font-weight: 600;
   line-height: 1.28;
-  text-wrap: balance;
-  overflow-wrap: anywhere;
   paint-order: stroke fill;
   -webkit-text-stroke: 0.11em #151515;
   color: white;
+}
+.subtitle-overlay > div {
+  /* Keep each language near 21 full-width characters even on a wide screen. */
+  max-inline-size: 22em;
+  margin-inline: auto;
+  white-space: pre-line;
+  text-wrap: balance;
+  line-break: strict;
+  overflow-wrap: anywhere;
 }
 .subtitle-overlay span {
   background: rgba(0, 0, 0, var(--sub-bg));

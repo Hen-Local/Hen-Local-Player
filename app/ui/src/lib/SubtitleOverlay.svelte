@@ -55,7 +55,7 @@
       style:--sub-bg={p.settings.subtitleBackground}
     >
       {#each lines as line, i}{#if line}<div dir="auto" class:secondary={!tracks.timeline && i > 0}>
-            <span style:white-space="pre-line">{line}</span>
+            <span>{line}</span>
           </div>{/if}{/each}
     </div>
   </div>{/if}
