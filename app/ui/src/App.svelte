@@ -18,25 +18,21 @@
   import './styles.css'
   import './lib/player-panels.css'
 
-  type SettingsTab = 'subtitles' | 'playback'
   type LeftPanel = 'library' | 'playlist'
-  type Panel = LeftPanel | SettingsTab | 'transcript'
+  type Panel = LeftPanel | 'subtitles' | 'transcript'
   type Side = 'left' | 'right'
   const mac = /Mac/.test(navigator.platform)
   const nativeMac = !mockMode && mac
   let shell: HTMLElement
   let samplePath = $state<string | null>(mockMode ? 'fixture_ja.mp4' : null)
   let leftPanel = $state<LeftPanel | null>(null)
-  let lastSettingsTab: SettingsTab = 'subtitles'
-  let playbackOpen = $state(false)
   let subtitleOverride = $state<boolean | null>(null)
-  let rightTab: SettingsTab | null = $derived(!p.media ? null :
-    (subtitleOverride ?? p.settings.showTranscriptPanel) ? 'subtitles' : playbackOpen ? 'playback' : null)
+  let subtitlesOpen = $derived(!!p.media && (subtitleOverride ?? p.settings.showTranscriptPanel))
   let preferenceWrite = Promise.resolve()
   let preferenceRevision = 0
   let menuOpen = $state(false)
   let lastSide = $state<Side>('right')
-  let dismissSide: Side = $derived(leftPanel && (!rightTab || lastSide === 'left') ? 'left' : 'right')
+  let dismissSide: Side = $derived(leftPanel && (!subtitlesOpen || lastSide === 'left') ? 'left' : 'right')
   let wasPlayingFile = false
 
   function focusMore() {
@@ -56,12 +52,9 @@
     placeOverlays()
     menuOpen = !menuOpen
   }
-  function setRight(tab: SettingsTab | null) {
-    if (tab) lastSettingsTab = tab
-    playbackOpen = tab === 'playback'
-    const showSubtitles = tab === 'subtitles'
+  function setSubtitlesOpen(showSubtitles: boolean) {
     subtitleOverride = showSubtitles
-    // Keep the visible tab responsive while serializing preference changes.
+    // Reflect the toggle immediately while serializing saved preferences.
     const revision = ++preferenceRevision
     preferenceWrite = preferenceWrite.then(async () => {
       if (p.settings.showTranscriptPanel !== showSubtitles)
@@ -74,14 +67,13 @@
     menuOpen = false
     const left = id === 'library' || id === 'playlist'
     const side = left ? 'left' : 'right'
-    const tab = id === 'transcript' ? 'subtitles' : id
-    if (toggle && (left ? leftPanel === id : rightTab === tab)) {
+    if (toggle && (left ? leftPanel === id : subtitlesOpen)) {
       closePanel(side)
       return
     }
     lastSide = side
     if (left) leftPanel = id
-    else setRight(id === 'transcript' ? 'subtitles' : id)
+    else setSubtitlesOpen(true)
     void tick().then(() => {
       const selector = id === 'transcript'
         ? '.right-inspector .subtitle-workspace'
@@ -91,15 +83,9 @@
       target?.focus({ preventScroll: true })
     })
   }
-  function transportPanel(id: Panel) {
-    if (id === 'subtitles') {
-      if (rightTab) closePanel('right')
-      else showPanel(lastSettingsTab)
-    } else showPanel(id, true)
-  }
   function closePanel(side: Side) {
     if (side === 'left') leftPanel = null
-    else setRight(null)
+    else setSubtitlesOpen(false)
     const selector = side === 'right' ? '.settings-trigger' : p.media ? '.playlist-trigger' : '.more-trigger'
     shell?.querySelector<HTMLButtonElement>(selector)?.focus({ preventScroll: true })
     lastSide = side === 'left' ? 'right' : 'left'
@@ -127,7 +113,7 @@
       focusMore()
       return
     }
-    if (e.key === 'Escape' && (leftPanel || rightTab)) {
+    if (e.key === 'Escape' && (leftPanel || subtitlesOpen)) {
       e.preventDefault()
       const focused = (e.target as Element | null)?.closest?.('.inspector')
       const side = focused?.classList.contains('left-inspector') ? 'left'
@@ -236,11 +222,6 @@
       () => void p.act(() => getCurrentWindow().startDragging()))
     void p.act(() => p.init())
     if (!mockMode) void p.act(async () => { samplePath = await backend.call('get_sample_media') })
-    function optionsFromMenu() {
-      menuOpen = false
-      showPanel('playback')
-    }
-    window.addEventListener('hlp:playback-options', optionsFromMenu)
     function fromMenu(e: Event) {
       const id = (e as CustomEvent).detail
       if (['library', 'playlist', 'subtitles', 'transcript'].includes(id))
@@ -250,7 +231,6 @@
     return () => {
       if (stopDragging) stopDragging()
       window.removeEventListener('player:panel', fromMenu)
-      window.removeEventListener('hlp:playback-options', optionsFromMenu)
       p.dispose()
     }
   })
@@ -274,10 +254,7 @@
     document.title = p.media ? p.media.title + ' · ' + p.t('app') : p.t('app')
     if (!!p.media !== wasPlayingFile) {
       wasPlayingFile = !!p.media
-      if (!p.media) {
-        leftPanel = null
-        playbackOpen = false
-      }
+      if (!p.media) leftPanel = null
       menuOpen = false
     }
     if (p.dialog) menuOpen = false
@@ -288,8 +265,8 @@
 <main bind:this={shell} class="app" class:desktop={!mockMode} class:watching={!!p.media}
   class:fullscreen={p.fullscreen}>
   {#if p.media}
-    <Player onpanel={transportPanel} onmore={toggleMenu} keepControls={menuOpen || !!leftPanel || !!rightTab}
-      subtitlesOpen={!!rightTab} playlistOpen={leftPanel === 'playlist'} />
+    <Player onpanel={(id) => showPanel(id, true)} onmore={toggleMenu} keepControls={menuOpen || !!leftPanel || subtitlesOpen}
+      {subtitlesOpen} playlistOpen={leftPanel === 'playlist'} />
   {:else}
     <section class="idle-stage" aria-label={p.t('player')}>
       <div class="welcome" class:has-history={p.recent.length > 0}>
@@ -343,12 +320,12 @@
     </aside>
   {/if}
   {#if p.media}
-    {#if leftPanel || rightTab}
+    {#if leftPanel || subtitlesOpen}
       <button class="panel-dismiss-surface" tabindex="-1" aria-label={p.t('close')}
         aria-controls={dismissSide === 'left' ? 'playlist-sidebar' : 'player-settings'}
         onclick={() => closePanel(dismissSide)}></button>
     {/if}
-    <PlayerSettings tab={rightTab} onselect={setRight} onfocus={() => (lastSide = 'right')}
+    <PlayerSettings open={subtitlesOpen} onfocus={() => (lastSide = 'right')}
       onclose={() => closePanel('right')} />
   {/if}
   {#if menuOpen}

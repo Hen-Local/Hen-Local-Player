@@ -55,3 +55,7 @@ On November 23, 2026, Chrome and WebKit opened the bundled Japanese sample throu
 In both engines, clicking each of the seven presets set the media element to 0.5×, 0.75×, 1×, 1.25×, 1.5×, 2× and 4× in turn. Home and End on the speed slider selected 0.25× and 5×. Arrow Left then selected 4.75×, which Playback Settings displayed correctly. Selecting a preset in Settings updated the movie again. Escape returned keyboard focus to the speed button.
 
 The Chrome glass check sampled the same portion of the transport over a warm and a cool background. The samples changed from RGB (122, 68, 75) and (57, 100, 111) in the previous build to (164, 68, 76) and (51, 122, 137). With Reduce Transparency enabled, both measured (36, 38, 45). The local checks used `node /tmp/hlp-transport-sizing.cjs` and `node /tmp/hlp-transport-glass.cjs` against Vite. `npm --prefix app/ui run check` reported zero errors and warnings.
+
+## Picture in Picture in the floating controls
+
+On November 23, 2026, Chrome opened and closed Picture in Picture using its standard video API through the new transport button. Playwright WebKit exercised the corresponding presentation-mode event path with a simulated PiP window. With a supported video loaded, both engines checked 159 viewport widths from 320 through 1440 CSS pixels. The play button stayed centered, every visible button or slider passed center-point hit testing, and adjacent hit targets did not overlap.

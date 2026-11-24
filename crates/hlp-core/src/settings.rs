@@ -37,7 +37,7 @@ impl Default for Settings {
             bilingual_order: BilingualOrder::TranslationFirst,
             subtitle_scale: 1.,
             subtitle_background: 0.,
-            subtitle_bottom_offset: 0.06,
+            subtitle_bottom_offset: 0.05,
             show_transcript_panel: false,
             lookahead_seconds: 180,
             process_whole_file: true,
@@ -64,6 +64,7 @@ mod tests {
     fn partial_preferences_get_defaults() {
         let s: Settings = serde_json::from_str(r#"{"subtitleScale":1.6}"#).unwrap();
         assert_eq!(s.subtitle_scale, 1.6);
+        assert_eq!(s.subtitle_bottom_offset, 0.05);
         assert_eq!(s.lookahead_seconds, 180);
         assert_eq!(s.source_language, "auto");
         assert_eq!(

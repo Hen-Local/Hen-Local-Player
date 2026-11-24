@@ -58,9 +58,8 @@
   accent-color: var(--accent-text);
 }
 
-.app .inspector :is(.select-box select, .track-field select, .track-field input),
-.app .player-dialog .dialog-body :is(select, input:not([type='range'], [type='checkbox'])),
-.app .playback-sheet :is(input, select) {
+.app .inspector :is(.select-box select, .delay-stepper input),
+.app .player-dialog .dialog-body :is(select, input:not([type='range'], [type='checkbox'])) {
   min-width: 0;
   min-height: 34px;
   border: 1px solid var(--line);
@@ -147,20 +146,18 @@
 .app .right-inspector .panel-title {
   padding-inline: var(--inspector-inset);
 }
-.app .right-inspector .inspector-tabs {
-  margin: 7px var(--inspector-inset);
-}
 .app .right-inspector {
+  container: subtitles / inline-size;
   font-size: 13px;
   line-height: 1.4;
 }
 .app .right-inspector :is(button, select, input) {
   font-size: 13px;
 }
-.app .right-inspector :is(.track-field > span:first-child, .track-field > label, .select-field > span:first-child, .slider-setting > span) {
+.app .right-inspector :is(.track-field > span:first-child, .delay-setting > label, .slider-setting > span) {
   color: var(--sub);
   font-size: 12px;
-  font-weight: 560;
+  font-weight: 520;
 }
 .app .right-inspector .track-picker,
 .app .right-inspector .coverage-summary {
@@ -214,24 +211,95 @@
   gap: 5px;
   min-width: 0;
 }
-.app .right-inspector .languages { gap: 12px; }
-.app .right-inspector .language-arrow { display: none; }
-.app .right-inspector .track-field select { max-width: 100%; text-overflow: ellipsis; }
-.app .right-inspector .delay-stepper {
-  display: flex;
+.app .inspector .select-box select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  min-height: 32px;
+  padding: 4px 27px 4px 9px;
+  border-radius: 7px;
+  background: rgb(19 21 26 / 67%);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 500;
+  text-overflow: ellipsis;
+}
+.app .inspector .select-box { min-width: 0; }
+.app .right-inspector .track-sources {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-block-start: 8px;
+}
+.app .right-inspector :is(.track-sources, .list-tools) button,
+.app .right-inspector .models-action {
+  min-height: 31px;
+  padding: 4px 6px;
   gap: 5px;
+  font-size: 12px;
+  font-weight: 540;
+}
+.app .right-inspector .models-action { justify-self: start; }
+.app .right-inspector .expanded-tools .track-field,
+.app .right-inspector .delay-setting {
+  display: grid;
+  grid-template-columns: minmax(70px, .67fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.app .right-inspector .expanded-tools .display-field { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+/* Keep the native picker and allow its selected language pair to wrap in narrow drawers. */
+.app .right-inspector .display-choice { display: grid; }
+.app .right-inspector .display-choice select {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  color: transparent;
+}
+.app .right-inspector .selected-languages {
+  z-index: 1;
+  min-height: 32px;
+  padding: 7px 27px 7px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 18px;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+.app .right-inspector .display-choice svg { z-index: 1; }
+.app .right-inspector .delay-stepper {
+  display: grid;
+  grid-template-columns: 29px minmax(0, 1fr) 29px;
+  gap: 3px;
 }
 .app .right-inspector .delay-stepper :is(input, button) {
-  min-height: 30px;
+  min-height: 31px;
+  padding: 3px;
   text-align: center;
 }
-.app .right-inspector .delay-stepper input { width: 5.5em; }
-.app .right-inspector .subtitle-file-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.app .right-inspector .delay-stepper input {
+  appearance: textfield;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
 }
-.app .right-inspector .subtitle-file-actions button { justify-content: flex-start; }
+.app .right-inspector .delay-stepper input::-webkit-inner-spin-button { appearance: none; }
+.app .right-inspector .list-tools {
+  display: flex;
+  justify-content: flex-end;
+  flex: none;
+  padding: 6px var(--inspector-inset);
+  border-bottom: 1px solid var(--hairline);
+}
+@container subtitles (max-width: 270px) {
+  .app .right-inspector .expanded-tools .track-field,
+  .app .right-inspector .delay-setting { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
+@container subtitles (max-width: 220px) {
+  .app .right-inspector .track-sources { grid-template-columns: minmax(0, 1fr); }
+}
+
 .app .right-inspector .cue-row {
   gap: 9px;
   padding: 10px var(--inspector-inset);
@@ -286,24 +354,6 @@
   padding: 14px 16px;
 }
 
-.app .inspector .track-field {
-  width: 100%;
-}
-
-.app .inspector .track-field select {
-  width: 100%;
-  padding-inline: 8px;
-}
-
-.app .inspector .delay-stepper {
-  gap: 3px;
-}
-
-.app .inspector .import-subtitle,
-.app .inspector .delay-stepper button {
-  min-height: 32px;
-}
-
 .app .inspector .mode-group,
 .app .player-dialog .tabs {
   display: grid;
@@ -325,17 +375,12 @@
 }
 
 .app .inspector .mode-group button.selected,
-.app .inspector .inspector-tabs button[aria-selected='true'],
 .app .player-dialog :is(.tabs, .theme-picker) button[aria-pressed='true'],
-.app .playback-sheet button[aria-pressed='true'] {
+.app .left-inspector .repeat-mode[aria-pressed='true'] {
   background: var(--accent-soft);
   border-color: color-mix(in srgb, var(--accent-text) 56%, transparent);
   color: var(--ink);
   box-shadow: none;
-}
-
-.app .inspector .inspector-tabs button[aria-selected='true'] {
-  color: var(--accent-text);
 }
 
 /* Modal dialogs */
@@ -438,77 +483,79 @@
 }
 
 .subtitle-appearance input[type='range'] {
+  appearance: none;
   width: 100%;
+  min-width: 0;
+  height: 20px;
+  padding: 0;
   margin: 0;
-  min-height: 18px;
+  border: 0;
+  background: transparent;
   cursor: pointer;
 }
-
-/* The Playback tab scrolls independently in the right sidebar. */
-.app .playback-sheet {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  padding: 0 var(--inspector-inset) 14px;
-  overflow: hidden auto;
-  overscroll-behavior: none contain;
+.subtitle-appearance input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, var(--accent-text) var(--range-fill), var(--line) var(--range-fill));
+}
+.subtitle-appearance input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -5px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 40%);
+}
+.subtitle-appearance input[type='range']::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.subtitle-appearance input[type='range']::-moz-range-progress {
+  height: 4px;
+  background: var(--accent-text);
+}
+.subtitle-appearance input[type='range']::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ink);
 }
 
-.app .playback-sheet :is(.option-row, form, .option-field) {
+.app .left-inspector { container: playlist / inline-size; }
+.app .left-inspector .chapter-choice { padding: 6px var(--inspector-inset); }
+.app .left-inspector .playlist-actions {
+  flex: none;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 8px var(--inspector-inset);
+}
+.app .left-inspector .playlist-navigation {
   display: flex;
-  gap: 6px;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.app .playback-sheet :is(form, .option-row) {
-  min-height: 41px;
-  margin: 0;
-  border-bottom: 1px solid var(--hairline);
-  color: var(--sub);
-  font-size: 12px;
-  font-weight: 580;
-}
-
-.app .playback-sheet .option-field {
-  min-width: 0;
+  margin-inline-start: auto;
   gap: 3px;
 }
-
-.app .playback-sheet button,
-.app .playback-sheet :is(input, select) {
-  padding: 4px 7px;
-  min-height: 30px;
-  width: auto;
-  font-size: 13px;
-  line-height: 1.25;
+.app .left-inspector .playlist-actions button {
+  min-height: 31px;
+  padding: 3px 7px;
+  font-size: 12px;
 }
-
-.app .playback-sheet :is(.nav-file, .icon) {
-  min-width: 31px;
+.app .left-inspector .playlist-navigation button {
+  width: 30px;
+  padding-inline: 0;
 }
+.app .left-inspector .repeat-mode[aria-pressed='true'] { color: var(--accent-text); }
 
-.app .playback-sheet .repeat-mode {
-  border-color: transparent;
+@container playlist (max-width: 218px) {
+  .app .left-inspector .playlist-actions { padding-inline: 6px; }
+  .app .left-inspector .add-files span { display: none; }
 }
-
-.app .playback-sheet .pip-toggle {
-  margin-top: 7px;
-}
-
-.app .playback-sheet input {
-  width: 78px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
-.app .playback-sheet select {
-  max-width: 158px;
-}
-
-.app .playback-sheet [role='alert'] {
-  display: block;
-  margin: 8px 0 0;
+@container playlist (max-width: 145px) {
+  .app .left-inspector .playlist-actions { gap: 2px; padding-inline: 4px; }
+  .app .left-inspector .playlist-navigation { gap: 2px; }
+  .app .left-inspector .playlist-actions button { width: 25px; padding: 2px; }
 }
 
 @media (max-width: 399px) {

@@ -9,6 +9,9 @@
     buffered = 0,
     subtitlesOpen = false,
     playlistOpen = false,
+    pipAvailable,
+    pipActive,
+    onpip,
     onsettings,
     onplaylist,
     onmore,
@@ -17,6 +20,9 @@
     buffered?: number
     subtitlesOpen?: boolean
     playlistOpen?: boolean
+    pipAvailable: boolean
+    pipActive: boolean
+    onpip: () => void
     onsettings: () => void
     onplaylist: () => void
     onmore: () => void
@@ -166,6 +172,11 @@
   </div>
 
   <div class="tool-buttons">
+    {#if pipAvailable}
+      <button class="float-button pip-trigger" title={p.t('pictureInPicture')}
+        aria-label={p.t('pictureInPicture')} aria-pressed={pipActive}
+        onclick={onpip}><Icon name="pip" size={21} /></button>
+    {/if}
     <button
       class="float-button playlist-trigger"
       title={p.t('playlist')}
@@ -176,8 +187,8 @@
     >
     <button
       class="float-button settings-trigger"
-      title={p.t('playerSettings')}
-      aria-label={p.t('playerSettings')}
+      title={p.t('subtitles')}
+      aria-label={p.t('subtitles')}
       aria-controls="player-settings"
       aria-expanded={subtitlesOpen}
       onclick={onsettings}><Icon name="settings" size={21} /></button
@@ -353,6 +364,7 @@
     background: rgb(255 255 255 / 18%);
   }
   .float-bar button:hover:not(:disabled),
+  .float-bar button[aria-pressed='true'],
   .float-bar button[aria-expanded='true'] {
     color: white;
     background: rgb(255 255 255 / 14%);
@@ -517,8 +529,8 @@
     .level { width: 32px; }
     .sound { margin-right: 0; }
   }
-  @container (max-width: 356px) {
-    .float-bar { padding-inline: 7px; gap: 2px; }
+  @container (max-width: 366px) {
+    .float-bar { padding-inline: 5px; gap: 2px; }
     .float-bar button.float-button { width: 26px; }
     .float-bar button.play-button { width: 32px; }
     .float-bar button.speed-trigger { width: 39px; }

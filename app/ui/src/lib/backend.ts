@@ -29,7 +29,6 @@ export interface Commands {
   close_media: [ undefined, void ]
   choose_media_folder: [ undefined, string[] ]
   list_media_siblings: [{ path: string }, { folder: string; files: string[] } | null]
-  save_video_frame: [ { sessionId: string; ms: number }, boolean ]
   get_sample_media: [ undefined, string | null ]
   list_chapters: [ { sessionId: string }, { startMs: number; title: string }[] ]
   open_media: [ { path: string }, void ]
@@ -70,7 +69,7 @@ export interface Events {
   'setup://progress': ComponentStatus
   'download://progress': DownloadProgress
   'app://open-files': string[]
-  'app://menu': 'open' | 'open-folder' | 'close-media' | 'url' | 'export' | 'play-pause' | 'playlist' | 'previous-file' | 'next-file' | 'seek-backward' | 'seek-forward' | 'mute' | 'audio-tracks' | 'volume-up' | 'volume-down' | 'repeat' | 'fullscreen' | 'subtitles' | 'transcript' | 'subtitle-file' | 'find-subtitles' | 'playback-options' | 'settings'
+  'app://menu': 'open' | 'open-folder' | 'close-media' | 'url' | 'export' | 'play-pause' | 'playlist' | 'previous-file' | 'next-file' | 'seek-backward' | 'seek-forward' | 'mute' | 'volume-up' | 'volume-down' | 'repeat' | 'fullscreen' | 'subtitles' | 'transcript' | 'subtitle-file' | 'find-subtitles' | 'settings'
   'app://error': ErrorEvent
 }
 export interface Backend {

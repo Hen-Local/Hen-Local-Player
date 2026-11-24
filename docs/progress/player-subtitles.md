@@ -75,3 +75,11 @@ On November 23, 2026, `node /tmp/hen-ui-labels.cjs` played the sample and checke
 ## Subtitle search field alignment
 
 On November 23, 2026, `node /tmp/hen-subtitle-field-layout.cjs` opened the search dialog in Chrome and WebKit at 450 × 300 and 720 × 430 in both English and Chinese. Across all eight screenshots the movie title field and language picker measured 36 CSS pixels tall. Their painted top and bottom borders aligned to the same pixels and the chevron sat at the vertical midpoint. Tab reached the language picker, English keyboard selection chose Japanese, and Enter submitted the chosen language and edited title in both locales. Each run made one search request to the local fixture.
+
+## Subtitle inspector and playlist controls
+
+On November 23, 2026, the subtitle drawer opened directly to the track picker, with separate disclosures for Languages, Appearance & Timing and the subtitle list. Chrome and WebKit exercised the English and Chinese interfaces at 320 × 235, 450 × 300, 720 × 430 and 1440 × 900. Language fields measured 32 CSS pixels high at desktop width. The current bilingual selection showed the full names for Japanese and English, Chinese and English in both directions, and Macedonian and Traditional Chinese. At the minimum split-panel width the longer names wrapped within the picker.
+
+`node /tmp/hen-subtitle-playlist-inspector.cjs` passed four browser-and-locale runs against the Vite mock. Each run imported a local SRT, opened online search and export, changed the display language, vertical position and subtitle delay, and expanded a virtualized list of 1,807 generated cues. Regeneration displayed progress and restored the footer action when complete. The playlist cycled through all repeat modes, navigated two files, sought to a chapter and reopened without issuing another chapter query. A file with no chapters displayed only the playlist controls.
+
+`npm --prefix app/ui run check` reported zero diagnostics, and `npm --prefix app/ui run build` produced the production frontend.

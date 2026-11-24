@@ -71,7 +71,6 @@ fn main() {
             playback::list_media_siblings,
             playback::get_sample_media,
             playback::list_chapters,
-            playback::save_video_frame,
             subtitle_tracks::list_subtitle_tracks,
             subtitle_tracks::read_sidecar_subtitle,
             subtitle_tracks::read_embedded_subtitle,

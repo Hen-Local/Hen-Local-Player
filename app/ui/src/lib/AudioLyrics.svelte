@@ -2,7 +2,7 @@
   import { player as p } from './stores.svelte'
   import { generatedLines, subtitleTracks as tracks } from './subtitle-tracks.svelte'
   import { lastStartedCue, visibleIndices } from './subtitle-tracks'
-  import { fitCaption } from './fit-caption'
+  import CaptionRows from './CaptionRows.svelte'
   import Icon from './Icon.svelte'
 
   let authored = $derived(tracks.authored)
@@ -21,6 +21,7 @@
       id: 'id' in cue ? cue.id : first + i,
       index: first + i,
       lines: 'text' in cue ? cue.text.split('\n') : generatedLines(cue, p.settings, true),
+      startMs: cue.startMs, endMs: cue.endMs,
       seekTo: Math.max(0, cue.startMs + (authored ? 0 : tracks.delayMs)),
     }))
   })
@@ -45,11 +46,8 @@
           aria-current={row.index === current ? 'time' : undefined}
           tabindex={row.index === anchor ? 0 : -1}
           onclick={() => p.seek(row.seekTo)}>
-          {#each row.lines as line, lineIndex}
-            <span class="lyric-line" class:secondary={lineIndex > 0} use:fitCaption>
-              <span dir="auto">{line}</span>
-            </span>
-          {/each}
+          <CaptionRows lines={row.lines} progress={(time - row.startMs) / (row.endMs - row.startMs)}
+            authored={!!authored} audio />
         </button>
       {/each}
     </div>
@@ -111,17 +109,9 @@
   button.lyric.resting { opacity: .68; }
   button.lyric.current, button.lyric:hover { opacity: 1; }
   button.lyric:hover { background: transparent; }
-  .lyric-line {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    width: 100%;
-    min-height: 1.2em;
-    white-space: nowrap;
-  }
-  .lyric-line > span { flex: none; }
-  .lyric-line.secondary { font-size: .74em; font-weight: 500; letter-spacing: 0; }
-  .current .lyric-line > span:not(:empty) {
+  .lyric :global(.caption-row) { min-height: 1.2em; }
+  .lyric :global(.caption-row.secondary) { font-size: .74em; font-weight: 500; letter-spacing: 0; }
+  .current :global(.caption-row > span:not(:empty)) {
     background: rgb(0 0 0 / var(--lyric-background));
     border-radius: .12em;
   }

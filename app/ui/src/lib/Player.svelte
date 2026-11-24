@@ -5,7 +5,7 @@
   import SubtitleOverlay from './SubtitleOverlay.svelte'
   import Controls from './Controls.svelte'
   import Icon from './Icon.svelte'
-  import { inPiP, updatePiPCaptions } from './picture-in-picture'
+  import { inPiP, supportsPiP, togglePiP, updatePiPCaptions } from './picture-in-picture'
   import { subtitleTracks } from './subtitle-tracks.svelte'
   type Panel = 'subtitles' | 'playlist' | 'transcript' | 'library'
   let {
@@ -32,6 +32,7 @@
     controlsHeld = $state(false),
     controlsPressed = $state(false),
     pipActive = $state(false),
+    pipAvailable = $state(false),
     audioOnly = $state(false)
   let lastReport = 0,
     raf = 0,
@@ -47,8 +48,7 @@
     if (!stage || !surface || !video) return
     const { clientWidth: w, clientHeight: h } = stage,
       aspect = (video.videoWidth || 16) / (video.videoHeight || 9)
-    const width = p.videoFit === 'cover' ? w : Math.min(w, h * aspect),
-      height = p.videoFit === 'cover' ? h : width / aspect
+    const width = Math.min(w, h * aspect), height = width / aspect
     const top = (h - height) / 2
     box = { width, height, left: (w - width) / 2, top }
     pictureBottomGap = surface.clientHeight - stage.offsetTop - top - height
@@ -166,16 +166,19 @@
     }
   })
   $effect(() => {
-    p.videoFit
-    measure()
-  })
-  $effect(() => {
     const element = video
-    if (!element) return
+    if (!element) {
+      pipActive = pipAvailable = false
+      return
+    }
     const update = () => {
       pipActive = inPiP(element)
+      pipAvailable = !!element.videoWidth && supportsPiP(element)
     }
     const events = [
+      'loadedmetadata',
+      'resize',
+      'emptied',
       'enterpictureinpicture',
       'leavepictureinpicture',
       'webkitpresentationmodechanged',
@@ -198,6 +201,10 @@
     nativeCaptions.track.mode = 'showing'
     updatePiPCaptions(nativeCaptions.track, subtitleTracks.pipCues(p.cues, p.settings))
   })
+  function togglePictureInPicture() {
+    const element = video
+    if (element) void p.act(() => togglePiP(element))
+  }
   function clickStage(e: MouseEvent) {
     if (
       wakeTap ||
@@ -317,7 +324,6 @@
             bind:this={video}
             draggable={mockMode ? undefined : false}
             src={url}
-            style:object-fit={p.videoFit}
             data-session={p.media.sessionId}
             preload="auto"
             playsinline
@@ -371,6 +377,9 @@
     >
       <Controls
         {buffered}
+        {pipAvailable}
+        {pipActive}
+        onpip={togglePictureInPicture}
         {subtitlesOpen}
         {playlistOpen}
         onsettings={() => onpanel?.('subtitles')}

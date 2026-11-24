@@ -287,13 +287,7 @@ time, kbd {
   -webkit-text-stroke: 0.11em #151515;
   color: white;
 }
-.subtitle-overlay > div {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-block-size: 1.28em;
-  white-space: nowrap;
-}
+.subtitle-overlay .caption-row { min-block-size: 1.28em; }
 .subtitle-overlay span {
   flex: none;
   background: rgba(0, 0, 0, var(--sub-bg));
@@ -1024,24 +1018,6 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
 .app .left-inspector { width: var(--playlist-width); left: 0; border-radius: 0; border-width: 0 1px 0 0; }
 .app .right-inspector { width: var(--settings-width); right: 0; border-radius: 0; border-width: 0 0 0 1px; }
 .native-mac .app:not(.fullscreen) .left-inspector { padding-top: 36px; }
-.inspector-page { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
-.inspector-tabs {
-  display: flex;
-  flex: none;
-  gap: 2px;
-  margin: 0 10px 6px;
-  padding: 3px;
-  border-radius: 8px;
-  background: #08090c4a;
-}
-.app .inspector-tabs button {
-  flex: 1; min-width: 0; min-height: 28px; padding: 4px 2px; border: 0;
-  border-radius: 5px; background: transparent; color: #afb1bf; font-size: 11px; font-weight: 570;
-}
-.app .inspector-tabs button[aria-selected='true'] {
-  background: #ffffff12; color: var(--glass-accent);
-}
-.app .inspector-tabs button:hover:not(:disabled) { color: white; background: #ffffff15; }
 .panel-dismiss-surface { display: none; }
 @media (max-width: 980px), (max-height: 540px) {
   .app.watching {
@@ -1090,8 +1066,6 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
 }
 @media (max-height: 400px) {
   .app.watching .inspector .panel-title { min-height: 30px; padding-block: 2px; }
-  .app.watching .inspector .inspector-tabs { margin-block: 3px; }
-  .app.watching .inspector .inspector-tabs button { min-height: 24px; }
 }
 @media (max-width: 530px) {
   .welcome { width: min(360px, calc(100% - 46px)); }

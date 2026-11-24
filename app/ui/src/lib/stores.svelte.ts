@@ -70,7 +70,6 @@ class PlayerState {
   error = $state('')
   notice = $state('')
   video = $state.raw<HTMLVideoElement | null>(null)
-  videoFit = $state<'contain' | 'cover'>('contain')
   queue = $state.raw<{ path: string; title: string }[]>([])
   queueFolder = $state('')
   currentPath = $state('')
@@ -572,9 +571,6 @@ class PlayerState {
           case 'volume-down':
             this.volume = Math.max(0, this.volume - 0.05)
             break
-          case 'audio-tracks':
-            if (this.media) window.dispatchEvent(new Event('hlp:playback-options'))
-            break
           case 'mute':
             this.mute()
             break
@@ -584,7 +580,6 @@ class PlayerState {
           case 'fullscreen':
             void this.act(() => this.full(!this.fullscreen))
             break
-          case 'playback-options':
           case 'subtitle-file':
             if (this.media) window.dispatchEvent(new Event('hlp:' + action))
             break

@@ -1,4 +1,5 @@
 mod alignment;
+mod reading;
 pub use alignment::align_translated_phrases;
 
 use crate::types::*;
@@ -93,6 +94,7 @@ fn connector(right: &str) -> Option<usize> {
             &["但是", "可是", "不过", "然而", "而是", "但"],
         ),
         (&["then", "next", "afterwards"], &["然后", "接着", "随后"]),
+        (&["why"], &["为什么", "为何"]),
         (&["because", "since"], &["因为", "由于"]),
         (&["therefore", "so", "thus"], &["因此", "所以"]),
         (&["if", "unless"], &["如果", "假如", "除非"]),
@@ -449,7 +451,11 @@ fn stored_pages<'a>(
         if s.trim().is_empty() || t.trim().is_empty() {
             return None;
         }
-        pages.push((s, t));
+        if display_cols(s.trim()).max(display_cols(t.trim())) > reading::LINE_LIMIT {
+            pages.extend(paired_pages(s, t));
+        } else {
+            pages.push((s, t));
+        }
         (start_s, start_t) = (p.source_end, p.target_end);
     }
     Some(pages)
@@ -532,9 +538,18 @@ fn utterance_cues(utt: &Utterance, translation: &str, alignment: &[AlignedPhrase
     let total: Ms = regions.iter().map(|r| r.end_ms - r.start_ms).sum();
     let pages = stored_pages(text, translation, alignment)
         .unwrap_or_else(|| paired_pages(text.trim(), translation.trim()));
+    let pages = reading::pages(pages);
+    let source_only_timing = pages.iter().all(|(s, _)| !s.trim().is_empty());
     let weights: Vec<_> = pages
         .iter()
-        .map(|(s, _)| display_cols(s.trim()).max(1))
+        .map(|(s, t)| {
+            let width = display_cols(s.trim());
+            if source_only_timing {
+                width.max(1)
+            } else {
+                width.max(display_cols(t.trim())).max(1)
+            }
+        })
         .collect();
     let cols: usize = weights.iter().sum();
     let mut cum = 0;
@@ -549,8 +564,10 @@ fn utterance_cues(utt: &Utterance, translation: &str, alignment: &[AlignedPhrase
                 && display_cols(source.trim()).max(display_cols(target.trim())) < 20
             {
                 last.original.push_str(source);
-                if let Some(tr) = &mut last.translation {
-                    tr.push_str(target);
+                if !target.is_empty() {
+                    last.translation
+                        .get_or_insert_with(String::new)
+                        .push_str(target);
                 }
                 last.end_ms = end;
                 continue;
@@ -683,7 +700,7 @@ fn finish_cues(mut cues: Vec<Cue>) -> Vec<Cue> {
             let same = |j: usize| {
                 cues.get(j).is_some_and(|cue| {
                     cue.utterance_id == cues[i].utterance_id
-                        && cue_width(cue) + cue_width(&cues[i]) <= MAX_CUE_COLS
+                        && cue_width(cue) + cue_width(&cues[i]) < reading::LINE_LIMIT
                 })
             };
             let neighbor = if same(i + 1) {
@@ -694,9 +711,11 @@ fn finish_cues(mut cues: Vec<Cue>) -> Vec<Cue> {
             if let Some(left) = neighbor {
                 let right = cues.remove(left + 1);
                 cues[left].original.push_str(&right.original);
-                if let (Some(left), Some(right)) = (&mut cues[left].translation, right.translation)
-                {
-                    left.push_str(&right);
+                if let Some(tail) = right.translation {
+                    cues[left]
+                        .translation
+                        .get_or_insert_with(String::new)
+                        .push_str(&tail);
                 }
                 cues[left].end_ms = if cue_width(&cues[left]) > PAGE_COLS {
                     right.end_ms

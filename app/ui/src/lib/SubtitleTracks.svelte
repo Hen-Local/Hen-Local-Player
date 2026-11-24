@@ -52,57 +52,58 @@
 <div class="subtitle-track-tools track-picker">
   <label class="track-field">
     <span>{copy.track}</span>
-    <select
-      aria-label={copy.track}
-      disabled={!p.media}
-      value={tracks.selected === 'generated' && p.settings.subtitleMode === 'off'
-        ? 'off'
-        : tracks.selected}
-      onchange={(e) => {
-        const key = e.currentTarget.value
-        // Keep the actual track selected until an asynchronous read succeeds.
-        e.currentTarget.value =
-          tracks.selected === 'generated' && p.settings.subtitleMode === 'off'
-            ? 'off'
-            : tracks.selected
-        void p.act(() => tracks.select(key))
-      }}
-    >
-      <option value="off">{p.t('off')}</option>
-      <option value="generated">{copy.generated}</option>
-      {#if tracks.embedded.length}<optgroup label={copy.embedded}>
-          {#each tracks.embedded as track (track.order)}
-            <option value={'embedded:' + track.order}>{trackLabel(track)}</option>
-          {/each}
-        </optgroup>{/if}
-      {#if tracks.sidecars.length}<optgroup label={copy.nearby}>
-          {#each tracks.sidecars as name (name)}<option value={'sidecar:' + name}>{name}</option
-            >{/each}
-        </optgroup>{/if}
-      {#if tracks.files.length}<optgroup label={copy.file}>
-          {#each tracks.files as file (file.id)}
-            <option value={file.id}>{file.name}</option>
-          {/each}
-        </optgroup>{/if}
-    </select>
+    <span class="select-box">
+      <select
+        aria-label={copy.track}
+        disabled={!p.media}
+        value={tracks.selected === 'generated' && p.settings.subtitleMode === 'off'
+          ? 'off'
+          : tracks.selected}
+        onchange={(e) => {
+          const key = e.currentTarget.value
+          // Keep the actual track selected until an asynchronous read succeeds.
+          e.currentTarget.value =
+            tracks.selected === 'generated' && p.settings.subtitleMode === 'off'
+              ? 'off'
+              : tracks.selected
+          void p.act(() => tracks.select(key))
+        }}
+      >
+        <option value="off">{p.t('off')}</option>
+        <option value="generated">{copy.generated}</option>
+        {#if tracks.embedded.length}<optgroup label={copy.embedded}>
+            {#each tracks.embedded as track (track.order)}
+              <option value={'embedded:' + track.order}>{trackLabel(track)}</option>
+            {/each}
+          </optgroup>{/if}
+        {#if tracks.sidecars.length}<optgroup label={copy.nearby}>
+            {#each tracks.sidecars as name (name)}<option value={'sidecar:' + name}>{name}</option
+              >{/each}
+          </optgroup>{/if}
+        {#if tracks.files.length}<optgroup label={copy.file}>
+            {#each tracks.files as file (file.id)}
+              <option value={file.id}>{file.name}</option>
+            {/each}
+          </optgroup>{/if}
+      </select>
+      <Icon name="down" size={13} />
+    </span>
   </label>
   <div class="track-sources">
-    <button class="import-subtitle" title={p.t('subtitleFileTypes')}
+    <button class="import-subtitle" aria-label={p.t('openSubtitleFile')} title={p.t('subtitleFileTypes')}
       onclick={() => window.dispatchEvent(new Event('hlp:subtitle-file'))}>
-      <Icon name="folder" size={14} />{p.t('openSubtitleFile')}
+      <Icon name="folder" size={14} />{p.t('importSubtitleAction')}
     </button>
-    <button class="online-subtitles" aria-haspopup="dialog" aria-keyshortcuts="Meta+Shift+D Control+Shift+D"
+    <button class="online-subtitles" aria-label={p.t('findOnlineSubtitles')} aria-haspopup="dialog" aria-keyshortcuts="Meta+Shift+D Control+Shift+D"
       title={p.t('findOnlineSubtitles') + (/Mac/.test(navigator.platform) ? ' (⇧⌘D)' : ' (Ctrl+Shift+D)')}
       onclick={() => p.findOnlineSubtitles()}>
-      <Icon name="search" size={14} />{p.t('findOnlineSubtitles')}…
+      <Icon name="search" size={14} />{p.t('searchSubtitleAction')}
     </button>
   </div>
+  {#if tracks.discoveryError}
+    <button onclick={() => tracks.discover(p.media?.sessionId ?? '')}>{p.t('retryTracks')}</button>
+  {/if}
 </div>
 {#if tracks.loading || tracks.discovering}<small class="read-status" role="status"
     >{copy.loading}</small
   >{/if}
-
-<style>
-  .track-sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-  .track-sources button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; }
-</style>

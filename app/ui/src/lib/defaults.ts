@@ -10,7 +10,7 @@ export function defaults(): Settings {
     bilingualOrder: 'translation-first',
     subtitleScale: 1,
     subtitleBackground: 0,
-    subtitleBottomOffset: 0.06,
+    subtitleBottomOffset: 0.05,
     showTranscriptPanel: false,
     lookaheadSeconds: 180,
     processWholeFile: true,

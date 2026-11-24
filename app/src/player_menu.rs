@@ -58,7 +58,6 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         ("next-file", "Next File"),
         ("repeat", "Cycle Repeat Mode"),
         ("playlist", "Show Playlist"),
-        ("playback-options", "Playback Options…"),
     ] {
         playback.append(&item(app, id, label, None)?)?;
     }
@@ -66,7 +65,6 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     audio.append(&item(app, "mute", "Mute / Unmute", None)?)?;
     audio.append(&item(app, "volume-up", "Volume Up", None)?)?;
     audio.append(&item(app, "volume-down", "Volume Down", None)?)?;
-    audio.append(&item(app, "audio-tracks", "Audio Tracks…", None)?)?;
     let subtitles = Submenu::new(app, "Subtitles", true)?;
     for (id, label, key) in [
         ("subtitle-file", "Import Subtitles…", None),
@@ -127,8 +125,6 @@ pub fn handle(app: &AppHandle, id: &str) {
             | "mute"
             | "volume-up"
             | "volume-down"
-            | "audio-tracks"
-            | "playback-options"
             | "subtitle-file"
             | "find-subtitles"
             | "subtitles"

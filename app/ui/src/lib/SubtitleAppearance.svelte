@@ -19,6 +19,7 @@
         max={control.max}
         step={control.step}
         value={p.settings[control.key]}
+        style:--range-fill={((p.settings[control.key] - control.min) / (control.max - control.min)) * 100 + '%'}
         aria-label={p.t(control.label)}
         aria-valuetext={percent}
         oninput={(e) => { p.settings[control.key] = e.currentTarget.valueAsNumber }}

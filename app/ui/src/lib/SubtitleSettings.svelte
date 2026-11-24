@@ -12,6 +12,8 @@
   const targetName = $derived(languageName(target, p.locale))
   const twoLanguages = $derived(target !== 'none' && source !== target)
   const displayMode = $derived(twoLanguages ? p.settings.subtitleMode : 'original')
+  const languagePair = $derived(sourceName + ' + ' + targetName)
+  const displayName = $derived(displayMode === 'both' ? languagePair : displayMode === 'translation' ? targetName : sourceName)
 
   function delay(seconds: number) {
     if (Number.isFinite(seconds) && Number.isSafeInteger(Math.round(seconds * 1000)))
@@ -19,36 +21,50 @@
   }
 </script>
 
-<details class="track-settings">
-  <summary class="settings-disclosure"><Icon name="right" size={14} />{p.t('subtitleSettings')}</summary>
-  <div class="expanded-tools">
-    {#if tracks.selected === 'generated'}
-      <label class="track-field subtitle-language-choice">
-        <span>{p.t('displayLanguage')}</span>
-        <select aria-label={p.t('displayLanguage')} value={displayMode} onchange={(e) => p.act(() => tracks.setMode(e.currentTarget.value))}>
-          <option value="original">{sourceName}</option>
-          {#if twoLanguages}
-            <option value="translation">{targetName}</option>
-            <option value="both">{p.t('bothLanguages')} · {sourceName} + {targetName}</option>
-          {/if}
-        </select>
-      </label>
-    {/if}
-    <SubtitleAppearance />
-    {#if tracks.selected === 'generated'}
+{#if tracks.selected === 'generated'}
+  <details class="track-settings">
+    <summary class="settings-disclosure"><Icon name="right" size={14} />{p.t('subtitleLanguages')}</summary>
+    <div class="expanded-tools">
       <LanguageControls />
+      <label class="track-field display-field">
+        <span>{p.t('displayLanguage')}</span>
+        <span class="select-box display-choice">
+          <span class="selected-languages" aria-hidden="true">{displayName}</span>
+          <select aria-label={p.t('displayLanguage')} value={displayMode}
+            onchange={(e) => p.act(() => tracks.setMode(e.currentTarget.value))}>
+            <option value="original">{sourceName}</option>
+            {#if twoLanguages}
+              <option value="translation">{targetName}</option>
+              <option value="both">{languagePair}</option>
+            {/if}
+          </select>
+          <Icon name="down" size={13} />
+        </span>
+      </label>
       {#if twoLanguages && displayMode === 'both'}
         <label class="track-field">
           <span>{p.t('order')}</span>
-          <select aria-label={p.t('order')} value={p.settings.bilingualOrder}
-            onchange={(e) => p.act(() => p.update({ bilingualOrder: e.currentTarget.value as 'translation-first' | 'original-first' }))}>
-            <option value="translation-first">{targetName} · {p.t('onTop')}</option>
-            <option value="original-first">{sourceName} · {p.t('onTop')}</option>
-          </select>
+          <span class="select-box">
+            <select aria-label={p.t('order')} value={p.settings.bilingualOrder}
+              onchange={(e) => p.act(() => p.update({ bilingualOrder: e.currentTarget.value as 'translation-first' | 'original-first' }))}>
+              <option value="translation-first">{targetName} · {p.t('onTop')}</option>
+              <option value="original-first">{sourceName} · {p.t('onTop')}</option>
+            </select>
+            <Icon name="down" size={13} />
+          </span>
         </label>
       {/if}
-    {/if}
-    <div class="track-field">
+      <button class="models-action" onclick={() => (p.dialog = 'setup')}>
+        <Icon name="download" size={14} />{p.t('models')}
+      </button>
+    </div>
+  </details>
+{/if}
+<details class="track-settings">
+  <summary class="settings-disclosure"><Icon name="right" size={14} />{p.t('subtitleAppearance')}</summary>
+  <div class="expanded-tools">
+    <SubtitleAppearance />
+    <div class="delay-setting">
       <label for="track-delay-seconds">{p.t('subtitleDelay')}</label>
       <div class="delay-stepper">
         <button type="button" aria-label={p.t('earlier')} title={p.t('earlier')}
@@ -58,13 +74,6 @@
         <button type="button" aria-label={p.t('later')} title={p.t('later')}
           onclick={() => delay((tracks.delayMs + 100) / 1000)}>+</button>
       </div>
-    </div>
-    <div class="subtitle-file-actions">
-      {#if tracks.discoveryError}<button onclick={() => tracks.discover(p.media?.sessionId ?? '')}>{p.t('retryTracks')}</button>{/if}
-      {#if tracks.selected === 'generated' && p.cues.length}
-        <button onclick={() => (p.dialog = 'export')}><Icon name="export" size={14} />{p.t('exportSubs')}</button>
-      {/if}
-      <button onclick={() => (p.dialog = 'setup')}><Icon name="download" size={14} />{p.t('models')}</button>
     </div>
   </div>
 </details>

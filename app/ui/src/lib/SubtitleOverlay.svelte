@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte'
-  import { player as p, mockMode } from './stores.svelte'
-  import { subtitleTracks as tracks } from './subtitle-tracks.svelte'
-  import { fitCaption } from './fit-caption'
+  import { player as p, mockMode, cueAt } from './stores.svelte'
+  import { subtitleTracks as tracks, generatedLines } from './subtitle-tracks.svelte'
+  import CaptionRows from './CaptionRows.svelte'
   let {
     box,
     clearance,
@@ -10,7 +10,14 @@
   }: { box: { width: number; height: number; left: number; top: number }; clearance: number; audioOnly: boolean } =
     $props()
   let picker: HTMLInputElement
-  let lines = $derived(audioOnly ? [] : tracks.linesAt(p.ms, p.cues, p.settings))
+  let at = $derived(p.ms - tracks.delayMs)
+  let cue = $derived(!audioOnly && tracks.selected === 'generated' ? p.cues[cueAt(p.cues, at)] : undefined)
+  let lines = $derived(!audioOnly && tracks.authored
+    ? tracks.linesAt(p.ms, p.cues, p.settings) : generatedLines(cue, p.settings, true))
+  let progress = $derived(cue ? (at - cue.startMs) / (cue.endMs - cue.startMs) : 0)
+  // Bound the type scale geometrically on extreme portrait media, independently
+  // of the text being displayed.
+  let base = $derived(Math.min(box.height, box.width * 1.9) * p.settings.subtitleScale)
   $effect(() => {
     const id = p.media?.sessionId ?? ''
     untrack(() => {
@@ -53,14 +60,10 @@
     <div
       class="subtitle-overlay"
       style:bottom={Math.max(box.height * p.settings.subtitleBottomOffset, clearance) + 'px'}
-      style:--main-size={box.height * 0.042 * p.settings.subtitleScale + 'px'}
-      style:--sub-size={box.height * 0.034 * p.settings.subtitleScale + 'px'}
+      style:--main-size={base * 0.042 + 'px'}
+      style:--sub-size={base * 0.034 + 'px'}
       style:--sub-bg={p.settings.subtitleBackground}
     >
-      {#each lines as line, i}
-        <div dir="auto" class:secondary={!tracks.timeline && i > 0} use:fitCaption>
-          <span>{line}</span>
-        </div>
-      {/each}
+      <CaptionRows {lines} {progress} authored={!!tracks.authored} />
     </div>
   </div>{/if}

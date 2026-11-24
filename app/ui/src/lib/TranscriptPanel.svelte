@@ -77,6 +77,11 @@
   </button>
   <div id="subtitle-list" hidden={!expanded}>
     {#if expanded}
+      {#if !authored && p.cues.length}
+        <div class="list-tools">
+          <button onclick={() => (p.dialog = 'export')}><Icon name="export" size={14} />{p.t('exportSubs')}</button>
+        </div>
+      {/if}
       <div
         role="region"
         aria-label={p.t('subtitleList')}

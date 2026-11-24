@@ -18,6 +18,25 @@ fn utterance(id: usize, start: Ms, end: Ms, text: &str) -> Utterance {
         asr_model: None,
     }
 }
+fn assert_readable(cues: &[Cue], source: &str, target: &str) {
+    let joined = |text: &str| generated_line(text).replace(' ', "");
+    assert_eq!(
+        cues.iter()
+            .map(|c| c.original.replace(' ', ""))
+            .collect::<String>(),
+        joined(source)
+    );
+    assert_eq!(
+        cues.iter()
+            .filter_map(|c| c.translation.as_deref())
+            .map(|s| s.replace(' ', ""))
+            .collect::<String>(),
+        joined(target)
+    );
+    assert!(cues.iter().all(|c| display_cols(&c.original) <= 72
+        && display_cols(c.translation.as_deref().unwrap_or("")) <= 72));
+    assert!(cues.windows(2).all(|w| w[0].end_ms <= w[1].start_ms));
+}
 #[test]
 fn split_over_pause_and_linger() {
     let sentence = "Here is a longer sentence.";
@@ -85,12 +104,12 @@ fn length_bounds_pending_text_and_tiny_neighbor() {
         1,
         0,
         600,
-        "This opening statement is long. This following statement is long.",
+        "The first statement is long. The next one is long.",
     );
     let next = utterance(2, 640, 2000, "Next.");
     let cues = build_cues(&[tiny, next], &HashMap::new());
     assert_eq!(cues.len(), 2);
-    assert!(cues[0].original.contains("long This"));
+    assert!(cues[0].original.contains("long The"));
 }
 #[test]
 fn translations_follow_sentences_then_weights() {
@@ -174,15 +193,17 @@ fn multilingual_paging_preserves_whole_words_and_indivisible_pairs() {
     let u = utterance(2, 0, 7000, "Migration");
     let translations = HashMap::from([(u.id.clone(), target.trim().into())]);
     let cues = build_cues(&[u], &translations);
-    // A single source word stays with its translation when there are no
-    // alignment points. Neither language gains internal line breaks.
-    assert_eq!(cues.len(), 1);
+    assert!(cues.len() >= 4);
     assert_eq!(cues[0].original, "Migration");
+    assert!(cues[1..].iter().all(|c| c.original.is_empty()));
+    assert_readable(&cues, "Migration", &target);
     assert_eq!(
-        cues[0].translation.as_deref(),
-        Some(generated_line(&target).as_str())
+        cues.iter()
+            .filter_map(|c| c.translation.as_deref())
+            .collect::<Vec<_>>()
+            .join(" "),
+        generated_line(&target)
     );
-    assert_eq!(cues[0].translation.as_deref().unwrap().lines().count(), 1);
 }
 
 #[test]
@@ -317,11 +338,22 @@ fn cached_reordered_english_and_chinese_keep_complete_meanings() {
             std::slice::from_ref(&u),
             &HashMap::from([(u.id.clone(), t.into())]),
         );
-        assert_eq!(cues.len(), 1);
-        assert_eq!(cues[0].original, generated_line(s));
-        assert_eq!(cues[0].translation, Some(generated_line(t)));
+        assert_readable(&cues, s, t);
+        if start == 41158 {
+            assert!(cues.iter().any(|cue| cue.original.contains("高技能人才")
+                && cue
+                    .translation
+                    .as_deref()
+                    .unwrap()
+                    .contains("highly skilled professionals")));
+            assert!(cues
+                .iter()
+                .all(|c| !c.translation.as_deref().unwrap().ends_with(" the")));
+        } else {
+            assert_eq!(cues.len(), 1);
+        }
         assert_eq!(cues[0].start_ms, start);
-        assert!(cues[0].end_ms >= end);
+        assert!(cues.last().unwrap().end_ms >= end);
         assert!(translation_plan(s, t).is_none());
     }
 }
@@ -347,24 +379,30 @@ fn cached_mac_and_steamos_clauses_cover_their_speech() {
         std::slice::from_ref(&u),
         &HashMap::from([(u.id.clone(), [first_t, last_t].concat())]),
     );
-    assert_eq!(cues.len(), 2);
-    for (cue, (s, t)) in cues.iter().zip([(first_s, first_t), (last_s, last_t)]) {
-        assert_eq!(cue.original, generated_line(s));
-        assert_eq!(cue.translation, Some(generated_line(t)));
+    assert_readable(
+        &cues,
+        &[first_s, last_s].concat(),
+        &[first_t, last_t].concat(),
+    );
+    for name in ["windows api", "mac", "steamos"] {
+        assert!(cues.iter().any(|c| c.original.to_lowercase().contains(name)
+            && c.translation
+                .as_deref()
+                .unwrap()
+                .to_lowercase()
+                .contains(name)));
     }
+    assert!(cues.iter().all(|c| !c.original.ends_with("that your")));
     assert_eq!(cues[0].start_ms, 102694);
-    assert_eq!(cues[1].start_ms - cues[0].end_ms, 80);
-    assert!(cues[1].end_ms >= 114438);
+    assert!(cues.last().unwrap().end_ms >= 114438);
 
-    // A long cached utterance with no shared clause boundary stays readable
-    // until the speech ends, including after the old seven-second cap.
     let u = utterance(1, 2000, 15000, first_s);
     let fixed = build_cues(
         std::slice::from_ref(&u),
         &HashMap::from([(u.id.clone(), first_t.into())]),
     );
-    assert_eq!(fixed.len(), 1);
-    assert!(fixed[0].end_ms >= 15000);
+    assert_readable(&fixed, first_s, first_t);
+    assert!(fixed.last().unwrap().end_ms >= 15000);
 }
 
 #[test]
@@ -390,7 +428,7 @@ fn joined_sentences_and_missing_commas_use_existing_clause_boundaries() {
         std::slice::from_ref(&u),
         &HashMap::from([(u.id.clone(), t.into())]),
     );
-    assert_eq!(cues.len(), 3);
+    assert_readable(&cues, s, t);
     assert_eq!(cues[1].original, "到最后找到机会");
     assert_eq!(
         cues[1].translation.as_deref(),
@@ -570,4 +608,38 @@ fn only_original_punctuation_resolves_a_one_word_alignment_tie() {
     assert_eq!(&whole[cut..], " then carefully lift the cover.");
     assert!(align_translated_phrases(source, &whole.replace(',', ""), &spans).is_none());
     assert!(align_translated_phrases(source, &whole.replace("then", "and then"), &spans).is_none());
+}
+
+#[test]
+fn long_cached_question_keeps_names_and_reordered_clauses_together() {
+    let s = "那问题就来了，为什么像纳蒂亚、雷扎和娜塔莉亚这样的人才，在一个明明急需他们技能的国家，反而会遇到这么多坎儿呢？";
+    let t = "So the question arises: why do talents like Natiya, Reza, and Natalia face so many obstacles in a country that desperately needs their skills?";
+    let u = utterance(21, 164070, 173640, s);
+    let full = [AlignedPhrase {
+        source_end: s.len(),
+        target_end: t.len(),
+    }];
+    for alignment in [&full[..], &[]] {
+        let mut builder = CueBuilder::default();
+        let cues = builder.update_aligned([(&u, t, alignment)]);
+        assert_readable(&cues, s, t);
+        assert_eq!(cues.len(), 3);
+        assert_eq!(
+            cues[0].translation.as_deref(),
+            Some("So the question arises")
+        );
+        assert_eq!(
+            cues[1].translation.as_deref(),
+            Some("why do talents like Natiya Reza and Natalia")
+        );
+        assert!(cues[1].original.contains("纳蒂亚 雷扎和娜塔莉亚"));
+        assert!(cues[2].original.starts_with("在一个"));
+        assert!(cues[2]
+            .translation
+            .as_deref()
+            .unwrap()
+            .ends_with("needs their skills"));
+        assert_eq!(cues[0].start_ms, 164070);
+        assert!(cues.last().unwrap().end_ms >= 173640);
+    }
 }
