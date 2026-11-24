@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { tick } from 'svelte'
+  import { tick, untrack } from 'svelte'
   import { playbackSpeedPresets, player as p } from './stores.svelte'
   import { clock } from './format'
   import Icon from './Icon.svelte'
   import SeekCoverage from './SeekCoverage.svelte'
 
   let {
+    visible,
     buffered = 0,
     subtitlesOpen = false,
     playlistOpen = false,
@@ -17,6 +18,7 @@
     onmore,
     onhold,
   }: {
+    visible: boolean
     buffered?: number
     subtitlesOpen?: boolean
     playlistOpen?: boolean
@@ -38,6 +40,27 @@
   let speedOpen = $state(false)
   let speedGroup: HTMLDivElement, speedButton: HTMLButtonElement
   let speedSlider = $state<HTMLInputElement>()
+  let scrubWidth = $state(0), sampledTime = $state(0)
+  // The native clock is sufficient when the scrubber advances less than one
+  // pixel per timeupdate. Short clips and high speeds benefit from intermediate
+  // samples, local to the visible transport.
+  const sampleInterval = $derived(scrubWidth > 0 && p.duration > 0
+    ? Math.max(33, p.duration / (scrubWidth * p.rate)) : Infinity)
+  const sampleTransport = $derived(visible && p.playing && sampleInterval < 250)
+  $effect(() => {
+    const element = p.video
+    if (!sampleTransport || !element) return
+    const sample = () => { sampledTime = element.currentTime * 1000 }
+    sample()
+    const timer = window.setInterval(sample, sampleInterval)
+    element.addEventListener('seeking', sample)
+    return () => {
+      clearInterval(timer)
+      element.removeEventListener('seeking', sample)
+    }
+  })
+  // Keep hidden controls mounted for keyboard access without writing their DOM.
+  const playhead = $derived(!visible ? untrack(() => p.ms) : sampleTransport ? sampledTime : p.ms)
   const pct = (ms: number) => Math.min(100, Math.max(0, (ms * 100) / (p.duration || 1)))
 
   $effect(() => onhold(hoveringBar || keyboardFocus || pointerHeld || speedOpen, pointerHeld))
@@ -203,9 +226,10 @@
   </div>
 
   <div class="timeline" style:--time-width={clock(p.duration).length + 'ch'}>
-    <time>{clock(p.ms)}</time>
+    <time>{clock(playhead)}</time>
     <div
       class="scrubber"
+      bind:clientWidth={scrubWidth}
       role="presentation"
       onpointermove={(e) => {
         const rect = e.currentTarget.getBoundingClientRect()
@@ -215,8 +239,8 @@
     >
       <div class="scrub-track" aria-hidden="true">
         <i class="buffer" style:width={pct(buffered) + '%'}></i>
-        <i class="progress" style:width={pct(p.ms) + '%'}></i>
-        <b style:left={pct(p.ms) + '%'}></b>
+        <i class="progress" style:width={pct(playhead) + '%'}></i>
+        <b style:left={pct(playhead) + '%'}></b>
       </div>
       {#if (hover !== null || scrubFocus) && p.status && !['complete', 'needs-setup'].includes(p.status.stage)}
         <SeekCoverage status={p.status} duration={p.duration} />
@@ -227,10 +251,10 @@
         min="0"
         max={p.duration || 1}
         step="50"
-        value={p.ms}
+        value={playhead}
         disabled={!p.video || !p.duration}
         aria-label={p.t('seek')}
-        aria-valuetext={clock(p.ms)}
+        aria-valuetext={clock(playhead)}
         oninput={(e) => p.seek(+e.currentTarget.value)}
         onfocus={() => (scrubFocus = true)}
         onblur={() => (scrubFocus = false)}
@@ -239,7 +263,7 @@
         <span class="time-tip" style:left={hover * 100 + '%'}>{clock(hover * p.duration)}</span>
       {/if}
     </div>
-    <time class="total" title={p.t('remainingTime')}>−{clock(Math.max(0, p.duration - p.ms))}</time>
+    <time class="total" title={p.t('remainingTime')}>−{clock(Math.max(0, p.duration - playhead))}</time>
   </div>
 </div>
 

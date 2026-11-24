@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, untrack } from 'svelte'
   import { backend, mockMode, player as p } from './stores.svelte'
   import AudioLyrics from './AudioLyrics.svelte'
   import SubtitleOverlay from './SubtitleOverlay.svelte'
@@ -7,6 +7,7 @@
   import Icon from './Icon.svelte'
   import { inPiP, supportsPiP, togglePiP, updatePiPCaptions } from './picture-in-picture'
   import { subtitleTracks } from './subtitle-tracks.svelte'
+  import { activeAuthoredFrame, lastStartedCue } from './subtitle-tracks'
   type Panel = 'subtitles' | 'playlist' | 'transcript' | 'library'
   let {
     onpanel,
@@ -35,10 +36,8 @@
     pipAvailable = $state(false),
     audioOnly = $state(false)
   let lastReport = 0,
-    raf = 0,
     idleTimer = 0,
     clickTimer = 0,
-    lastPosition = 0,
     wakeTap = false
   let url = $derived(p.prep?.mediaUrl || p.media?.mediaUrl || null)
   let controlsVisible = $derived(
@@ -53,40 +52,66 @@
     box = { width, height, left: (w - width) / 2, top }
     pictureBottomGap = surface.clientHeight - stage.offsetTop - top - height
   }
+  let videoPageEnd = $state<number | null>(null), audioPageEnd = $state<number | null>(null)
+  let advancing = $state(false), clockRevision = $state(0)
+  let scheduling = $derived(p.startingTranscription || p.status?.stage === 'processing' || p.status?.stage === 'paused')
+
+  // Native timeupdate drives the transport. Wake precisely at subtitle edges
+  // between those events, including gaps, overlapping imports and overflow pages.
+  let nextBoundary = $derived.by(() => {
+    if (subtitleTracks.selected === 'off') return Infinity
+    const authored = subtitleTracks.authored
+    if (authored) return activeAuthoredFrame(authored, p.ms).until
+    if (p.settings.subtitleMode === 'off') return Infinity
+    const delay = subtitleTracks.delayMs, now = p.ms - delay
+    const index = lastStartedCue(p.cues, now)
+    const end = p.cues[index]?.endMs ?? Infinity
+    const next = p.cues[index + 1]?.startMs ?? Infinity
+    const page = audioOnly ? audioPageEnd : videoPageEnd
+    return Math.min((end > now ? Math.min(end, next) : next) + delay,
+      page !== null && page > p.ms ? page : Infinity)
+  })
+  $effect(() => {
+    const element = video, boundary = nextBoundary, rate = p.rate
+    // A seek within one cue changes the wall time of the same boundary.
+    void clockRevision
+    if (!element || !advancing || !Number.isFinite(boundary)) return
+    let timer = 0
+    function wake() {
+      if (!element || element.paused || element.seeking) return
+      const time = element.currentTime * 1000
+      const wait = (boundary - time) / rate
+      if (wait > 0) timer = window.setTimeout(wake, Math.max(8, Math.ceil(wait)))
+      else p.ms = time
+    }
+    wake()
+    return () => clearTimeout(timer)
+  })
+
   function sync(force = false) {
-    if (!video || !p.media) return
+    if (!video || video.dataset.session !== p.media?.sessionId) return
     p.ms = video.currentTime * 1000
-    if (Number.isFinite(video.duration) && video.duration > 0) p.duration = video.duration * 1000
-    if (
-      navigator.mediaSession?.setPositionState &&
-      Number.isFinite(video.duration) &&
-      video.duration > 0 &&
-      (force || performance.now() - lastPosition >= 1000)
-    ) {
-      lastPosition = performance.now()
-      navigator.mediaSession.setPositionState({
+    if (force && Number.isFinite(video.duration) && video.duration > 0) {
+      p.duration = video.duration * 1000
+      navigator.mediaSession?.setPositionState?.({
         duration: video.duration,
         playbackRate: video.playbackRate,
         position: Math.min(video.currentTime, video.duration),
       })
     }
-    if (force || (p.playing && performance.now() - lastReport >= 250)) {
+    p.remember()
+    if (force || (scheduling && p.playing && performance.now() - lastReport >= 200)) {
       lastReport = performance.now()
-      p.remember()
-      void p.act(() =>
-        backend.call('set_playhead', {
-          sessionId: p.media!.sessionId,
-          ms: Math.round(p.ms),
-          playing: p.playing,
-        }),
-      )
+      void p.act(() => p.reportPlayhead())
     }
   }
-  function frame() {
-    if (!video || video.paused) return
-    sync()
-    raf = requestAnimationFrame(frame)
+  function resync() {
+    clockRevision++
+    sync(true)
   }
+  $effect(() => {
+    if (scheduling) untrack(() => sync(true))
+  })
   function activity() {
     idle = false
     clearTimeout(idleTimer)
@@ -94,6 +119,7 @@
       idleTimer = window.setTimeout(() => (idle = true), 2500)
   }
   function wakeControls() {
+    if (!controlsVisible && video) p.ms = video.currentTime * 1000
     pointerAway = false
     activity()
   }
@@ -116,14 +142,12 @@
   function play() {
     p.playing = true
     sync(true)
-    cancelAnimationFrame(raf)
-    raf = requestAnimationFrame(frame)
     activity()
   }
   function pause() {
     p.playing = false
     p.remember(true)
-    cancelAnimationFrame(raf)
+    advancing = false
     activity()
     sync(true)
   }
@@ -293,7 +317,6 @@
       root.removeEventListener('pointerleave', mouseLeave)
       removeMediaKeys()
       size.disconnect()
-      cancelAnimationFrame(raf)
       clearTimeout(idleTimer)
       clearTimeout(clickTimer)
       p.video = null
@@ -329,16 +352,18 @@
             playsinline
             onloadedmetadata={loaded}
             onresize={measure}
+            ondurationchange={resync}
+            onratechange={resync}
+            onplaying={() => { advancing = true; clockRevision++; sync() }}
+            onwaiting={() => { advancing = false }}
             onplay={play}
             onpause={pause}
             onended={() => {
               pause()
               p.ended()
             }}
-            onseeked={() => sync(true)}
-            ontimeupdate={() => {
-              if (!p.playing || document.hidden) sync()
-            }}
+            onseeked={resync}
+            ontimeupdate={() => sync()}
             onprogress={() => {
               if (video?.buffered.length)
                 buffered = video.buffered.end(video.buffered.length - 1) * 1000
@@ -347,7 +372,7 @@
           >
             <track kind="captions" />
           </video>
-          {#if audioOnly}<AudioLyrics />{/if}
+          {#if audioOnly}<AudioLyrics onPageEnd={(ms) => audioPageEnd = ms} />{/if}
         {:else}<div class="stage-state">
             <Icon name="film" size={40} />
             <strong>{p.t('preparing')}</strong>
@@ -358,6 +383,7 @@
       <SubtitleOverlay
         {box}
         {audioOnly}
+        onPageEnd={(ms) => videoPageEnd = ms}
         clearance={controlsVisible ? Math.max(0, controlsHeight + 12 - pictureBottomGap) : 0}
       />
       {#if p.status?.stage === 'needs-setup' && !url && subtitleTracks.selected === 'generated' && p.settings.subtitleMode !== 'off'}<button
@@ -375,7 +401,7 @@
       class:transport-hidden={!controlsVisible}
       bind:clientHeight={controlsHeight}
     >
-      <Controls
+      <Controls visible={controlsVisible}
         {buffered}
         {pipAvailable}
         {pipActive}

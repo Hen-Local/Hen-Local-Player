@@ -76,6 +76,7 @@ class PlayerState {
   queueIndex = $derived(this.queue.findIndex((item) => item.path === this.currentPath))
   repeat = $state<'off' | 'all' | 'one'>('off')
   private positions = new ResumeHistory()
+  private restoredSources = new WeakMap<HTMLVideoElement, string>()
   private fileOperations = Promise.resolve()
   private switchPosition: { path: string; ms: number; playing: boolean } | null = null
   private lastSave = 0
@@ -119,6 +120,8 @@ class PlayerState {
     }
   }
   async update(patch: Partial<Settings>) {
+    if (['subtitleMode', 'translationContext', 'sourceLanguage', 'targetLanguage', 'asrModel', 'dialogueChannelFocus'].some(key => key in patch))
+      await this.reportPlayhead()
     this.settings = await backend.call('update_settings', { patch })
   }
   findOnlineSubtitles() {
@@ -142,6 +145,8 @@ class PlayerState {
       this.transcriptionRequested = true
       const track = this.regenerationTrack
       const previousStatus = this.status
+      await this.reportPlayhead()
+      if (this.media !== media) return
       const { missing } = await backend.call('start_transcription', track === null
         ? { sessionId: media.sessionId }
         : { sessionId: media.sessionId, regenerate: true, audioTrackOrder: track })
@@ -322,9 +327,16 @@ class PlayerState {
   resumePosition(path: string) {
     return this.positions.get(path)
   }
+  async reportPlayhead() {
+    const video = this.video, sessionId = this.media?.sessionId
+    if (sessionId && video?.dataset.session === sessionId && video.readyState >= 1 && this.restoredSources.get(video) === video.currentSrc)
+      await backend.call('set_playhead', { sessionId, ms: Math.round(video.currentTime * 1000), playing: !video.paused })
+  }
   remember(force = false) {
     const video = this.video
     if (!video || video.readyState < 1 || video.dataset.session !== this.media?.sessionId) return
+    // WebKit can deliver durationchange at time zero, before loadedmetadata restores the saved position.
+    if (this.restoredSources.get(video) !== video.currentSrc) return
     const now = Date.now()
     if (!force && now - this.lastSave < 4000) return
     this.lastSave = now
@@ -335,6 +347,7 @@ class PlayerState {
     this.switchPosition = null
     const ms = pending?.ms ?? this.resumePosition(this.currentPath)
     if (ms > 0 && ms < video.duration * 1000) video.currentTime = ms / 1000
+    this.restoredSources.set(video, video.currentSrc)
     if (pending?.playing !== false)
       void video.play().catch(() => {
         this.playing = false
@@ -351,6 +364,7 @@ class PlayerState {
   }
   async setSource(code: string) {
     const id = this.media?.sessionId
+    await this.reportPlayhead()
     await backend.call('set_source_language', { modeOrCode: code })
     this.settings = { ...this.settings, sourceLanguage: code }
     if (id && this.own(id) && this.missingSubtitleComponents.length && subtitleTracks.selected === 'generated' && !this.startingTranscription)
@@ -358,6 +372,7 @@ class PlayerState {
   }
   async setTarget(code: string) {
     const id = this.media?.sessionId
+    await this.reportPlayhead()
     await backend.call('set_target_language', { code })
     this.settings = { ...this.settings, targetLanguage: code }
     if (id && this.own(id) && this.missingSubtitleComponents.length && subtitleTracks.selected === 'generated' && !this.startingTranscription)

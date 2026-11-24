@@ -1,10 +1,9 @@
 import { invoke } from '@tauri-apps/api/core'
-import { backend, cueAt, player } from './stores.svelte'
+import { backend, player } from './stores.svelte'
 import {
   readSubtitleFile,
   parseSubtitleText,
   indexTimeline,
-  visibleText,
   type SubtitleTimeline,
   type TimedText,
 } from './subtitle-tracks'
@@ -273,13 +272,6 @@ class SubtitleTracks {
         : 'Subtitles loaded. Local storage is unavailable, so you’ll need to import them again next time.')
     }
     if (this.current(id) && revision === this.request) await this.select(track.id)
-  }
-
-  linesAt(ms: number, cues: Cue[], settings: Settings) {
-    if (this.selected === 'off') return []
-    const at = ms - this.delayMs
-    if (this.authored) return visibleText(this.authored, ms).flatMap((text) => text.split('\n'))
-    return generatedLines(cues[cueAt(cues, at)], settings, true)
   }
 
   pipCues(cues: Cue[], settings: Settings): TimedText[] {

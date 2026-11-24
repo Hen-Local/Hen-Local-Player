@@ -81,19 +81,31 @@ export function lastStartedCue(cues: readonly { startMs: number }[], ms: number)
   return low - 1
 }
 
-export function visibleIndices(timeline: SubtitleTimeline, ms: number): number[] {
+type AuthoredFrame = { from: number; until: number; indices: number[] }
+const frames = new WeakMap<SubtitleTimeline, AuthoredFrame>()
+
+export function activeAuthoredFrame(timeline: SubtitleTimeline, ms: number): AuthoredFrame {
+  const previous = frames.get(timeline)
+  if (previous && ms >= previous.from && ms < previous.until) return previous
   const { cues, latestEnd } = timeline
-  const result = []
+  const indices: number[] = []
+  const last = lastStartedCue(cues, ms)
+  let until = cues[last + 1]?.startMs ?? Infinity
   // A long caption can span several shorter ones. The prefix ends let us stop
   // at the first point before which no cue can still be on screen.
-  for (let i = lastStartedCue(cues, ms); i >= 0 && latestEnd[i] > ms; i--) {
-    if (cues[i].endMs > ms) result.push(i)
+  for (let i = last; i >= 0 && latestEnd[i] > ms; i--) {
+    if (cues[i].endMs > ms) {
+      indices.push(i)
+      until = Math.min(until, cues[i].endMs)
+    }
   }
-  return result.reverse()
+  const frame = { from: ms, until, indices: indices.reverse() }
+  frames.set(timeline, frame)
+  return frame
 }
 
-export function visibleText(timeline: SubtitleTimeline, ms: number): string[] {
-  return visibleIndices(timeline, ms).map((index) => timeline.cues[index].text)
+export function visibleIndices(timeline: SubtitleTimeline, ms: number): number[] {
+  return activeAuthoredFrame(timeline, ms).indices
 }
 
 export async function readSubtitleFile(file: File, locale: string): Promise<string> {

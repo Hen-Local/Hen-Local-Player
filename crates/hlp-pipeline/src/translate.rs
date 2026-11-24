@@ -101,6 +101,15 @@ impl Translator {
     pub fn new() -> Self {
         Self::default()
     }
+    pub(super) async fn shutdown(&mut self) {
+        if let Some(mut server) = self.server.take() {
+            let _ = server.child.kill().await;
+        }
+    }
+    #[cfg(test)]
+    pub(super) fn process_id(&self) -> Option<u32> {
+        self.server.as_ref()?.child.id()
+    }
     pub async fn load(&mut self) -> Result<()> {
         if let Some(server) = &mut self.server {
             if server.child.try_wait()?.is_none() {

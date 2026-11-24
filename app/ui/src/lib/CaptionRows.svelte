@@ -1,7 +1,8 @@
 <script lang="ts">
   import { captionPages, type RowMetrics } from './caption-pages'
-  let { lines, progress, authored = false, audio = false }: {
+  let { lines, progress, authored = false, audio = false, onNextPage }: {
     lines: string[]; progress: number; authored?: boolean; audio?: boolean
+    onNextPage?: (fraction: number | null) => void
   } = $props()
 
   let metrics = $state<(RowMetrics | undefined)[]>([])
@@ -25,7 +26,8 @@
   let rows = $derived(lines.map((line, i) =>
     authored || !metrics[i] ? [line] : captionPages(line, metrics[i]!)))
   let count = $derived(rows.reduce((max, parts) => Math.max(max, parts.length), 1))
-  let page = $derived(Math.min(count - 1, Math.max(0, Math.floor(progress * count))))
+  let page = $derived(count === 1 ? 0 : Math.min(count - 1, Math.max(0, Math.floor(progress * count))))
+  $effect(() => onNextPage?.(page + 1 < count ? (page + 1) / count : null))
 </script>
 
 {#each rows as parts, i}

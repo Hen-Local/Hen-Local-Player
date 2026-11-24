@@ -311,6 +311,10 @@ impl AsrClient {
             self.jobs = None;
         }
     }
+    #[cfg(test)]
+    pub(super) fn has_supervisor(&self) -> bool {
+        self.jobs.is_some()
+    }
 }
 
 #[cfg(all(test, target_os = "macos"))]

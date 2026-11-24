@@ -1,7 +1,7 @@
 use super::{
     store::{self, Audio},
     timeline::{self, Timeline},
-    vad, Message, Request, SharedEngines,
+    vad, Message, ModelUse, Request, SharedEngines,
 };
 use anyhow::{bail, Context as _, Result};
 use hlp_core::{
@@ -117,6 +117,7 @@ struct Running {
     setup: bool,
     engine_failed: bool,
     prep_failed: bool,
+    model_use: Option<ModelUse>,
     seen: HashSet<String>,
     url: Option<String>,
 }
@@ -270,6 +271,8 @@ impl Running {
                     t.track.join("audio.pcm"),
                 );
                 let counts = ctx.counts.clone();
+                self.model_use
+                    .get_or_insert_with(|| ctx.shared.use_models());
                 self.asr = true;
                 self.tasks.spawn(async move {
                     let start = Instant::now();
@@ -343,6 +346,8 @@ impl Running {
                     ctx.shared.translator.clone(),
                 );
                 self.mt = true;
+                self.model_use
+                    .get_or_insert_with(|| ctx.shared.use_models());
                 ctx.counts
                     .translation
                     .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -429,6 +434,7 @@ pub(super) async fn serve(ctx: &mut Context, mut requests: mpsc::Receiver<Reques
             setup: ctx.project.probe.audio.is_empty() && ctx.project.probe.video.is_none(),
             engine_failed: false,
             prep_failed: false,
+            model_use: None,
             seen: HashSet::new(),
             url: None,
         };
@@ -583,6 +589,9 @@ async fn drive(
                 "processing"
             };
         let changed = stage_before != stage;
+        if stage != "processing" && !run.asr && !run.mt {
+            run.model_use = None;
+        }
         if matches!(stage, "complete" | "error") {
             run.regenerating = false;
         }
@@ -616,7 +625,7 @@ async fn drive(
             }
             Some(event)=work.recv()=>apply_work(ctx,t,run,event)?,
             Some(result)=run.tasks.join_next(),if !run.tasks.is_empty()=>{result.context("Pipeline task stopped")?;}
-            _=ticker.tick()=>{}
+            _=ticker.tick(),if stage == "processing" || pending_save || t.dirty=>{}
         }
     }
 }

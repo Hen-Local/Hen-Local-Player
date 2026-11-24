@@ -5,6 +5,7 @@
   import CaptionRows from './CaptionRows.svelte'
   import Icon from './Icon.svelte'
 
+  let { onPageEnd }: { onPageEnd?: (ms: number | null) => void } = $props()
   let authored = $derived(tracks.authored)
   let cues = $derived(tracks.selected === 'off' || (!authored && p.settings.subtitleMode === 'off')
     ? [] : authored?.cues ?? p.cues)
@@ -12,6 +13,12 @@
   let latest = $derived(lastStartedCue(cues, time))
   let current = $derived(authored ? (visibleIndices(authored, time).at(-1) ?? -1)
     : latest >= 0 && time < cues[latest].endMs ? latest : -1)
+  function nextPage(fraction: number | null) {
+    const cue = cues[current]
+    onPageEnd?.(cue && fraction !== null
+      ? cue.startMs + (cue.endMs - cue.startMs) * fraction + tracks.delayMs : null)
+  }
+  $effect(() => { if (authored || current < 0) onPageEnd?.(null) })
   // Hold the reading position through pauses. Only five cue groups have DOM
   // nodes even when the recording contains hours of speech.
   let anchor = $derived(current < 0 ? Math.max(0, latest) : current)
@@ -47,7 +54,7 @@
           tabindex={row.index === anchor ? 0 : -1}
           onclick={() => p.seek(row.seekTo)}>
           <CaptionRows lines={row.lines} progress={(time - row.startMs) / (row.endMs - row.startMs)}
-            authored={!!authored} audio />
+            authored={!!authored} onNextPage={!authored && row.index === current ? nextPage : undefined} audio />
         </button>
       {/each}
     </div>

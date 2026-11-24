@@ -9,9 +9,9 @@ use anyhow::{Context, Result};
 pub use asr_client::AsrClient;
 use hlp_core::{events::*, settings::Settings, types::*};
 use hlp_media::{MediaServer, Tools};
-use std::{path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc, time::Duration};
 use tokio::{
-    sync::{mpsc, oneshot, Mutex},
+    sync::{mpsc, oneshot, watch, Mutex},
     task::JoinHandle,
 };
 pub use translate::Translator;
@@ -21,20 +21,72 @@ pub struct SharedEngines {
     pub asr: Arc<Mutex<AsrClient>>,
     pub translator: Arc<Mutex<Translator>>,
     pub server: MediaServer,
+    model_users: watch::Sender<usize>,
 }
+
+/// Keep the models warm across individual utterances and overlapping sessions.
+struct ModelUse(watch::Sender<usize>);
+
+impl Drop for ModelUse {
+    fn drop(&mut self) {
+        self.0.send_modify(|users| *users -= 1);
+    }
+}
+
 impl SharedEngines {
     pub async fn new(settings: &Settings) -> Result<Self> {
-        Ok(Self {
+        Self::with_idle_grace(settings, Duration::from_secs(30)).await
+    }
+    async fn with_idle_grace(settings: &Settings, grace: Duration) -> Result<Self> {
+        let (model_users, changes) = watch::channel(0);
+        let engines = Self {
             asr: Arc::new(Mutex::new(AsrClient::new(hlp_models::asr_model_dir(
                 &settings.asr_model,
             )))),
             translator: Arc::new(Mutex::new(Translator::new())),
             server: MediaServer::start().await?,
-        })
+            model_users,
+        };
+        tokio::spawn(unload_idle_models(
+            changes,
+            grace,
+            engines.asr.clone(),
+            engines.translator.clone(),
+        ));
+        Ok(engines)
+    }
+    fn use_models(&self) -> ModelUse {
+        self.model_users.send_modify(|users| *users += 1);
+        ModelUse(self.model_users.clone())
     }
     pub async fn shutdown(&self) {
         self.asr.lock().await.shutdown().await;
-        *self.translator.lock().await = Translator::new();
+        self.translator.lock().await.shutdown().await;
+    }
+}
+
+async fn unload_idle_models(
+    mut users: watch::Receiver<usize>,
+    grace: Duration,
+    asr: Arc<Mutex<AsrClient>>,
+    mt: Arc<Mutex<Translator>>,
+) {
+    while users.changed().await.is_ok() {
+        while *users.borrow_and_update() == 0 {
+            match tokio::time::timeout(grace, users.changed()).await {
+                Ok(Ok(())) => continue,
+                Ok(Err(_)) => return,
+                Err(_) => {
+                    let (mut asr, mut mt) = tokio::join!(asr.lock(), mt.lock());
+                    // Another session may have acquired the models while we
+                    // waited for a cancelled request to return its lock.
+                    if matches!(users.has_changed(), Ok(false)) {
+                        tokio::join!(asr.shutdown(), mt.shutdown());
+                    }
+                    break;
+                }
+            }
+        }
     }
 }
 pub struct Session;
@@ -372,7 +424,8 @@ mod playback_tests {
             target_language: "none".into(),
             ..Settings::default()
         };
-        let engines = SharedEngines::new(&settings).await?;
+        let grace = Duration::from_secs(1);
+        let engines = SharedEngines::with_idle_grace(&settings, grace).await?;
         let (status, mut events) = watch::channel(None);
         let sink = Arc::new(Events {
             opened: AtomicUsize::new(0),
@@ -404,6 +457,9 @@ mod playback_tests {
         session.send(SessionCommand::SetTarget("en".into())).await?;
         assert_eq!(wait_for(&mut events, "paused").await?.translated_count, 0);
         assert_eq!(session.request_counts(), (6, 0));
+        // A second recording using the shared engines keeps the same process
+        // alive across the first recording's idle deadline.
+        let other = engines.use_models();
         settings.target_language = "en".into();
         settings.process_whole_file = true;
         session
@@ -411,6 +467,21 @@ mod playback_tests {
             .await?;
         assert_eq!(wait_for(&mut events, "complete").await?.translated_count, 6);
         assert_eq!(session.request_counts(), (6, 6));
+        let pid = engines.translator.lock().await.process_id().unwrap();
+        tokio::time::sleep(grace * 2).await;
+        assert_eq!(engines.translator.lock().await.process_id(), Some(pid));
+        drop(other);
+        timeout(Duration::from_secs(10), async {
+            loop {
+                let translation_stopped = engines.translator.lock().await.process_id().is_none();
+                if translation_stopped && !engines.asr.lock().await.has_supervisor() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await?;
+        // The later regeneration exercises cold reload in the same session.
 
         let track = root
             .path()
