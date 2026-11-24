@@ -4,8 +4,18 @@
   import { clock } from './format'
   import Icon from './Icon.svelte'
   import { inPiP, supportsPiP, togglePiP } from './picture-in-picture'
+  import SubtitlePanel from './SubtitlePanel.svelte'
+  import { slidePanel } from './panel-transition'
 
-  let { open, onreturnfocus }: { open: boolean; onreturnfocus: () => void } = $props()
+  const tabs = ['subtitles', 'playback'] as const
+  type Tab = (typeof tabs)[number]
+  let { tab, onselect, onfocus, onclose }: {
+    tab: Tab | null
+    onselect: (tab: Tab) => void
+    onfocus: () => void
+    onclose: () => void
+  } = $props()
+  let playbackVisible = $derived(tab === 'playback')
   let time = $state('')
   let error = $state('')
   let start = $state<number | null>(null)
@@ -21,9 +31,22 @@
   let pipActive = $state(false)
   let frameSize = $state('')
 
+  function tabKey(e: KeyboardEvent) {
+    const index = tabs.findIndex((item) => item === tab)
+    const next = e.key === 'ArrowRight' ? (index + 1) % tabs.length
+      : e.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length
+      : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : -1
+    if (next < 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    onselect(tabs[next])
+    const tablist = e.currentTarget as HTMLElement
+    tablist.querySelector<HTMLButtonElement>('#tab-' + tabs[next])?.focus()
+  }
+
   $effect(() => {
     const video = p.video
-    if (!open) return
+    if (!playbackVisible) return
     if (!video) {
       frameSize = ''
       pipAvailable = pipActive = false
@@ -59,7 +82,7 @@
 
   $effect(() => {
     const id = session
-    if (open && id)
+    if (playbackVisible && id)
       untrack(() => {
         void prepare(id)
       })
@@ -132,7 +155,7 @@
       return
     }
     p.seek(ms)
-    onreturnfocus()
+    onclose()
   }
 
   function markEnd() {
@@ -145,7 +168,7 @@
   }
 </script>
 
-{#if open}
+{#snippet playbackControls()}
   <div class="playback-sheet" role="group" aria-label={p.t('playbackOptions')}>
     <label class="option-row"
       >{p.t('speed')}
@@ -249,7 +272,7 @@
           onchange={(e) => {
             if (e.currentTarget.value) {
               p.seek(Number(e.currentTarget.value))
-              onreturnfocus()
+              onclose()
             }
           }}
         >
@@ -278,4 +301,26 @@
     {/if}
     {#if error}<small role="alert">{error}</small>{/if}
   </div>
+{/snippet}
+
+{#if tab}
+  <aside id="player-settings" class="inspector right-inspector" onfocusin={onfocus} transition:slidePanel={'right'} aria-label={p.t('playerSettings')}>
+    <div class="panel-title">
+      <h2>{p.t('playerSettings')}</h2>
+      <button class="icon panel-close" title={p.t('close')} aria-label={p.t('close')}
+        onclick={onclose}><Icon name="close" size={16}/></button>
+    </div>
+    <div class="inspector-tabs" role="tablist" tabindex="-1" aria-label={p.t('playerSettings')} onkeydown={tabKey}>
+      {#each tabs as item}
+        <button role="tab" id={'tab-' + item} aria-controls={'pane-' + item} aria-selected={tab === item}
+          tabindex={tab === item ? 0 : -1} onclick={() => onselect(item)}>
+          {p.t(item === 'playback' ? 'quick' : item)}
+        </button>
+      {/each}
+    </div>
+    {#if tab === 'subtitles'}<div class="inspector-page" id="pane-subtitles" role="tabpanel" aria-labelledby="tab-subtitles"><SubtitlePanel /></div>
+    {:else}<div class="inspector-page" id="pane-playback" role="tabpanel" aria-labelledby="tab-playback">
+      {@render playbackControls()}
+    </div>{/if}
+  </aside>
 {/if}

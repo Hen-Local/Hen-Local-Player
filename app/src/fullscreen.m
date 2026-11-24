@@ -16,6 +16,11 @@
     [self.webview evaluateJavaScript:@"window.dispatchEvent(new Event('hlp:exit-player-fullscreen'))"
                   completionHandler:nil];
 }
+- (void)performClose:(id)sender {
+    // AppKit's normal close target has no title-bar close button in this mode.
+    [self.webview evaluateJavaScript:@"window.dispatchEvent(new Event('hlp:close-player-window'))"
+                  completionHandler:nil];
+}
 - (void)restore {
     for (NSMenuItem *item in self.previousTargets.keyEnumerator) {
         if (item.target == self) {
@@ -44,7 +49,7 @@ void hlp_set_player_fullscreen_target(WKWebView *webview, bool enabled) {
     target.previousTargets = [NSMapTable weakToWeakObjectsMapTable];
     for (NSMenuItem *group in NSApp.mainMenu.itemArray) {
         for (NSMenuItem *item in group.submenu.itemArray) {
-            if (item.action != @selector(toggleFullScreen:)) continue;
+            if (item.action != @selector(toggleFullScreen:) && item.action != @selector(performClose:)) continue;
             [target.previousTargets setObject:item.target ?: NSNull.null forKey:item];
             item.target = target;
         }

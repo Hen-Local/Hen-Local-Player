@@ -17,3 +17,9 @@ Explicit track choices and timing offsets are kept per movie. Imported subtitle 
 On November 23, 2026, headless Chrome played the bundled sample with a Chinese cue and an English translation. In a 720 × 430 window the previous layout displayed the two languages on single lines 468 and 487 pixels wide. With each language limited to 22 times its own font size, the same text wrapped into two lines per language, with longest lines of 234 and 262 pixels. A 450 × 300 window and a 1920 × 1080 fullscreen session also displayed two lines per language. DOM range measurements placed every glyph inside the picture.
 
 An imported SRT retained its explicit line break. A separate 132-letter string without spaces wrapped into four lines in all three viewports and retained every character. The production Vite build and `npm --prefix app/ui run check` passed with zero Svelte errors or warnings.
+
+## Sidebars over the picture
+
+The playlist and settings now slide from the edges over the playing movie. With the sample video and its bilingual SRT open in Chrome, the movie element, subtitle area and all ten transport targets kept identical window coordinates with either sidebar open, both open and both closed. All ten controls remained clickable at 720 × 430, 1280 × 760, 450 × 300, touch sizes 390 × 680 and 320 × 235, and the player's fullscreen layout at 1920 × 1080.
+
+Frame sampling at 720 × 430 recorded the playlist sliding 180 pixels and settings sliding 250 pixels. Both retained their contents during opening and closing. Enabling reduced motion produced no intermediate movement. Closing and reopening either sidebar 42 ms apart left exactly one interactive sidebar with keyboard focus. Escape restored the toggle, and a 1.3–2.1 second A–B playback loop continued with settings closed.

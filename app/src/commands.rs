@@ -23,6 +23,10 @@ pub async fn set_playback_capabilities(
     if !p.pending.is_empty() {
         emit(&app, "app://open-files", std::mem::take(&mut p.pending));
     }
+    #[cfg(target_os = "macos")]
+    if let Some(action) = p.pending_menu.take() {
+        emit(&app, "app://menu", action);
+    }
     Ok(())
 }
 #[tauri::command]
@@ -333,16 +337,11 @@ pub async fn download_url(app: AppHandle, state: State<'_, Desktop>, url: String
         )
         .await
         .map_err(err)?;
+    let mut player = state.player.lock().await;
     if job.cancel.is_cancelled() {
         return Err("Download cancelled".into());
     }
-    state
-        .player
-        .lock()
-        .await
-        .open(&app, path, Some(url))
-        .await
-        .map_err(err)
+    player.open(&app, path, Some(url)).await.map_err(err)
 }
 #[tauri::command]
 pub async fn cancel_download(state: State<'_, Desktop>) -> Reply<()> {

@@ -20,6 +20,8 @@ pub struct Player {
     pub active: Option<OpenFile>,
     pub ready: bool,
     pub pending: Vec<PathBuf>,
+    #[cfg(target_os = "macos")]
+    pub pending_menu: Option<String>,
 }
 impl Player {
     pub async fn open(
@@ -165,12 +167,25 @@ impl Drop for Job<'_> {
     }
 }
 pub struct Desktop {
-    pub player: Mutex<Player>,
+    pub player: Arc<Mutex<Player>>,
     pub url: Activity,
     pub setup: Activity,
     pub preview: SyncMutex<Option<(String, UrlInfo)>>,
 }
 impl Desktop {
+    #[cfg(target_os = "macos")]
+    pub fn window_closed(&self) {
+        self.url.cancel();
+        self.preview.lock().take();
+        // Serialize closing behind any in-flight open and ahead of a Finder
+        // reopen of the same file, which needs the previous session's cache lock.
+        let mut player = tauri::async_runtime::block_on(self.player.clone().lock_owned());
+        player.ready = false;
+        player.pending.clear();
+        player.pending_menu = None;
+        tauri::async_runtime::spawn(async move { player.close().await });
+    }
+
     pub async fn new() -> Result<Self> {
         let root = store::data_root();
         let settings: Settings = store::read(&root.join("settings.json"))
@@ -183,14 +198,16 @@ impl Desktop {
             .filter(|p| p.is_file())
             .collect();
         Ok(Self {
-            player: Mutex::new(Player {
+            player: Arc::new(Mutex::new(Player {
                 settings,
                 caps: Caps::new(),
                 engines,
                 active: None,
                 pending,
                 ready: false,
-            }),
+                #[cfg(target_os = "macos")]
+                pending_menu: None,
+            })),
             url: Default::default(),
             setup: Default::default(),
             preview: Default::default(),

@@ -5,10 +5,10 @@
   import { player as p, mockMode, backend } from './lib/stores.svelte'
   import Icon from './lib/Icon.svelte'
   import Player from './lib/Player.svelte'
-  import PlaybackOptions from './lib/PlaybackOptions.svelte'
+  import PlayerSettings from './lib/PlayerSettings.svelte'
+  import { slidePanel } from './lib/panel-transition'
   import RecentList from './lib/RecentList.svelte'
   import PlaylistPanel from './lib/PlaylistPanel.svelte'
-  import SubtitlePanel from './lib/SubtitlePanel.svelte'
   import OpenUrlDialog from './lib/OpenUrlDialog.svelte'
   import ExportMenu from './lib/ExportMenu.svelte'
   import SetupScreen from './lib/SetupScreen.svelte'
@@ -21,7 +21,6 @@
   type LeftPanel = 'library' | 'playlist'
   type Panel = LeftPanel | SettingsTab | 'transcript'
   type Side = 'left' | 'right'
-  const tabs = ['subtitles', 'playback'] as const
   const mac = /Mac/.test(navigator.platform)
   const nativeMac = !mockMode && mac
   let shell: HTMLElement
@@ -95,17 +94,6 @@
       if (rightTab) closePanel('right')
       else showPanel(lastSettingsTab)
     } else showPanel(id, true)
-  }
-  function tabKey(e: KeyboardEvent) {
-    const index = tabs.findIndex((tab) => tab === rightTab)
-    const next = e.key === 'ArrowRight' ? (index + 1) % tabs.length
-      : e.key === 'ArrowLeft' ? (index + tabs.length - 1) % tabs.length
-      : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : -1
-    if (next < 0) return
-    e.preventDefault()
-    e.stopPropagation()
-    setRight(tabs[next])
-    shell.querySelector<HTMLButtonElement>('#tab-' + tabs[next])?.focus()
   }
   function closePanel(side: Side) {
     if (side === 'left') leftPanel = null
@@ -289,7 +277,7 @@
 
 <svelte:window onkeydown={key} />
 <main bind:this={shell} class="app" class:desktop={!mockMode} class:watching={!!p.media}
-  class:left-dock={leftPanel !== null && !!p.media} class:right-dock={rightTab !== null} class:fullscreen={p.fullscreen}>
+  class:fullscreen={p.fullscreen}>
   {#if p.media}
     <Player onpanel={transportPanel} onmore={toggleMenu} keepControls={menuOpen || !!leftPanel || !!rightTab}
       subtitlesOpen={!!rightTab} playlistOpen={leftPanel === 'playlist'} />
@@ -335,7 +323,7 @@
   {/if}
 
   {#if leftPanel}
-    <aside id="playlist-sidebar" class="inspector left-inspector" onfocusin={() => (lastSide = 'left')} aria-label={p.t(leftPanel === 'library' ? 'recent' : 'playlist')}>
+    <aside id="playlist-sidebar" class="inspector left-inspector" transition:slidePanel={'left'} onfocusin={() => (lastSide = 'left')} aria-label={p.t(leftPanel === 'library' ? 'recent' : 'playlist')}>
       <div class="panel-title">
         <h2>{p.t(leftPanel === 'library' ? 'recent' : 'playlist')}</h2>
         <button class="icon panel-close" title={p.t('close')} aria-label={p.t('close')}
@@ -346,25 +334,8 @@
     </aside>
   {/if}
   {#if p.media}
-    <aside id="player-settings" class="inspector right-inspector" onfocusin={() => (lastSide = 'right')} hidden={!rightTab} aria-label={p.t('playerSettings')}>
-      <div class="panel-title">
-        <h2>{p.t('playerSettings')}</h2>
-        <button class="icon panel-close" title={p.t('close')} aria-label={p.t('close')}
-          onclick={() => closePanel('right')}><Icon name="close" size={16}/></button>
-      </div>
-      <div class="inspector-tabs" role="tablist" tabindex="-1" aria-label={p.t('playerSettings')} onkeydown={tabKey}>
-        {#each tabs as tab}
-          <button role="tab" id={'tab-' + tab} aria-controls={'pane-' + tab} aria-selected={rightTab === tab}
-            tabindex={rightTab === tab ? 0 : -1} onclick={() => setRight(tab)}>
-            {p.t(tab === 'playback' ? 'quick' : tab)}
-          </button>
-        {/each}
-      </div>
-      {#if rightTab === 'subtitles'}<div class="inspector-page" id="pane-subtitles" role="tabpanel" aria-labelledby="tab-subtitles"><SubtitlePanel /></div>{/if}
-      <div class="inspector-page" hidden={rightTab !== 'playback'} id="pane-playback" role="tabpanel" aria-labelledby="tab-playback">
-        <PlaybackOptions open={rightTab === 'playback'} onreturnfocus={() => closePanel('right')} />
-      </div>
-    </aside>
+    <PlayerSettings tab={rightTab} onselect={setRight} onfocus={() => (lastSide = 'right')}
+      onclose={() => closePanel('right')} />
   {/if}
   {#if menuOpen}
     <PlayerMenu hasMedia={!!p.media} canSample={!!samplePath} onaction={menuAction}

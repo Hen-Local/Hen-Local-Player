@@ -43,6 +43,8 @@ fn main() {
     }));
     // Finder can deliver the initial file before Tauri runs its setup hook.
     let desktop = tauri::async_runtime::block_on(Desktop::new()).expect("initialize player");
+    #[cfg(target_os = "macos")]
+    let mut launched = false;
     tauri::Builder::default()
         .manage(desktop)
         .plugin(tauri_plugin_dialog::init())
@@ -97,13 +99,32 @@ fn main() {
         ])
         .build(tauri::generate_context!())
         .expect("build Hen Local Player")
-        .run(|app, event| match event {
-            RunEvent::Ready => show_window(app),
+        .run(move |app, event| match event {
+            RunEvent::Ready => {
+                #[cfg(target_os = "macos")]
+                {
+                    launched = true;
+                }
+                show_window(app);
+            }
+            #[cfg(target_os = "macos")]
+            RunEvent::WindowEvent {
+                label,
+                event: tauri::WindowEvent::Destroyed,
+                ..
+            } if label == "main" => app.state::<Desktop>().window_closed(),
+            #[cfg(target_os = "macos")]
+            RunEvent::ExitRequested {
+                code: None, api, ..
+            } => {
+                // The last window closed. AppKit's Quit command is independent.
+                api.prevent_exit();
+            }
             #[cfg(target_os = "macos")]
             RunEvent::Reopen {
                 has_visible_windows: false,
                 ..
-            } => show_window(app),
+            } if launched => show_window(app),
             #[cfg(target_os = "macos")]
             RunEvent::Opened { urls } => {
                 let paths: Vec<_> = urls
@@ -111,6 +132,9 @@ fn main() {
                     .filter_map(|url| url.to_file_path().ok())
                     .collect();
                 if !paths.is_empty() {
+                    if launched {
+                        show_window(app);
+                    }
                     let app = app.clone();
                     tauri::async_runtime::spawn(async move {
                         let state = app.state::<Desktop>();
@@ -144,7 +168,24 @@ fn main() {
 }
 
 fn show_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
+    let window = app.get_webview_window("main");
+    #[cfg(target_os = "macos")]
+    let window = window.or_else(|| {
+        let config = app
+            .config()
+            .app
+            .windows
+            .iter()
+            .find(|w| w.label == "main")?;
+        match tauri::WebviewWindowBuilder::from_config(app, config).and_then(|b| b.build()) {
+            Ok(window) => Some(window),
+            Err(error) => {
+                tracing::error!(%error, "Could not reopen the player window");
+                None
+            }
+        }
+    });
+    if let Some(window) = window {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();

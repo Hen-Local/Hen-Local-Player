@@ -88,6 +88,7 @@
 /* Side panels */
 .app .inspector {
   overflow: hidden;
+  background: rgb(28 30 35 / 83%);
 }
 
 .app .inspector .panel-title,

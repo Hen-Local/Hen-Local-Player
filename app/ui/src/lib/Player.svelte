@@ -26,8 +26,10 @@
   let box = $state({ width: 0, height: 0, left: 0, top: 0 }),
     buffered = $state(0),
     idle = $state(false),
+    pointerAway = $state(false),
     controlsHeight = $state(0),
     controlsHeld = $state(false),
+    controlsPressed = $state(false),
     pipActive = $state(false),
     audioOnly = $state(false)
   let lastReport = 0,
@@ -37,7 +39,9 @@
     lastPosition = 0,
     wakeTap = false
   let url = $derived(p.prep?.mediaUrl || p.media?.mediaUrl || null)
-  let controlsVisible = $derived(!idle || !p.playing || keepControls || controlsHeld)
+  let controlsVisible = $derived(
+    controlsPressed || (!pointerAway && (!idle || !p.playing || keepControls || controlsHeld)),
+  )
   function measure() {
     if (!stage || !surface || !video) return
     stageBottomGap = surface.clientHeight - stage.offsetTop - stage.clientHeight
@@ -86,6 +90,23 @@
     clearTimeout(idleTimer)
     if (p.playing && !controlsHeld && !keepControls)
       idleTimer = window.setTimeout(() => (idle = true), 2500)
+  }
+  function wakeControls() {
+    pointerAway = false
+    activity()
+  }
+  function mouseEnter(e: PointerEvent) {
+    if (e.pointerType === 'mouse') wakeControls()
+  }
+  function mouseLeave(e: PointerEvent) {
+    if (e.pointerType === 'mouse') pointerAway = true
+  }
+  function pointerMove(e: PointerEvent) {
+    if (e.pointerType === 'touch') return
+    // A captured seek/volume slider still receives moves beyond the window.
+    if (e.clientX < 0 || e.clientX >= innerWidth || e.clientY < 0 || e.clientY >= innerHeight) {
+      mouseLeave(e)
+    } else wakeControls()
   }
   $effect(() => {
     activity()
@@ -254,7 +275,13 @@
     const size = new ResizeObserver(measure)
     size.observe(stage)
     size.observe(surface)
+    // Sidebars and the title bar are siblings of the video, inside the same window.
+    const root = document.documentElement
+    root.addEventListener('pointerenter', mouseEnter)
+    root.addEventListener('pointerleave', mouseLeave)
     return () => {
+      root.removeEventListener('pointerenter', mouseEnter)
+      root.removeEventListener('pointerleave', mouseLeave)
       removeMediaKeys()
       size.disconnect()
       cancelAnimationFrame(raf)
@@ -265,7 +292,7 @@
   })
 </script>
 
-<svelte:window onkeydown={activity} />
+<svelte:window onkeydowncapture={wakeControls} onpointermove={pointerMove} />
 
 <div class="player-surface" bind:this={surface}>
   <div
@@ -275,12 +302,9 @@
     class:controls-visible={controlsVisible}
     class:hide-cursor={!controlsVisible}
     role="presentation"
-    onpointermove={(e) => {
-      if (e.pointerType !== 'touch') activity()
-    }}
     onpointerdown={(e) => {
       wakeTap = e.pointerType === 'touch' && !controlsVisible
-      activity()
+      wakeControls()
     }}
     onfocusin={activity}
     onclick={clickStage}
@@ -354,7 +378,10 @@
         onsettings={() => onpanel?.('subtitles')}
         onplaylist={() => onpanel?.('playlist')}
         onmore={() => onmore?.()}
-        onhold={(held) => (controlsHeld = held)}
+        onhold={(held, pressed) => {
+          controlsHeld = held
+          controlsPressed = pressed
+        }}
       />
     </div>
   {/if}

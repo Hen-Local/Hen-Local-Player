@@ -563,6 +563,16 @@ class PlayerState {
       this.cleanups.push(() => document.removeEventListener('fullscreenchange', reflectFullscreen))
     } else {
       const win = getCurrentWindow()
+      if (/Mac/.test(navigator.platform)) {
+        const closeWindow = () => void this.act(() => win.close())
+        window.addEventListener('hlp:close-player-window', closeWindow)
+        this.cleanups.push(() => window.removeEventListener('hlp:close-player-window', closeWindow))
+        this.cleanups.push(await win.onCloseRequested(async () => {
+          this.video?.pause()
+          this.remember(true)
+          if (this.inPlaceFullscreen) await this.act(() => this.full(false))
+        }))
+      }
       const exitPlayerFullscreen = () => {
         if (this.inPlaceFullscreen) void this.act(() => this.full(false))
       }

@@ -1,0 +1,6 @@
+{
+  "identifier": "macos-window",
+  "windows": ["main"],
+  "platforms": ["macOS"],
+  "permissions": ["core:window:allow-close", "core:window:allow-destroy"]
+}

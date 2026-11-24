@@ -18,7 +18,7 @@
     onsettings: () => void
     onplaylist: () => void
     onmore: () => void
-    onhold: (held: boolean) => void
+    onhold: (held: boolean, pressed: boolean) => void
   } = $props()
 
   let bar: HTMLDivElement
@@ -29,7 +29,7 @@
     scrubFocus = $state(false)
   const pct = (ms: number) => Math.min(100, Math.max(0, (ms * 100) / (p.duration || 1)))
 
-  $effect(() => onhold(hoveringBar || keyboardFocus || pointerHeld))
+  $effect(() => onhold(hoveringBar || keyboardFocus || pointerHeld, pointerHeld))
 
   function updateFocus() {
     keyboardFocus = Boolean(bar?.querySelector(':focus-visible'))
@@ -39,6 +39,7 @@
 <svelte:window
   onpointerup={() => (pointerHeld = false)}
   onpointercancel={() => (pointerHeld = false)}
+  onblur={() => (pointerHeld = false)}
 />
 
 <div

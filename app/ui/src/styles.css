@@ -993,8 +993,8 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
 .app:has(.video-stage.controls-visible) .window-chrome,
 .watching .window-chrome:hover { opacity: 1; }
 .app {
-  --left-dock-width: clamp(152px, 22vw, 280px);
-  --right-dock-width: clamp(220px, 27vw, 332px);
+  --playlist-width: clamp(172px, 25vw, 280px);
+  --settings-width: clamp(250px, 33vw, 332px);
 }
 .player-surface, .app .movie-viewport { position: absolute; inset: 0; }
 .app .movie-viewport { width: auto; height: auto; }
@@ -1005,9 +1005,9 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
   bottom: 0;
   max-width: calc(100% - 22px);
 }
-.app .left-inspector { width: var(--left-dock-width); left: 0; right: auto; border-radius: 0; border-width: 0 1px 0 0; }
-.app .right-inspector { width: var(--right-dock-width); right: 0; left: auto; border-radius: 0; border-width: 0 0 0 1px; }
-.app .inspector[hidden], .inspector-page[hidden] { display: none; }
+.app .left-inspector { width: var(--playlist-width); left: 0; border-radius: 0; border-width: 0 1px 0 0; }
+.app .right-inspector { width: var(--settings-width); right: 0; border-radius: 0; border-width: 0 0 0 1px; }
+.native-mac .app:not(.fullscreen) .left-inspector { padding-top: 36px; }
 .inspector-page { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
 .inspector-tabs {
   display: flex;
@@ -1026,47 +1026,23 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
   background: #ffffff12; color: var(--glass-accent);
 }
 .app .inspector-tabs button:hover:not(:disabled) { color: white; background: #ffffff15; }
-@media (min-width: 680px) {
-  .native-mac .app:not(.fullscreen) .left-inspector { padding-top: 36px; }
-  .left-dock .movie-viewport, .left-dock .window-chrome { left: var(--left-dock-width); }
-  .right-dock .movie-viewport, .right-dock .window-chrome { right: var(--right-dock-width); }
-}
 @media (max-width: 1208px) {
   .app.watching .inspector { bottom: var(--bar-clearance); }
 }
 @media (max-width: 679px) {
   .app {
-    --compact-picture-height: min(33dvh, 48vw);
-    --compact-playlist-width: clamp(92px, 32vw, 188px);
+    --playlist-width: clamp(92px, 32vw, 188px);
+    --settings-width: min(clamp(220px, 51vw, 312px), calc(100% - var(--playlist-width)));
   }
-  .app.watching:is(.left-dock, .right-dock) .movie-viewport {
-    bottom: auto;
-    height: var(--compact-picture-height);
-  }
-  .app.watching .inspector {
-    top: var(--compact-picture-height);
-    width: 100%;
-    max-width: 100%;
-    border-width: 1px 0;
-  }
-  .app.left-dock.right-dock .left-inspector {
-    width: var(--compact-playlist-width);
-    border-right-width: 1px;
-  }
-  .app.left-dock.right-dock .right-inspector {
-    width: calc(100% - var(--compact-playlist-width));
-  }
-  .app.left-dock.right-dock .left-inspector :is(.drawer-footer, .panel-title) { padding-inline: 6px; }
-  .app.left-dock.right-dock .left-inspector .panel-title { gap: 0; }
-  .app.left-dock.right-dock .left-inspector .panel-title h2 { font-size: 13px; }
-  .app.left-dock.right-dock .left-inspector .queue-row { gap: 0; padding-right: 2px; }
-  .app.left-dock.right-dock .left-inspector .queue-number { min-width: 12px; }
-  .app.left-dock.right-dock .left-inspector .drawer-footer button { padding-inline: 6px; }
+  .app .left-inspector :is(.drawer-footer, .panel-title) { padding-inline: 6px; }
+  .app .left-inspector .panel-title { gap: 0; }
+  .app .left-inspector .panel-title h2 { font-size: 13px; }
+  .app .left-inspector .queue-row { gap: 0; padding-right: 2px; }
+  .app .left-inspector .queue-number { min-width: 12px; }
+  .app .left-inspector .drawer-footer button { padding-inline: 6px; }
 }
 @media (max-width: 679px) and (max-height: 400px) {
-  .app { --compact-picture-height: 24dvh; }
   .app.watching .inspector { display: block; overflow: hidden auto; overscroll-behavior: none contain; }
-  .app.watching .inspector[hidden] { display: none; }
   .app.watching .inspector .panel-title { min-height: 30px; padding-block: 2px; }
   .app.watching .inspector .inspector-tabs button { min-height: 24px; }
 }

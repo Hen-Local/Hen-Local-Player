@@ -89,6 +89,23 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 }
 
 pub fn handle(app: &AppHandle, id: &str) {
+    #[cfg(target_os = "macos")]
+    if matches!(id, "open" | "open-folder" | "url" | "settings") {
+        use tauri::Manager;
+        crate::show_window(app);
+        let app = app.clone();
+        let action = id.to_owned();
+        tauri::async_runtime::spawn(async move {
+            let state = app.state::<crate::state::Desktop>();
+            let mut player = state.player.lock().await;
+            if player.ready {
+                crate::events::emit(&app, "app://menu", action);
+            } else {
+                player.pending_menu = Some(action);
+            }
+        });
+        return;
+    }
     if matches!(
         id,
         "open"
