@@ -13,12 +13,12 @@ use tauri::{State, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 use tokio::{io::AsyncReadExt, process::Command};
 
-const MAX_BYTES: u64 = 16 * 1024 * 1024;
+pub(super) const MAX_BYTES: u64 = 16 * 1024 * 1024;
 
 #[derive(Serialize)]
 pub struct SubtitleFile {
-    name: String,
-    text: String,
+    pub(super) name: String,
+    pub(super) text: String,
 }
 
 #[derive(Serialize)]
@@ -46,9 +46,23 @@ fn read_file(path: &Path) -> Result<SubtitleFile> {
         bytes.len() as u64 <= MAX_BYTES,
         "Subtitle file exceeds 16 MiB"
     );
-    let text = if bytes.starts_with(&[0xff, 0xfe]) || bytes.starts_with(&[0xfe, 0xff]) {
+    Ok(SubtitleFile {
+        name: path
+            .file_name()
+            .context("Missing subtitle filename")?
+            .to_string_lossy()
+            .into_owned(),
+        text: decode_subtitle(bytes)?,
+    })
+}
+
+pub(super) fn decode_subtitle(bytes: Vec<u8>) -> Result<String> {
+    if bytes.starts_with(&[0xff, 0xfe]) || bytes.starts_with(&[0xfe, 0xff]) {
         let little_endian = bytes[0] == 0xff;
-        ensure!(bytes.len() % 2 == 0, "Invalid UTF-16 subtitle file");
+        ensure!(
+            bytes.len().is_multiple_of(2),
+            "Invalid UTF-16 subtitle file"
+        );
         let units: Vec<_> = bytes[2..]
             .chunks_exact(2)
             .map(|b| {
@@ -59,18 +73,10 @@ fn read_file(path: &Path) -> Result<SubtitleFile> {
                 }
             })
             .collect();
-        String::from_utf16(&units).context("Invalid UTF-16 subtitle file")?
+        String::from_utf16(&units).context("Invalid UTF-16 subtitle file")
     } else {
-        String::from_utf8(bytes).context("Save subtitles as UTF-8 or UTF-16")?
-    };
-    Ok(SubtitleFile {
-        name: path
-            .file_name()
-            .context("Missing subtitle filename")?
-            .to_string_lossy()
-            .into_owned(),
-        text,
-    })
+        String::from_utf8(bytes).context("Save subtitles as UTF-8 or UTF-16")
+    }
 }
 
 #[tauri::command]

@@ -175,13 +175,6 @@
   }
 </script>
 
-{#snippet regenerateButton()}
-  <button class="regenerate-button" aria-label={p.t('regenerateSubtitles')}
-    title={p.t('regenerateSubtitles')} onclick={regenerate}>
-    <Icon name="refresh" size={15}/>{p.t('regenerate')}
-  </button>
-{/snippet}
-
 {#snippet playbackControls()}
   <div class="playback-sheet" role="group" aria-label={p.t('playbackOptions')}>
     <label class="option-row"
@@ -337,26 +330,22 @@
       {@render playbackControls()}
     </div>{/if}
     {#if p.canRegenerate}
-      <div class="regenerate-footer">{@render regenerateButton()}</div>
+      <div class="regenerate-footer">
+        <button class="regenerate-button" onclick={regenerate}>
+          <Icon name="refresh" size={15}/>{p.t('regenerateSubtitles')}
+        </button>
+      </div>
     {/if}
   </aside>
-{:else if p.canRegenerate}
-  <div class="regenerate-corner">{@render regenerateButton()}</div>
 {/if}
 
 <style>
   .regenerate-footer {
     display: flex;
     flex: none;
-    justify-content: flex-end;
+    justify-content: center;
     padding: 8px var(--inspector-inset);
     border-top: 1px solid var(--hairline);
-  }
-  .regenerate-corner {
-    position: absolute;
-    right: max(14px, env(safe-area-inset-right));
-    bottom: max(clamp(18px, 4.6vh, 38px), env(safe-area-inset-bottom));
-    z-index: 5;
   }
   .regenerate-button {
     gap: 6px;
@@ -364,25 +353,5 @@
     padding: 5px 11px;
     font-size: 12px;
     font-weight: 600;
-  }
-  .regenerate-corner .regenerate-button {
-    color: #f2f3f6;
-    background: rgb(24 27 34 / 70%);
-    border: 1px solid rgb(255 255 255 / 27%);
-    border-radius: 18px;
-    box-shadow: inset 0 1px rgb(255 255 255 / 9%), 0 2px 8px rgb(0 0 0 / 22%);
-    -webkit-backdrop-filter: blur(14px) saturate(145%);
-    backdrop-filter: blur(14px) saturate(145%);
-  }
-  .regenerate-corner .regenerate-button:hover {
-    background: rgb(47 51 62 / 85%);
-  }
-  @media (max-width: 900px) {
-    .regenerate-corner {
-      bottom: var(--bar-clearance);
-    }
-  }
-  @media (prefers-reduced-transparency: reduce) {
-    .regenerate-corner .regenerate-button { background: #202228; backdrop-filter: none; -webkit-backdrop-filter: none; }
   }
 </style>

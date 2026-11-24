@@ -1043,32 +1043,30 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
   background: #ffffff12; color: var(--glass-accent);
 }
 .app .inspector-tabs button:hover:not(:disabled) { color: white; background: #ffffff15; }
-.settings-dismiss-surface { display: none; }
+.panel-dismiss-surface { display: none; }
 @media (max-width: 1208px) {
   .app.watching .inspector { bottom: var(--bar-clearance); }
 }
-/* The compact settings drawer slides over the picture and transport together.
-   Its transparent dismiss surface consumes the first click outside the drawer. */
+/* Compact drawers cover the picture and transport. Clicking the clear area
+   dismisses a drawer; exposed sidebar buttons can still open the other one. */
 @media (max-width: 980px), (max-height: 540px) {
-  .app.watching { --settings-width: min(clamp(260px, 56vw, 350px), calc(100% - 58px)); }
-  .app.watching:has(> .right-inspector) { --occupied-right: 0px; }
-  .app.watching:has(> .left-inspector) .movie-viewport {
-    left: var(--occupied-left);
-    bottom: var(--bar-clearance);
+  .app.watching {
+    --settings-width: min(clamp(260px, 56vw, 350px), calc(100% - 58px));
     --caption-left: 0px;
     --caption-right: 0px;
-    --stage-footer-gap: 0px;
   }
-  .app.watching .left-inspector { bottom: var(--bar-clearance); }
-  .app.watching .right-inspector {
+  .app.watching:has(> .left-inspector):has(> .right-inspector) {
+    --settings-width: min(clamp(260px, 56vw, 350px), calc(100% - var(--playlist-width) - 28px));
+  }
+  .app.watching .inspector {
     z-index: 7;
     bottom: 0;
   }
-  .app .settings-dismiss-surface,
-  .app .settings-dismiss-surface:hover:not(:disabled) {
+  .app .panel-dismiss-surface,
+  .app .panel-dismiss-surface:hover:not(:disabled) {
     display: block;
     position: absolute;
-    z-index: 6;
+    z-index: 4;
     inset: 0;
     padding: 0;
     border: 0;
@@ -1076,10 +1074,11 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
     box-shadow: none;
     cursor: default;
   }
-  .app.watching .window-chrome {
-    left: var(--occupied-left);
+  .app:has(> .panel-dismiss-surface) [data-transport] { pointer-events: none; }
+  .app:has(> .panel-dismiss-surface) .floating-slot:not(.transport-hidden) :is(.playlist-trigger, .settings-trigger) {
+    pointer-events: auto;
   }
-  .app.watching:has(> .right-inspector) .window-chrome { right: var(--settings-width); }
+  .app.watching .window-chrome { left: var(--occupied-left); right: var(--occupied-right); }
   .window-title { max-width: calc(100% - 24px); }
   .native-mac .app.watching:not(:has(> .left-inspector)) .window-title {
     max-width: calc(100% - 152px);
@@ -1093,17 +1092,6 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
   .app .left-inspector .queue-row { gap: 0; padding-right: 2px; }
   .app .left-inspector .queue-number { min-width: 12px; }
   .app .left-inspector .drawer-footer button { padding-inline: 6px; }
-}
-/* The portrait playlist sits below the movie. Settings can cover either. */
-@media (max-width: 600px) and (min-height: 500px) and (orientation: portrait) {
-  .app.watching:has(> .left-inspector) { --portrait-stage: min(43%, 340px); }
-  .app.watching:has(> .left-inspector) .movie-viewport {
-    inset: 0 0 auto;
-    height: var(--portrait-stage);
-  }
-  .app.watching .window-chrome { left: 0; right: 0; }
-  .app.watching .left-inspector { top: var(--portrait-stage); width: 100%; max-width: 100%; }
-  .native-mac .app.watching:not(.fullscreen) .left-inspector { padding-top: 0; }
 }
 @media (max-height: 400px) {
   .app.watching .inspector .panel-title { min-height: 30px; padding-block: 2px; }

@@ -2162,12 +2162,14 @@ name = "henlocal-player"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "axum",
  "dirs 5.0.1",
  "hlp-core",
  "hlp-media",
  "hlp-models",
  "hlp-pipeline",
  "parking_lot",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "tauri",

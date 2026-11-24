@@ -60,9 +60,6 @@
       </div>
     </div>
     <div class="subtitle-file-actions">
-      <button class="import-subtitle" onclick={() => window.dispatchEvent(new Event('hlp:subtitle-file'))}>
-        <Icon name="folder" size={14} />{p.t('openSubtitleFile')}
-      </button>
       {#if tracks.discoveryError}<button onclick={() => tracks.discover(p.media?.sessionId ?? '')}>{p.t('retryTracks')}</button>{/if}
       {#if tracks.selected === 'generated' && p.cues.length}
         <button onclick={() => (p.dialog = 'export')}><Icon name="export" size={14} />{p.t('exportSubs')}</button>

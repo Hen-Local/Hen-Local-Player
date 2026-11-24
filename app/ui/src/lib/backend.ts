@@ -12,6 +12,12 @@ export interface EmbeddedTrack {
   language: string | null
   title: string | null
 }
+export interface OpenSubtitleResult {
+  fileId: number
+  fileName: string
+  language: string
+  release: string
+}
 export interface SubtitleInventory {
   embedded: EmbeddedTrack[]
   sidecars: string[]
@@ -39,6 +45,10 @@ export interface Commands {
   list_subtitle_tracks: [{ sessionId: string }, SubtitleInventory]
   read_embedded_subtitle: [{ sessionId: string; order: number }, string]
   read_sidecar_subtitle: [{ sessionId: string; name: string }, string]
+  get_opensubtitles_config: [undefined, { hasApiKey: boolean }]
+  open_opensubtitles_registration: [undefined, void]
+  search_opensubtitles: [{ query: string; language: string; apiKey?: string }, OpenSubtitleResult[]]
+  download_opensubtitle: [{ fileId: number; apiKey?: string }, { name: string; text: string }]
   export_subtitles: [ { variant: SubtitleVariant; format: SubtitleFormat; path: string }, void ]
   suggest_export_paths: [ { variant: SubtitleVariant; format: SubtitleFormat }, string ]
   get_settings: [ undefined, Settings ]

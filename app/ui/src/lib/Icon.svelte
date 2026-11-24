@@ -1,6 +1,7 @@
 <script lang="ts">
   let { name, size = 18 }: { name: string; size?: number } = $props()
   const paths: Record<string, string> = {
+    search: 'M16 10a6 6 0 1 1-12 0 6 6 0 0 1 12 0zm-2 5 6 6',
     folder: 'M3 7V5a1 1 0 0 1 1-1h5l2 3h9a1 1 0 0 1 1 1v2M3 8v11h16l3-10H6l-3 10',
     link: 'M10 13a4 4 0 0 0 6 0l4-4a4 4 0 0 0-6-6l-2 2M14 11a4 4 0 0 0-6 0l-4 4a4 4 0 0 0 6 6l2-2',
     settings: 'M4 6h7m4 0h5M4 12h2m4 0h10M4 18h10m4 0h2M11 3v6M6 9v6M14 15v6',

@@ -10,6 +10,7 @@
   import RecentList from './lib/RecentList.svelte'
   import PlaylistPanel from './lib/PlaylistPanel.svelte'
   import OpenUrlDialog from './lib/OpenUrlDialog.svelte'
+  import OpenSubtitlesDialog from './lib/OpenSubtitlesDialog.svelte'
   import ExportMenu from './lib/ExportMenu.svelte'
   import SetupScreen from './lib/SetupScreen.svelte'
   import SettingsDialog from './lib/SettingsDialog.svelte'
@@ -34,7 +35,8 @@
   let preferenceWrite = Promise.resolve()
   let preferenceRevision = 0
   let menuOpen = $state(false)
-  let lastSide: Side = 'right'
+  let lastSide = $state<Side>('right')
+  let dismissSide: Side = $derived(leftPanel && (!rightTab || lastSide === 'left') ? 'left' : 'right')
   let wasPlayingFile = false
 
   function focusMore() {
@@ -130,7 +132,7 @@
       const focused = (e.target as Element | null)?.closest?.('.inspector')
       const side = focused?.classList.contains('left-inspector') ? 'left'
         : focused?.classList.contains('right-inspector') ? 'right'
-        : leftPanel && rightTab ? lastSide : leftPanel ? 'left' : 'right'
+        : dismissSide
       closePanel(side)
       return
     }
@@ -246,7 +248,7 @@
     }
   })
   $effect(() => {
-    // The menu and compact panels clear the actual transport, including after resize.
+    // Keep the menu and subtitle clearance aligned to the transport after resize.
     p.media?.sessionId
     const observer = new ResizeObserver(placeOverlays)
     let mounted = true
@@ -334,9 +336,10 @@
     </aside>
   {/if}
   {#if p.media}
-    {#if rightTab}
-      <button class="settings-dismiss-surface" tabindex="-1" aria-label={p.t('close')}
-        aria-controls="player-settings" onclick={() => closePanel('right')}></button>
+    {#if leftPanel || rightTab}
+      <button class="panel-dismiss-surface" tabindex="-1" aria-label={p.t('close')}
+        aria-controls={dismissSide === 'left' ? 'playlist-sidebar' : 'player-settings'}
+        onclick={() => closePanel(dismissSide)}></button>
     {/if}
     <PlayerSettings tab={rightTab} onselect={setRight} onfocus={() => (lastSide = 'right')}
       onclose={() => closePanel('right')} />
@@ -363,6 +366,7 @@
     </div>{/if}
   {#if p.dialog === 'url'}<OpenUrlDialog
     />{:else if p.dialog === 'settings'}<SettingsDialog />
+  {:else if p.dialog === 'opensubtitles'}<OpenSubtitlesDialog />
   {:else if p.dialog === 'setup'}<SetupScreen
     />{:else if p.dialog === 'export'}<ExportMenu />{/if}
 </main>

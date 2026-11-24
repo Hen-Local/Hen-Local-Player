@@ -224,34 +224,53 @@ class SubtitleTracks {
   }
 
   async importFile(browserFile?: File) {
+    return this.importText(async () => browserFile
+      ? { name: browserFile.name, text: await readSubtitleFile(browserFile, player.locale) }
+      : invoke<{ name: string; text: string } | null>('choose_subtitle_file'))
+  }
+
+  async importOnline(fileId: number, read: () => Promise<{ name: string; text: string } | null>) {
+    const key = 'file:opensubtitles:' + fileId
+    if (this.files.some((track) => track.id === key)) {
+      const id = this.session
+      const expected = this.request + 1
+      try {
+        await this.select(key)
+        return
+      } catch {
+        // The browser can evict imported text independently of track preferences.
+        if (!this.current(id) || expected !== this.request) return
+      }
+    }
+    return this.importText(read, key)
+  }
+
+  private async importText(read: () => Promise<{ name: string; text: string } | null>, key?: string) {
     const id = this.session
     if (!this.current(id)) return
     this.initial = false
     const revision = ++this.request
     this.loading = false
-    let file: { name: string; text: string } | null
-    if (browserFile) {
-      file = { name: browserFile.name, text: await readSubtitleFile(browserFile, player.locale) }
-    } else {
-      file = await invoke<{ name: string; text: string } | null>('choose_subtitle_file')
-    }
+    const file = await read()
     if (!file || !this.current(id)) return
     const timeline = parseSubtitleText(file.text)
     if (!timeline.cues.length)
       throw Error(
-        player.locale === 'zh'
+        key ? 'invalid_subtitle' : player.locale === 'zh'
           ? '文件中没有有效的 SRT 或 WebVTT 字幕。'
           : 'This file contains no readable SRT or WebVTT cues.',
       )
-    const track = { id: 'file:' + (this.files.length + 1), name: file.name }
+    const track = { id: key ?? 'file:' + (this.files.length + 1), name: file.name }
     this.extracted.set(track.id, timeline)
-    this.files = [...this.files, track]
+    this.files = [...this.files.filter((entry) => entry.id !== track.id), track]
     try {
       await importedText(this.path, track.id, file.text)
       if (!this.current(id)) return
       this.save({ files: this.files })
     } catch {
-      /* Still usable in this session if device storage is exhausted. */
+      if (this.current(id)) player.toast(player.locale === 'zh'
+        ? '已载入字幕。本机存储空间不足或不可用，下次打开时需重新导入。'
+        : 'Subtitles loaded. Local storage is unavailable, so you’ll need to import them again next time.')
     }
     if (this.current(id) && revision === this.request) await this.select(track.id)
   }

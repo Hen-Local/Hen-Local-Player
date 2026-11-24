@@ -22,6 +22,10 @@ parking_lot.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 dirs.workspace = true
+reqwest.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
 
 [build-dependencies]
 tauri-build.workspace = true

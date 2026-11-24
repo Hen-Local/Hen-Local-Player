@@ -19,6 +19,7 @@
   })
   function importTrack() {
     if (!p.media) return
+    p.error = ''
     tracks.attach(p.media.sessionId)
     if (mockMode) picker.click()
     else void p.act(() => tracks.importFile())

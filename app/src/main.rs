@@ -4,6 +4,7 @@
 )]
 mod commands;
 mod events;
+mod opensubtitles;
 mod playback;
 mod player_menu;
 mod state;
@@ -72,6 +73,10 @@ fn main() {
             subtitle_tracks::read_sidecar_subtitle,
             subtitle_tracks::read_embedded_subtitle,
             subtitle_tracks::choose_subtitle_file,
+            opensubtitles::get_opensubtitles_config,
+            opensubtitles::open_opensubtitles_registration,
+            opensubtitles::search_opensubtitles,
+            opensubtitles::download_opensubtitle,
             probe_url,
             download_url,
             cancel_download,

@@ -22,7 +22,7 @@ import type {
 
 export const mockMode = !('__TAURI_INTERNALS__' in window)
 export const backend: Backend = mockMode ? new MockBackend() : new TauriBackend()
-export type Dialog = 'settings' | 'setup' | 'url' | 'export' | null
+export type Dialog = 'settings' | 'setup' | 'url' | 'export' | 'opensubtitles' | null
 export const playbackSpeedPresets = [0.5, 0.75, 1, 1.25, 1.5, 2, 4]
 export const modes = ['original', 'translation', 'both', 'off'] as const
 export function cueAt(cues: Cue[], ms: number) {

@@ -1,0 +1,8 @@
+# OpenSubtitles integration
+
+## Desktop API verification · November 23, 2026
+
+- Read the official OpenAPI 3.0.3 document, version 1.0.1, and checked the search and download examples against the integration. OpenSubtitles requires an application consumer key for both calls. Anonymous users can use the provider’s daily download allowance without logging in. [OpenAPI schema](https://stoplight.io/api/v1/projects/opensubtitles/opensubtitles-api/nodes/open_api.json) · [Provider setup and quotas](https://opensubtitles.tawk.help/article/getting-started).
+- The live public language catalog at `GET /api/v1/infos/languages` returned HTTP 200. It listed `zh-cn`, `zh-tw`, `zh-ca`, `pt-pt` and `pt-br`. A live search for the public film title “The Matrix” without a consumer key received HTTP 403. An authenticated production download remains unverified because no provider key was available in the test environment.
+- `cargo test --offline --locked -p henlocal-player opensubtitles` passed all three tests. A local HTTP service verified encoded search parameters and API headers, returned two files for one release, accepted the second file ID, and served a bilingual SRT from the temporary link. The file request contained neither a consumer key nor an authorization header. The other cases checked disallowed download URLs, restricted redirects, response size, query validation, authentication, quota and rate-limit errors.
+- The desktop reuses the existing reqwest dependency, subtitle size limit and UTF-8/UTF-16 file decoder. The media file, path, fingerprint and audio stay on the device. Local playback and imports do not contact the provider.

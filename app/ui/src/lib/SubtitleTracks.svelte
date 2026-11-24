@@ -2,6 +2,7 @@
   import { untrack } from 'svelte'
   import { player as p } from './stores.svelte'
   import type { EmbeddedTrack } from './backend'
+  import Icon from './Icon.svelte'
   import { subtitleTracks as tracks } from './subtitle-tracks.svelte'
 
   const labels = {
@@ -85,7 +86,21 @@
         </optgroup>{/if}
     </select>
   </label>
+  <div class="track-sources">
+    <button class="import-subtitle" title={p.t('subtitleFileTypes')}
+      onclick={() => window.dispatchEvent(new Event('hlp:subtitle-file'))}>
+      <Icon name="folder" size={14} />{p.t('openSubtitleFile')}
+    </button>
+    <button class="online-subtitles" aria-haspopup="dialog" onclick={() => (p.dialog = 'opensubtitles')}>
+      <Icon name="search" size={14} />OpenSubtitles…
+    </button>
+  </div>
 </div>
 {#if tracks.loading || tracks.discovering}<small class="read-status" role="status"
     >{copy.loading}</small
   >{/if}
+
+<style>
+  .track-sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .track-sources button { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; }
+</style>

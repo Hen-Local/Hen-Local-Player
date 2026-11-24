@@ -10,6 +10,12 @@ The desktop receives file paths from the operating system, its file and folder d
 
 The desktop fullscreen button and shortcuts call Tauri’s window fullscreen API. In the pinned Tao 0.37.3 Mac backend, programmatic entry and the green window button both use AppKit fullscreen. Tao applies the latest request made during a transition after AppKit finishes and emits a resize event on completion. The webview observes native window state to update its controls after a system menu or title-bar action. [Tauri window API](https://v2.tauri.app/reference/javascript/api/namespacewindow/#setfullscreen) · [AppKit fullscreen action](https://developer.apple.com/documentation/appkit/nswindow/togglefullscreen%28_%3A%29).
 
+## Online subtitle search
+
+The desktop contacts OpenSubtitles.com when a viewer submits a title search or chooses a file to download. Search sends the edited title and optional language to `GET /api/v1/subtitles`. The search response can contain multiple files per release. Download sends the selected `file_id` and the requested SRT format to `POST /api/v1/download`, then retrieves the returned temporary HTTPS link. The API receives the viewer-supplied consumer key or `OPENSUBTITLES_API_KEY`. The file host receives neither the key nor a bearer token. Anonymous downloads use the provider’s allowance. [Official OpenAPI schema](https://stoplight.io/api/v1/projects/opensubtitles/opensubtitles-api/nodes/open_api.json) · [Provider integration guide](https://blog.opensubtitles.com/opensubtitles/how-to-build-a-movie-subtitle-finder-cli-with-python-and-the-opensubtitles-api).
+
+Downloaded subtitle text goes through the same per-movie parser and storage as an imported SRT. Playback of a saved track works offline. File downloads accept HTTPS links on OpenSubtitles domains, including validated redirect destinations, and use the local importer’s 16 MiB text limit. API errors return short status codes for the localized UI. A query and its temporary download URL stay out of the error messages.
+
 ## Build observations
 
 The pinned upstream MLX release includes libmlx.a, libmlxc.a, libgguflib.a and mlx.metallib. The translator release workflow supplies the SHA-256 for the build archive. A Command Line Tools installation can supply clang on hosts where full Xcode is unavailable. The installed Homebrew FFmpeg on the development Mac omits libvpx. The fixture generator accepts an encoder-capable FFmpeg via HLP_FFMPEG.
