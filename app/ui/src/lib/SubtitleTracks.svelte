@@ -91,8 +91,8 @@
       onclick={() => window.dispatchEvent(new Event('hlp:subtitle-file'))}>
       <Icon name="folder" size={14} />{p.t('openSubtitleFile')}
     </button>
-    <button class="online-subtitles" aria-haspopup="dialog" onclick={() => (p.dialog = 'opensubtitles')}>
-      <Icon name="search" size={14} />OpenSubtitles…
+    <button class="online-subtitles" aria-haspopup="dialog" onclick={() => (p.dialog = 'online-subtitles')}>
+      <Icon name="search" size={14} />{p.t('findOnlineSubtitles')}…
     </button>
   </div>
 </div>

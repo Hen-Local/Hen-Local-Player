@@ -2,6 +2,14 @@
 
 A checked item has been exercised. Worktree branches and tags are local until publication is requested.
 
+## Find Online Subtitles without account setup · November 23, 2026
+
+- [x] Confirmed that the installed IINA 1.5.1 bundles OpenSubtitles and uses **Find Online Subtitles**. Hen’s sidebar and native Subtitles menu now expose the same action, including ⇧⌘D on macOS. Hen uses Subtitle Search Engine’s public guest API by default. [IINA providers](https://docs.iina.io/pages/subtitle-providers.html) · [Guest API](https://subtitles.website/docs/).
+- [x] A live guest search for *Metropolis* returned releases for both the 1927 and 2001 films. Selecting the 1927 release returned a 27,449-byte SRT with 314 timing markers. An *Avatar* search using the provider’s Chinese code returned 20 Chinese results. [Provider checks](progress/keyless-subtitle-provider.md).
+- [x] Chrome at 450 × 300 in English and WebKit at 720 × 430 in Chinese exercised the title suggestions, empty results, retry after a failed search or download, selection, and offline reopens. Opening the dialog and editing its fields generated zero provider requests. Twelve filename examples covered release tags, numeric titles, initials, non-Latin filenames and TV episodes. A track cached by the earlier OpenSubtitles integration also restored without contacting its provider. [UI checks](progress/player-subtitles.md#finding-online-subtitles-without-an-api-key).
+- [x] Opened a silent test video named `Metropolis.mp4` in an isolated copy of the packaged Mac player with no credentials. ⇧⌘D opened an enabled search for *Metropolis* in English. The live service returned three releases. Clicking **Use Subtitle** for the 1927 release selected `Metropolis [1927].ys-en.srt`; the player listed 313 captions and rendered the selected track at 00:32. The signed application passed `codesign --verify --deep --strict`. The 126,392,429-byte Apple Silicon installer passed `hdiutil verify` with SHA-256 `034d8af1ec65a6ebcc116a19f560c87897bbe29f88499fb786cbc27e2e4b75d0`.
+- [x] `cargo test --locked --offline --workspace` passed all 57 regular tests. `cargo fmt --all --check`, Svelte checks (zero errors and warnings), the production Vite build, and the local Windows x64 compiler check for the desktop player, CLI and worker passed.
+
 ## Sidebar controls and subtitle sources · November 23, 2026
 
 - [x] Tested both compact drawers in Chrome and WebKit at nine sizes from 320 × 235 to 1440 × 900. At 720 × 430 the playlist covered the left end of the transport. The picture stayed at 720 × 430 and the transport stayed at 600 × 87. An outside click closed the most recently used drawer and consumed the click. [Drawer measurements](progress/player-shell.md#compact-playlist-and-settings-overlays).

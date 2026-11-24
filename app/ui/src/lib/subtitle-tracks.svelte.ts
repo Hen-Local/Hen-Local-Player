@@ -229,8 +229,8 @@ class SubtitleTracks {
       : invoke<{ name: string; text: string } | null>('choose_subtitle_file'))
   }
 
-  async importOnline(fileId: number, read: () => Promise<{ name: string; text: string } | null>) {
-    const key = 'file:opensubtitles:' + fileId
+  async importOnline(fileId: string, read: () => Promise<{ name: string; text: string } | null>) {
+    const key = 'file:' + fileId
     if (this.files.some((track) => track.id === key)) {
       const id = this.session
       const expected = this.request + 1

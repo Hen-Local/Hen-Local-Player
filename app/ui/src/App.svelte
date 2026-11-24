@@ -10,7 +10,7 @@
   import RecentList from './lib/RecentList.svelte'
   import PlaylistPanel from './lib/PlaylistPanel.svelte'
   import OpenUrlDialog from './lib/OpenUrlDialog.svelte'
-  import OpenSubtitlesDialog from './lib/OpenSubtitlesDialog.svelte'
+  import OnlineSubtitleDialog from './lib/OnlineSubtitleDialog.svelte'
   import ExportMenu from './lib/ExportMenu.svelte'
   import SetupScreen from './lib/SetupScreen.svelte'
   import SettingsDialog from './lib/SettingsDialog.svelte'
@@ -139,14 +139,14 @@
     if (menuOpen) return
     const cmd = e.metaKey || e.ctrlKey,
       k = e.key.toLowerCase()
-    if (cmd && ['o', 'l', 'e'].includes(k)) {
+    if (cmd && (['o', 'l', 'e'].includes(k) || (k === 'd' && e.shiftKey))) {
       if (!mockMode) return // The desktop menu handles these accelerators.
       e.preventDefault()
       if (k === 'o') {
         if (e.shiftKey) void p.chooseFolder()
         else void p.choose()
       } else if (k === 'l') p.dialog = 'url'
-      else if (p.media) p.dialog = 'export'
+      else if (p.media) p.dialog = k === 'd' ? 'online-subtitles' : 'export'
       return
     }
     const el = e.target as HTMLElement | null
@@ -366,7 +366,7 @@
     </div>{/if}
   {#if p.dialog === 'url'}<OpenUrlDialog
     />{:else if p.dialog === 'settings'}<SettingsDialog />
-  {:else if p.dialog === 'opensubtitles'}<OpenSubtitlesDialog />
+  {:else if p.dialog === 'online-subtitles'}<OnlineSubtitleDialog />
   {:else if p.dialog === 'setup'}<SetupScreen
     />{:else if p.dialog === 'export'}<ExportMenu />{/if}
 </main>

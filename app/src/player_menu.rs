@@ -70,6 +70,11 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let subtitles = Submenu::new(app, "Subtitles", true)?;
     for (id, label, key) in [
         ("subtitle-file", "Open Subtitle File…", None),
+        (
+            "find-subtitles",
+            "Find Online Subtitles…",
+            Some("CmdOrCtrl+Shift+D"),
+        ),
         ("subtitles", "Cycle Generated Subtitles", None),
         ("transcript", "Show Subtitles Panel", None),
         ("export", "Export Generated Subtitles…", Some("CmdOrCtrl+E")),
@@ -125,6 +130,7 @@ pub fn handle(app: &AppHandle, id: &str) {
             | "audio-tracks"
             | "playback-options"
             | "subtitle-file"
+            | "find-subtitles"
             | "subtitles"
             | "transcript"
             | "export"

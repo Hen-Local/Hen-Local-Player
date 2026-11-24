@@ -1,64 +1,24 @@
 //! User-initiated OpenSubtitles.com searches and downloads. Signed file requests
 //! use their own headers so the consumer key only goes to the API origin.
-use crate::subtitle_tracks::{decode_subtitle, SubtitleFile, MAX_BYTES};
+use crate::{
+    online_subtitles::{response_bytes, subtitle_file, Reply, SearchFile, JSON_LIMIT, USER_AGENT},
+    subtitle_tracks::{SubtitleFile, MAX_BYTES},
+};
 use reqwest::{
     header::{HeaderValue, ACCEPT},
     redirect::Policy,
     Client, RequestBuilder, Url,
 };
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize};
 use std::{collections::HashSet, time::Duration};
-use tauri_plugin_opener::OpenerExt;
 
 const API: &str = "https://api.opensubtitles.com/api/v1";
-const USER_AGENT: &str = concat!("Hen Local Player v", env!("CARGO_PKG_VERSION"));
-const JSON_LIMIT: u64 = 2 * 1024 * 1024;
-type Reply<T> = Result<T, &'static str>;
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Config {
-    has_api_key: bool,
-}
-
-fn key_from_environment() -> Option<String> {
-    std::env::var("OPENSUBTITLES_API_KEY")
-        .ok()
-        .filter(|key| !key.trim().is_empty())
-}
-
-#[tauri::command]
-pub fn get_opensubtitles_config() -> Config {
-    Config {
-        has_api_key: key_from_environment().is_some(),
-    }
-}
-
-#[tauri::command]
-pub fn open_opensubtitles_registration(app: tauri::AppHandle) -> Reply<()> {
-    app.opener()
-        .open_url("https://www.opensubtitles.com/en/consumers", None::<&str>)
-        .map_err(|_| "network")
-}
-
-fn consumer_key(explicit: Option<String>) -> Reply<HeaderValue> {
-    let key = explicit
-        .filter(|key| !key.trim().is_empty())
-        .or_else(key_from_environment)
-        .ok_or("missing_key")?;
+fn consumer_key(key: &str) -> Reply<HeaderValue> {
     let mut header = HeaderValue::from_str(key.trim()).map_err(|_| "invalid_key")?;
     header.set_sensitive(true);
     Ok(header)
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SearchFile {
-    file_id: u32,
-    file_name: String,
-    language: String,
-    release: String,
-}
 #[derive(Deserialize)]
 struct SearchResponse {
     data: Vec<Entry>,
@@ -120,34 +80,6 @@ fn client() -> Reply<Client> {
         .map_err(|_| "network")
 }
 
-async fn response_bytes(request: RequestBuilder, max: u64, api: bool) -> Reply<Vec<u8>> {
-    let mut response = request.send().await.map_err(|_| "network")?;
-    if !response.status().is_success() {
-        return Err(match response.status().as_u16() {
-            401 | 403 if api => "invalid_key",
-            402 | 406 if api => "quota",
-            429 => "rate_limited",
-            _ => "unavailable",
-        });
-    }
-    let invalid = if api {
-        "unavailable"
-    } else {
-        "invalid_subtitle"
-    };
-    if response.content_length().is_some_and(|n| n > max) {
-        return Err(invalid);
-    }
-    let mut bytes = Vec::new();
-    while let Some(chunk) = response.chunk().await.map_err(|_| "network")? {
-        if bytes.len() as u64 + chunk.len() as u64 > max {
-            return Err(invalid);
-        }
-        bytes.extend_from_slice(&chunk);
-    }
-    Ok(bytes)
-}
-
 async fn api_json<T: DeserializeOwned>(request: RequestBuilder, key: HeaderValue) -> Reply<T> {
     let request = request
         .header(ACCEPT, "application/json")
@@ -163,20 +95,14 @@ async fn search(
     query: &str,
     language: &str,
 ) -> Reply<Vec<SearchFile>> {
-    let query = query.trim();
-    if query.is_empty() || query.chars().count() > 250 || query.chars().any(char::is_control) {
-        return Err("invalid_query");
-    }
     let mut request = client.get(format!("{base}/subtitles"));
-    let language = language.trim().to_ascii_lowercase();
     if !language.is_empty() {
-        if language.len() > 12
-            || !language
-                .split('-')
-                .all(|s| (2..=3).contains(&s.len()) && s.bytes().all(|c| c.is_ascii_lowercase()))
-        {
-            return Err("invalid_language");
-        }
+        let language = match language {
+            "zh" => "zh-cn,zh-tw",
+            "yue" => "zh-ca",
+            "pt" => "pt-br,pt-pt",
+            other => other,
+        };
         request = request.query(&[("languages", language)]);
     }
     // The provider asks for alphabetized parameters and lowercase queries.
@@ -191,7 +117,7 @@ async fn search(
                 continue;
             }
             files.push(SearchFile {
-                file_id: f.file_id,
+                file_id: format!("opensubtitles:{}", f.file_id),
                 file_name: f.file_name.unwrap_or_default(),
                 language: a.language.clone(),
                 release: a.release.clone().unwrap_or_default(),
@@ -201,14 +127,12 @@ async fn search(
     Ok(files)
 }
 
-#[tauri::command]
-pub async fn search_opensubtitles(
-    query: String,
-    language: String,
-    api_key: Option<String>,
+pub(super) async fn search_titles(
+    query: &str,
+    language: &str,
+    key: &str,
 ) -> Reply<Vec<SearchFile>> {
-    let key = consumer_key(api_key)?;
-    search(&client()?, API, key, &query, &language).await
+    search(&client()?, API, consumer_key(key)?, query, language).await
 }
 
 async fn download(
@@ -230,24 +154,24 @@ async fn download(
         return Err("unavailable");
     }
     let bytes = response_bytes(client.get(url), MAX_BYTES, false).await?;
-    // The importer performs complete cue parsing before adding this to a movie.
-    let text = decode_subtitle(bytes).map_err(|_| "invalid_subtitle")?;
-    if text.contains('\0') || !text.contains("-->") {
-        return Err("invalid_subtitle");
-    }
     let name = meta
         .file_name
         .as_deref()
         .and_then(|s| s.rsplit(['/', '\\']).next())
         .filter(|s| !s.trim().is_empty() && !s.chars().any(char::is_control))
         .map_or_else(|| format!("OpenSubtitles-{file_id}.srt"), str::to_owned);
-    Ok(SubtitleFile { name, text })
+    subtitle_file(name, bytes)
 }
 
-#[tauri::command]
-pub async fn download_opensubtitle(file_id: u32, api_key: Option<String>) -> Reply<SubtitleFile> {
-    let key = consumer_key(api_key)?;
-    download(&client()?, API, key, file_id, file_url_allowed).await
+pub(super) async fn download_file(file_id: u32, key: &str) -> Reply<SubtitleFile> {
+    download(
+        &client()?,
+        API,
+        consumer_key(key)?,
+        file_id,
+        file_url_allowed,
+    )
+    .await
 }
 
 #[cfg(test)]
@@ -267,7 +191,7 @@ mod tests {
     const SRT: &str = "1\r\n00:00:00,000 --> 00:00:02,000\r\nHello, 世界\r\n";
 
     fn key() -> HeaderValue {
-        consumer_key(Some(KEY.into())).unwrap()
+        consumer_key(KEY).unwrap()
     }
     fn check_api_headers(headers: &HeaderMap) {
         assert_eq!(headers["Api-Key"], KEY);
@@ -301,13 +225,14 @@ mod tests {
             }));
         let server = tokio::spawn(async move { axum::serve(listener, routes).await.unwrap() });
         let client = client().unwrap();
-        let rows = search(&client, &base, key(), " Public Film & Part 2 ", "ZH-CN")
+        let rows = search(&client, &base, key(), "Public Film & Part 2", "zh-cn")
             .await
             .unwrap();
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[1].file_name, "Part two");
+        assert_eq!(rows[1].file_id, "opensubtitles:11");
         assert_eq!(rows[1].release, "Public Film");
-        let file = download(&client, &base, key(), rows[1].file_id, |url| {
+        let file = download(&client, &base, key(), 11, |url| {
             url.as_str() == format!("{base}/signed/file.srt")
         })
         .await
@@ -335,7 +260,7 @@ mod tests {
         ] {
             assert!(!file_url_allowed(&Url::parse(address).unwrap()));
         }
-        assert!(consumer_key(Some("bad\r\nheader".into())).is_err());
+        assert!(consumer_key("bad\r\nheader").is_err());
     }
 
     #[tokio::test]
@@ -368,14 +293,6 @@ mod tests {
                 error
             );
         }
-        assert!(matches!(
-            search(&client, &base, key(), "", "en").await,
-            Err("invalid_query")
-        ));
-        assert!(matches!(
-            search(&client, &base, key(), "movie", "../etc").await,
-            Err("invalid_language")
-        ));
         server.abort();
     }
 }

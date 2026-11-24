@@ -433,10 +433,8 @@ export class MockBackend implements Backend {
       case 'list_recent':
         reply = [...this.recent]
         break
-      case 'get_opensubtitles_config':
-      case 'open_opensubtitles_registration':
-      case 'search_opensubtitles':
-      case 'download_opensubtitle':
+      case 'search_online_subtitles':
+      case 'download_online_subtitle':
         throw Error('desktop_only')
       case 'get_sample_media':
         reply = demoPath
