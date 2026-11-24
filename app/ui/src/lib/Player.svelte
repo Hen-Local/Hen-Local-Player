@@ -22,7 +22,7 @@
     playlistOpen?: boolean
   } = $props()
   let surface: HTMLDivElement, stage: HTMLDivElement
-  let stageHeight = $state(0), stageBottomGap = $state(0)
+  let pictureBottomGap = $state(0)
   let video = $state<HTMLVideoElement>()
   let box = $state({ width: 0, height: 0, left: 0, top: 0 }),
     buffered = $state(0),
@@ -45,12 +45,13 @@
   )
   function measure() {
     if (!stage || !surface || !video) return
-    stageBottomGap = surface.clientHeight - stage.offsetTop - stage.clientHeight
     const { clientWidth: w, clientHeight: h } = stage,
       aspect = (video.videoWidth || 16) / (video.videoHeight || 9)
     const width = p.videoFit === 'cover' ? w : Math.min(w, h * aspect),
       height = p.videoFit === 'cover' ? h : width / aspect
-    box = { width, height, left: (w - width) / 2, top: (h - height) / 2 }
+    const top = (h - height) / 2
+    box = { width, height, left: (w - width) / 2, top }
+    pictureBottomGap = surface.clientHeight - stage.offsetTop - top - height
   }
   function sync(force = false) {
     if (!video || !p.media) return
@@ -298,7 +299,6 @@
 <div class="player-surface" bind:this={surface}>
   <div
     bind:this={stage}
-    bind:clientHeight={stageHeight}
     class="video-stage movie-viewport"
     class:audio-only={audioOnly}
     class:controls-visible={controlsVisible}
@@ -352,7 +352,7 @@
       <SubtitleOverlay
         {box}
         {audioOnly}
-        clearance={Math.max(0, controlsHeight + 12 - stageBottomGap - (stageHeight - box.top - box.height))}
+        clearance={controlsVisible ? Math.max(0, controlsHeight + 12 - pictureBottomGap) : 0}
       />
       {#if p.status?.stage === 'needs-setup' && !url && subtitleTracks.selected === 'generated' && p.settings.subtitleMode !== 'off'}<button
           class="stage-chip"

@@ -1,5 +1,6 @@
 //! Adapted from Hen-Local-Translator/node-hub/dora-qwen35-translator/src/backend_llamacpp.rs.
 use anyhow::{bail, ensure, Context, Result};
+use hlp_core::cues::{align_translated_phrases, translation_plan, AlignedPhrase};
 use hlp_core::prompts::{translation_prompt, MAX_TOKENS, REPEAT_PENALTY, TEMPERATURE};
 use serde_json::{json, Value};
 use std::{net::TcpListener, process::Stdio, time::Duration};
@@ -155,6 +156,45 @@ impl Translator {
             }
         }
         bail!("Translation was empty, unchanged or contained reasoning after retry")
+    }
+
+    pub(crate) async fn translate_subtitle(
+        &mut self,
+        source: Option<&str>,
+        target: &str,
+        text: &str,
+        context: Option<&str>,
+    ) -> Result<(String, Vec<AlignedPhrase>)> {
+        let whole = self.translate(source, target, text, context).await?;
+        let Some(plan) = translation_plan(text, &whole) else {
+            return Ok((whole, Vec::new()));
+        };
+
+        // The complete utterance supplies the meaning of each short extract,
+        // including words spoken later in the same sentence.
+        let background = match context {
+            Some(previous) => format!("{previous}\n{text}"),
+            None => text.to_owned(),
+        };
+        // Phrase translations are alignment hints only. The model can echo its
+        // background, so never concatenate these outputs into the saved translation.
+        let mut hints = Vec::with_capacity(plan.len());
+        for (span, reusable) in plan {
+            let hint = match reusable {
+                Some(existing) => existing.to_owned(),
+                None => match self
+                    .translate(source, target, span.trim(), Some(&background))
+                    .await
+                {
+                    Ok(part) => part,
+                    Err(_) => return Ok((whole, Vec::new())),
+                },
+            };
+            hints.push((span, hint));
+        }
+        let spans: Vec<_> = hints.iter().map(|(s, t)| (*s, t.as_str())).collect();
+        let offsets = align_translated_phrases(text, &whole, &spans).unwrap_or_default();
+        Ok((whole, offsets))
     }
 }
 fn clean_output(raw: &str, source: &str) -> String {

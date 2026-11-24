@@ -78,3 +78,9 @@ At 1112 × 586 CSS pixels in `d318c3d`, both sidebars ended at y=464, leaving a 
 The transport's right group now contains Playlist, Player Settings and More. Removing the fullscreen button freed enough space to center Play even at the minimum window width.
 
 `node /tmp/hen-player-transport-actions.cjs` played the sample in Chrome and WebKit and checked eight viewport sizes from 320 × 235 through 1440 × 900. Every visible control fit within the window, accepted pointer hit tests, and had a separate click target. Play remained centered to the pixel at all eight sizes. In each browser, F entered fullscreen, Escape exited, and double-clicking the video entered and exited fullscreen.
+
+## Video subtitle placement
+
+Video captions use the midpoint of the displayed picture with either drawer open or both open together. The Vertical Position setting anchors their lower edge. When the visible transport reaches that position, the captions move just far enough to leave a 12-pixel gap above it. Pointer exit and the playback idle timeout restore the selected position immediately.
+
+`node /tmp/hen-picture-subtitle-position.cjs` checked 160 combinations per engine in Chrome and WebKit. It exercised ten sizes from 320 × 235 through 1920 × 600, four drawer states, two subtitle positions, and transport show/hide. The English and Chinese rows stayed centered in the picture, each on a single line. At 1112 × 586 with a 5% offset, the subtitle block ended at y=460 above the visible transport at y=472. It returned to y=557 on the first animation frame after pointer exit. The idle timeout and pointer return produced the same two positions. Imported SRT cues kept their authored line breaks. `node /tmp/hen-audio-subtitle-position.cjs` checked that audio lyrics retained their reading position when the transport hid and when playback advanced to the next cue. `npm --prefix app/ui run check` reported zero errors and warnings.

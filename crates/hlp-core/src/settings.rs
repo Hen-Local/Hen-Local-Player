@@ -48,7 +48,7 @@ impl Default for Settings {
                 "qwen3-asr-1.7b"
             }
             .into(),
-            translation_context: false,
+            translation_context: true,
             download_dir: dirs::video_dir()
                 .or_else(|| dirs::home_dir().map(|p| p.join("Movies")))
                 .unwrap_or_default()

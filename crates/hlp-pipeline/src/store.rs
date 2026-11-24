@@ -129,7 +129,14 @@ pub struct Transcript {
 #[serde(rename_all = "camelCase")]
 pub struct Translation {
     pub source_hash: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_language: Option<String>,
+    /// Hash of the effective source language and the exact background sent to Hy-MT2.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_hash: Option<String>,
     pub text: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aligned_phrases: Vec<hlp_core::cues::AlignedPhrase>,
     #[serde(default)]
     pub failed: bool,
 }
@@ -143,24 +150,47 @@ pub struct Translations {
     #[serde(default)]
     pub context: bool,
     pub items: BTreeMap<String, Translation>,
+    /// Still-readable subtitles from the other mode while the requested mode catches up.
+    #[serde(skip)]
+    pub fallback: BTreeMap<String, Translation>,
 }
 impl Translations {
-    pub fn load(path: &Path, context: bool, generation: u64) -> Self {
+    pub fn path(track: &Path, target: &str, context: bool) -> PathBuf {
+        let filename = if context {
+            format!("{target}.context.json")
+        } else {
+            format!("{target}.json")
+        };
+        track.join("translations").join(filename)
+    }
+
+    pub fn load(track: &Path, target: &str, context: bool, generation: u64) -> Self {
         let version = hlp_core::prompts::PROMPT_VERSION;
-        read::<Self>(path)
-            .filter(|t| {
+        let read_for_mode = |mode| {
+            read::<Self>(&Self::path(track, target, mode)).filter(|t| {
                 t.translator_id == "hy-mt2-1.8b-q4km"
                     && t.prompt_version == version
-                    && t.context == context
                     && t.generation == generation
             })
-            .unwrap_or_else(|| Self {
-                translator_id: "hy-mt2-1.8b-q4km".into(),
-                prompt_version: version,
-                generation,
-                context,
-                items: BTreeMap::new(),
-            })
+        };
+        let mut active = read_for_mode(context).unwrap_or_else(|| Self {
+            translator_id: "hy-mt2-1.8b-q4km".into(),
+            prompt_version: version,
+            generation,
+            context,
+            items: BTreeMap::new(),
+            fallback: BTreeMap::new(),
+        });
+        if active.context != context {
+            // Early players used the plain filename for both modes. Keep those
+            // captions readable until each has a replacement for this mode.
+            for entry in active.items.values_mut() {
+                entry.context_hash = Some(String::new());
+            }
+            active.context = context;
+        }
+        active.fallback = read_for_mode(!context).map(|t| t.items).unwrap_or_default();
+        active
     }
 }
 pub fn list_recent(root: &Path) -> Vec<RecentItem> {

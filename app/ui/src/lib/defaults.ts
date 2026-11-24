@@ -16,7 +16,7 @@ export function defaults(): Settings {
     processWholeFile: true,
     dialogueChannelFocus: true,
     asrModel: 'qwen3-asr-1.7b',
-    translationContext: false,
+    translationContext: true,
     downloadDir: '',
     cacheLimitGb: 30,
   }

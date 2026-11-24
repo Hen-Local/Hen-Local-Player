@@ -294,3 +294,280 @@ fn streaming_updates_match_full_layout_when_neighbors_and_languages_change() {
     check(&rows, &HashMap::new());
     check(&[], &HashMap::new());
 }
+
+#[test]
+fn cached_reordered_english_and_chinese_keep_complete_meanings() {
+    let cases = [
+        (
+            41158,
+            44678,
+            "今天，我们就来讲三个高技能人才的亲身经历。",
+            "Today, we will share the personal experiences of three highly skilled professionals.",
+        ),
+        (
+            45542,
+            48422,
+            "的故事啊，可以说是把这个问题讲透了。",
+            "The story can be said to have explained this issue thoroughly.",
+        ),
+    ];
+    for (start, end, s, t) in cases {
+        let u = utterance(1, start, end, s);
+        let cues = build_cues(
+            std::slice::from_ref(&u),
+            &HashMap::from([(u.id.clone(), t.into())]),
+        );
+        assert_eq!(cues.len(), 1);
+        assert_eq!(cues[0].original, generated_line(s));
+        assert_eq!(cues[0].translation, Some(generated_line(t)));
+        assert_eq!(cues[0].start_ms, start);
+        assert!(cues[0].end_ms >= end);
+        assert!(translation_plan(s, t).is_none());
+    }
+}
+
+#[test]
+fn cached_mac_and_steamos_clauses_cover_their_speech() {
+    let first_s = "Instead of being a compatibility layer that translates Windows API calls into something that your Mac can handle natively,";
+    let last_s = " it uses virtualization to run a native ARM version of SteamOS.";
+    let first_t = "它并非那种将Windows API调用转换为mac电脑能够原生处理的格式的兼容层，";
+    let last_t = "而是通过虚拟化技术来运行原生ARM版本的SteamOS。";
+    let mut u = utterance(11, 102694, 114438, &[first_s, last_s].concat());
+    u.regions = vec![
+        SpeechRegion {
+            start_ms: 102694,
+            end_ms: 109350,
+        },
+        SpeechRegion {
+            start_ms: 109702,
+            end_ms: 114438,
+        },
+    ];
+    let cues = build_cues(
+        std::slice::from_ref(&u),
+        &HashMap::from([(u.id.clone(), [first_t, last_t].concat())]),
+    );
+    assert_eq!(cues.len(), 2);
+    for (cue, (s, t)) in cues.iter().zip([(first_s, first_t), (last_s, last_t)]) {
+        assert_eq!(cue.original, generated_line(s));
+        assert_eq!(cue.translation, Some(generated_line(t)));
+    }
+    assert_eq!(cues[0].start_ms, 102694);
+    assert_eq!(cues[1].start_ms - cues[0].end_ms, 80);
+    assert!(cues[1].end_ms >= 114438);
+
+    // A long cached utterance with no shared clause boundary stays readable
+    // until the speech ends, including after the old seven-second cap.
+    let u = utterance(1, 2000, 15000, first_s);
+    let fixed = build_cues(
+        std::slice::from_ref(&u),
+        &HashMap::from([(u.id.clone(), first_t.into())]),
+    );
+    assert_eq!(fixed.len(), 1);
+    assert!(fixed[0].end_ms >= 15000);
+}
+
+#[test]
+fn joined_sentences_and_missing_commas_use_existing_clause_boundaries() {
+    let s = "我们把文件准备好然后再发给本地的客户。";
+    let t = "We prepare the documents first, then send them to the local customers.";
+    let u = utterance(1, 0, 5500, s);
+    let cues = build_cues(
+        std::slice::from_ref(&u),
+        &HashMap::from([(u.id.clone(), t.into())]),
+    );
+    assert_eq!(cues.len(), 2);
+    assert_eq!(cues[1].original, "然后再发给本地的客户");
+    assert_eq!(
+        cues[1].translation.as_deref(),
+        Some("then send them to the local customers")
+    );
+
+    let s = "从一身才华无处施展，到最后找到机会，中间到底遇到了多少制度上的坎儿？";
+    let t = "From having great talent that has no place to be utilized, to finally finding an opportunity – how many institutional obstacles did he have to overcome along the way?";
+    let u = utterance(1, 49158, 55430, s);
+    let cues = build_cues(
+        std::slice::from_ref(&u),
+        &HashMap::from([(u.id.clone(), t.into())]),
+    );
+    assert_eq!(cues.len(), 3);
+    assert_eq!(cues[1].original, "到最后找到机会");
+    assert_eq!(
+        cues[1].translation.as_deref(),
+        Some("to finally finding an opportunity")
+    );
+}
+
+#[test]
+fn fresh_translation_plan_preserves_bytes_and_reuses_short_pairs() {
+    let s = "  She went home. Farmers prepare the fields for planting every year before the rains arrive and their children help them with heavy equipment from the nearby town during the summer.  ";
+    let t = "她回家了。每年雨季来临之前农民都会用从邻近城镇运来的重型设备准备耕作而他们的孩子也会来帮忙。  ";
+    let plan = translation_plan(s, t).unwrap();
+    assert_eq!(plan.iter().map(|(part, _)| *part).collect::<String>(), s);
+    assert_eq!(plan[0].0.trim(), "She went home.");
+    assert_eq!(plan[0].1.unwrap().trim(), "她回家了。");
+    assert!(plan.len() >= 3);
+    for &(source, existing) in &plan[1..] {
+        assert!(existing.is_none());
+        assert!(source.split_whitespace().count() >= 2);
+        assert_eq!(source.trim().lines().count(), 1);
+    }
+    assert!(translation_plan("Migration", &"A very long translation. ".repeat(10)).is_none());
+    assert!(translation_plan("Brief source", "简短的译文").is_none());
+    assert!(translation_plan(s, "").is_none());
+}
+
+#[test]
+fn stored_alignment_round_trip_and_invalid_offsets_use_safe_fallback() {
+    let left = "  Farmers prepare the fields";
+    let right = " before the summer rains arrive.  ";
+    let t1 = "农民们整地";
+    let t2 = "，赶在夏季雨水来临之前。 ";
+    let s = [left, right].concat();
+    let t = [t1, t2].concat();
+    let u = utterance(1, 0, 6000, &s);
+    let first = AlignedPhrase {
+        source_end: left.len(),
+        target_end: t1.len(),
+    };
+    let end = AlignedPhrase {
+        source_end: s.len(),
+        target_end: t.len(),
+    };
+    let alignment = vec![first.clone(), end.clone()];
+    let json = serde_json::to_value(&alignment).unwrap();
+    assert_eq!(json[0]["sourceEnd"], left.len());
+    let reopen: Vec<AlignedPhrase> = serde_json::from_value(json).unwrap();
+    let mut builder = CueBuilder::default();
+    let valid = builder.update_aligned([(&u, t.as_str(), reopen.as_slice())]);
+    assert_eq!(valid.len(), 2);
+    assert_eq!(valid[0].translation.as_deref(), Some(t1));
+    assert_eq!(valid[1].original, generated_line(right));
+    assert_eq!(
+        valid[1].translation.as_deref(),
+        Some(generated_line(t2).as_str())
+    );
+    let fallback = build_cues(
+        std::slice::from_ref(&u),
+        &HashMap::from([(u.id.clone(), t.clone())]),
+    );
+    assert_eq!(fallback.len(), 1);
+    for bad in [
+        vec![],
+        vec![first.clone()],
+        vec![first.clone(), first, end.clone()],
+        vec![
+            AlignedPhrase {
+                source_end: 1,
+                target_end: 1,
+            },
+            end,
+        ],
+    ] {
+        let actual = builder.update_aligned([(&u, t.as_str(), bad.as_slice())]);
+        assert_eq!(actual, fallback);
+    }
+    // An alignment-only cache update must also invalidate in-memory pages.
+    assert_eq!(
+        builder.update_aligned([(&u, t.as_str(), reopen.as_slice())]),
+        valid
+    );
+}
+
+#[test]
+fn phrase_hints_map_to_the_verbatim_english_and_chinese_translations() {
+    let source = "先打开窗户再走进花园";
+    let whole = "  Open the bright window, then walk into the quiet garden!  ";
+    let spans = [
+        ("先打开窗户", "Open a bright window"),
+        ("再走进花园", "Then walk into the quiet green garden"),
+    ];
+    let alignment = align_translated_phrases(source, whole, &spans).unwrap();
+    assert_eq!(alignment[0].source_end, spans[0].0.len());
+    let boundary = alignment[0].target_end;
+    assert_eq!(&whole[..boundary], "  Open the bright window,");
+    assert_eq!(
+        &whole[boundary..alignment[1].target_end],
+        " then walk into the quiet garden!  "
+    );
+    assert_eq!(alignment[1].source_end, source.len());
+
+    let source = "Open the window then walk into the garden";
+    let whole = "他们先打开窗户，然后走进花园。";
+    let spans = [
+        ("Open the window", "他们先打开窗户。"),
+        (" then walk into the garden", "然后一起走进花园"),
+    ];
+    let alignment = align_translated_phrases(source, whole, &spans).unwrap();
+    assert_eq!(&whole[..alignment[0].target_end], "他们先打开窗户，");
+    assert_eq!(
+        &whole[alignment[0].target_end..alignment[1].target_end],
+        "然后走进花园。"
+    );
+}
+
+#[test]
+fn overlapping_echoes_reordering_and_ambiguous_seams_fall_back_to_whole() {
+    let source = "First part then second part";
+    for (whole, a, b) in [
+        (
+            "Close the green window. Open the large red door.",
+            "Close the green window. Open the large red door.",
+            "Open the large red door.",
+        ),
+        (
+            "Close the green window. Open the large red door.",
+            "Open the large red door.",
+            "Close the green window.",
+        ),
+        (
+            "Close the green window. Open the large red door.",
+            "Close this farm gate.",
+            "Go out into the garden.",
+        ),
+        (
+            "First read this report and take a break.",
+            "First read this report",
+            "take a break",
+        ),
+        ("打开窗户以后就出发。", "打开窗户以后就出发", "以后就出发"),
+        ("今天我们学习中文语法。", "今天我们学", "习中文语法"),
+        ("We can re-enter the room.", "We can re", "enter the room"),
+    ] {
+        let spans = [("First part", a), (" then second part", b)];
+        assert!(
+            align_translated_phrases(source, whole, &spans).is_none(),
+            "{whole}"
+        );
+    }
+    let oversized = "Walk forward ".repeat(15);
+    let whole = format!("{oversized}then turn left.");
+    assert!(align_translated_phrases(
+        source,
+        &whole,
+        &[
+            ("First part", &oversized),
+            (" then second part", "then turn left")
+        ]
+    )
+    .is_none());
+    assert!(
+        align_translated_phrases("wrong source", "One two", &[("a", "One"), ("b", "two")])
+            .is_none()
+    );
+}
+
+#[test]
+fn only_original_punctuation_resolves_a_one_word_alignment_tie() {
+    let source = "先拆开设备然后抬起盖子";
+    let spans = [
+        ("先拆开设备", "We unpack the heavy equipment."),
+        ("然后抬起盖子", "Carefully lift the cover."),
+    ];
+    let whole = "We unpack the heavy equipment, then carefully lift the cover.";
+    let cut = align_translated_phrases(source, whole, &spans).unwrap()[0].target_end;
+    assert_eq!(&whole[..cut], "We unpack the heavy equipment,");
+    assert_eq!(&whole[cut..], " then carefully lift the cover.");
+    assert!(align_translated_phrases(source, &whole.replace(',', ""), &spans).is_none());
+    assert!(align_translated_phrases(source, &whole.replace("then", "and then"), &spans).is_none());
+}

@@ -4,7 +4,7 @@ use anyhow::{ensure, Result};
 use hlp_core::{asr_text::ParsedAsr, events::*, lang, settings::Settings, types::*};
 use std::{
     collections::{BTreeMap, HashMap},
-    path::{Path, PathBuf},
+    path::PathBuf,
 };
 pub fn validate_settings(s: &Settings) -> Result<()> {
     ensure!(
@@ -68,12 +68,22 @@ pub fn guessed(text: &str) -> Option<(LangCode, f64)> {
         .find(|l| l.whatlang == Some(info.lang()))?;
     (info.confidence() >= 0.5).then(|| (LangCode(code.code.into()), info.confidence()))
 }
+// A short dialogue window fits well within the server's 4096-token context,
+// including for scripts that use several tokens per character.
+const PRECEDING_LINES: usize = 3;
+const MAX_CONTEXT_GAP_MS: Ms = 8_000;
+const MAX_CONTEXT_AGE_MS: Ms = 30_000;
+const MAX_BACKGROUND_BYTES: usize = 1024;
+
 pub struct Timeline {
     pub track: PathBuf,
     pub vad_hash: String,
     pub rows: BTreeMap<String, Utterance>,
     pub language: LanguageEvent,
     pub translations: Translations,
+    // Per-row model input signatures. A source edit affects this row and at
+    // most the next three. Playback ticks only compare the cached signatures.
+    translation_keys: HashMap<String, (String, String)>,
     pub target: String,
     pub model: String,
     pub audio_complete: bool,
@@ -140,7 +150,8 @@ impl Timeline {
             }
         }
         let translations = Translations::load(
-            &Self::tr_path(&track, &s.target_language),
+            &track,
+            &s.target_language,
             s.translation_context,
             generation,
         );
@@ -150,6 +161,7 @@ impl Timeline {
             rows,
             language: initial_language(id, &s.source_language),
             translations,
+            translation_keys: HashMap::new(),
             target: s.target_language.clone(),
             model: s.asr_model.clone(),
             audio_complete: complete,
@@ -180,26 +192,25 @@ impl Timeline {
             t.requeue_mismatches(true);
         }
         t.vote();
+        t.rebuild_keys();
         Ok(t)
-    }
-    fn tr_path(track: &Path, target: &str) -> PathBuf {
-        track.join("translations").join(format!("{target}.json"))
     }
     pub fn set_target(&mut self, target: &str, context: bool) -> Result<()> {
         self.save_translations()?;
         self.target = target.into();
-        self.translations = Translations::load(
-            &Self::tr_path(&self.track, target),
-            context,
-            self.translations.generation,
-        );
+        let mode_changed = self.translations.context != context;
+        self.translations =
+            Translations::load(&self.track, target, context, self.translations.generation);
+        if mode_changed {
+            self.rebuild_keys()
+        }
         self.dirty = true;
         Ok(())
     }
     fn save_translations(&self) -> Result<()> {
         if self.target != "none" && !self.translations.items.is_empty() {
             store::write_json(
-                &Self::tr_path(&self.track, &self.target),
+                &Translations::path(&self.track, &self.target, self.translations.context),
                 &self.translations,
             )?
         }
@@ -246,6 +257,8 @@ impl Timeline {
             *row = speech_segment(row);
         }
         self.translations.items.clear();
+        self.translations.fallback.clear();
+        self.translation_keys.clear();
         self.translations.generation = transcript.generation;
         self.language = initial_language(&self.language.session_id, source_mode);
         self.language_dirty = true;
@@ -263,6 +276,7 @@ impl Timeline {
         if mode == "auto" {
             self.vote()
         }
+        self.rebuild_keys();
         self.dirty = true;
     }
     fn requeue_mismatches(&mut self, all: bool) {
@@ -333,16 +347,126 @@ impl Timeline {
         }
         .map(|c| c.0.as_str())
     }
-    pub fn tr_needed(&self, u: &Utterance) -> bool {
-        u.status == UttStatus::Done
-            && self.target != "none"
-            && self.source_for(u) != Some(self.target.as_str())
-            && u.text.as_ref().is_some_and(|v| {
-                self.translations
-                    .items
-                    .get(&u.id)
-                    .is_none_or(|item| item.source_hash != store::hash(v))
+    /// VAD IDs are issued in media-time order even when ASR finishes out of order.
+    /// Never reach across a missing utterance, another language, or a scene-sized gap.
+    fn predecessors<'a>(&'a self, u: &'a Utterance) -> impl Iterator<Item = &'a Utterance> {
+        use std::ops::Bound::{Excluded, Unbounded};
+        let mut next_start = u.start_ms;
+        self.rows
+            .range::<str, _>((Unbounded, Excluded(u.id.as_str())))
+            .rev()
+            .take(PRECEDING_LINES)
+            .map(|(_, row)| row)
+            .take_while(move |row| {
+                let adjacent = row.end_ms <= next_start
+                    && next_start - row.end_ms <= MAX_CONTEXT_GAP_MS
+                    && u.start_ms.saturating_sub(row.start_ms) <= MAX_CONTEXT_AGE_MS;
+                next_start = row.start_ms;
+                adjacent
             })
+    }
+
+    pub(super) fn background(&self, u: &Utterance) -> Option<String> {
+        if !self.translations.context {
+            return None;
+        }
+        let language = self.source_for(u)?;
+        let mut remaining = MAX_BACKGROUND_BYTES;
+        let mut lines = Vec::with_capacity(PRECEDING_LINES);
+        for row in self.predecessors(u) {
+            if row.status != UttStatus::Done
+                || self.source_for(row) != Some(language)
+                || row
+                    .language
+                    .as_ref()
+                    .zip(u.language.as_ref())
+                    .is_some_and(|(a, b)| a != b)
+            {
+                break;
+            }
+            let Some(line) = row.text.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+                break;
+            };
+            if line.len() > remaining {
+                // Retain the nearest end of a long line, always at a UTF-8 boundary.
+                let from = line.ceil_char_boundary(line.len() - remaining);
+                if from < line.len() {
+                    lines.push(&line[from..])
+                }
+                break;
+            }
+            lines.push(line);
+            remaining = remaining.saturating_sub(line.len() + 1);
+            if remaining == 0 {
+                break;
+            }
+        }
+        lines.reverse();
+        (!lines.is_empty()).then(|| lines.join("\n"))
+    }
+    pub(super) fn context_hash(&self, u: &Utterance, bg: Option<&str>) -> String {
+        store::hash(&format!(
+            "{}\0{}",
+            self.source_for(u).unwrap_or(""),
+            bg.unwrap_or("")
+        ))
+    }
+    fn key(&self, row: &Utterance) -> Option<(String, String)> {
+        Some((
+            store::hash(row.text.as_deref()?),
+            self.context_hash(row, self.background(row).as_deref()),
+        ))
+    }
+    pub(super) fn rebuild_keys(&mut self) {
+        self.translation_keys = self
+            .rows
+            .values()
+            .filter_map(|row| self.key(row).map(|key| (row.id.clone(), key)))
+            .collect();
+    }
+    pub(super) fn refresh_keys_from(&mut self, id: &str) {
+        use std::ops::Bound::{Included, Unbounded};
+        let affected: Vec<_> = self
+            .rows
+            .range::<str, _>((Included(id), Unbounded))
+            .take(if self.translations.context {
+                PRECEDING_LINES + 1
+            } else {
+                1
+            })
+            .map(|(id, row)| (id.clone(), self.key(row)))
+            .collect();
+        for (id, key) in affected {
+            if let Some(key) = key {
+                self.translation_keys.insert(id, key);
+            } else {
+                self.translation_keys.remove(&id);
+            }
+        }
+    }
+    fn applicable(&self, u: &Utterance) -> bool {
+        self.target != "none"
+            && self.source_for(u) != Some(self.target.as_str())
+            && u.text.is_some()
+    }
+    fn current_entry(&self, u: &Utterance) -> Option<&store::Translation> {
+        let item = self.translations.items.get(&u.id)?;
+        let (source_hash, context_hash) = self.translation_keys.get(&u.id)?;
+        if &item.source_hash != source_hash {
+            return None;
+        }
+        match &item.context_hash {
+            // Historical literal translations are valid in their original mode.
+            None if !self.translations.context => Some(item),
+            Some(hash) if hash == context_hash => Some(item),
+            _ => None,
+        }
+    }
+    pub fn tr_needed(&self, u: &Utterance) -> bool {
+        u.status == UttStatus::Done && self.applicable(u) && self.current_entry(u).is_none()
+    }
+    pub fn translation_failed(&self, u: &Utterance) -> bool {
+        self.applicable(u) && self.current_entry(u).is_some_and(|item| item.failed)
     }
     fn asr_rtf(&self) -> f32 {
         if self.asr_ms == 0 {
@@ -368,27 +492,81 @@ impl Timeline {
                 && (self.audio_complete || u.end_ms <= self.extracted)
         })
     }
+    fn waits_for_background(&self, row: &Utterance, playhead: Ms, s: &Settings) -> bool {
+        // When processing backwards, the next ASR result may otherwise invalidate
+        // every recent translation in turn. Keep urgent subtitles responsive.
+        if !self.translations.context
+            || self.source_for(row).is_none()
+            || (row.end_ms > playhead && row.start_ms <= playhead.saturating_add(2_000))
+        {
+            return false;
+        }
+        for previous in self.predecessors(row) {
+            if previous.status == UttStatus::Pending {
+                return s.process_whole_file
+                    || previous.end_ms > playhead
+                    || previous.start_ms.saturating_add(2_000) >= playhead;
+            }
+            if previous.status != UttStatus::Done
+                || self.source_for(previous) != self.source_for(row)
+            {
+                break;
+            }
+        }
+        false
+    }
     pub fn pick(&self, translation: bool, playhead: Ms, s: &Settings) -> Option<&Utterance> {
-        self.rows
+        let next = self
+            .rows
             .values()
-            .filter(|u| {
-                if translation {
-                    self.tr_needed(u)
-                } else {
-                    u.status == UttStatus::Pending
-                        && (self.audio_complete || u.end_ms <= self.extracted)
-                }
-            })
             .filter(|u| {
                 s.process_whole_file
                     || u.start_ms <= playhead.saturating_add(s.lookahead_seconds as u64 * 1000)
             })
             .filter_map(|u| {
-                hlp_core::schedule::priority(u.start_ms, playhead, s.process_whole_file)
-                    .map(|p| (p, u))
+                // A seek can land more than two seconds inside a long utterance.
+                if u.start_ms <= playhead && playhead < u.end_ms {
+                    Some(((false, 0), u))
+                } else {
+                    hlp_core::schedule::priority(u.start_ms, playhead, s.process_whole_file)
+                        .map(|p| ((true, p), u))
+                }
+            })
+            .filter(|(_, u)| {
+                if translation {
+                    self.tr_needed(u) && !self.waits_for_background(u, playhead, s)
+                } else {
+                    u.status == UttStatus::Pending
+                        && (self.audio_complete || u.end_ms <= self.extracted)
+                }
             })
             .min_by_key(|(p, _)| *p)
-            .map(|(_, u)| u)
+            .map(|(_, u)| u);
+        // A seek should display its first recognized line immediately. After it
+        // does, fill its nearby missing background even in lookahead-only mode.
+        if !translation && self.translations.context && self.target != "none" {
+            let anchor = self.rows.values().find(|row| row.end_ms > playhead);
+            if let Some(anchor) = anchor.filter(|u| {
+                u.status == UttStatus::Done
+                    && self.applicable(u)
+                    && self.source_for(u).is_some()
+                    && u.start_ms <= playhead.saturating_add(2_000)
+            }) {
+                for row in self.predecessors(anchor) {
+                    if row.status == UttStatus::Pending
+                        && (self.audio_complete || row.end_ms <= self.extracted)
+                    {
+                        return Some(row);
+                    }
+                    if row.status != UttStatus::Done
+                        || self.source_for(row) != self.source_for(anchor)
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+        next
     }
     pub fn apply(&mut self, id: &str, result: ParsedAsr, forced: Option<LangCode>) {
         let Some(u) = self.rows.get_mut(id) else {
@@ -425,27 +603,42 @@ impl Timeline {
             self.language.confidence = 0.;
             self.language_dirty = true;
         }
+        let was_locked = self.language.locked;
         self.vote();
+        if self.language.locked != was_locked {
+            self.rebuild_keys()
+        } else {
+            self.refresh_keys_from(id)
+        }
         self.dirty = true;
     }
-    fn translation(&self, u: &Utterance) -> Option<&String> {
-        if self.target == "none" || self.source_for(u) == Some(self.target.as_str()) {
+    fn translation(&self, u: &Utterance) -> Option<&store::Translation> {
+        if !self.applicable(u) {
             return None;
         }
-        let source = u.text.as_ref()?;
-        self.translations
-            .items
-            .get(&u.id)
-            .filter(|v| !v.failed && v.source_hash == store::hash(source))
-            .map(|v| &v.text)
+        let language = self.source_for(u);
+        let (source_hash, _) = self.translation_keys.get(&u.id)?;
+        [
+            self.translations.items.get(&u.id),
+            self.translations.fallback.get(&u.id),
+        ]
+        .into_iter()
+        .flatten()
+        .find(|v| {
+            !v.text.is_empty()
+                && &v.source_hash == source_hash
+                && v.source_language
+                    .as_deref()
+                    .is_none_or(|l| Some(l) == language)
+        })
     }
     pub fn cues(&mut self) -> Vec<Cue> {
         let mut builder = std::mem::take(&mut self.cue_builder);
-        let cues = builder.update(
-            self.rows
-                .values()
-                .map(|row| (row, self.translation(row).map_or("", String::as_str))),
-        );
+        let cues =
+            builder.update_aligned(self.rows.values().map(|row| match self.translation(row) {
+                Some(t) => (row, t.text.as_str(), t.aligned_phrases.as_slice()),
+                None => (row, "", [].as_slice()),
+            }));
         self.cue_builder = builder;
         cues
     }
@@ -466,10 +659,12 @@ impl Timeline {
                 UttStatus::Failed { .. } => failed += 1,
                 UttStatus::Pending => append(&mut asr, u),
             }
-            if self.translation(u).is_some() {
-                translated += 1
-            } else if self.tr_needed(u) {
-                append(&mut tr, u)
+            if u.status == UttStatus::Done && self.applicable(u) {
+                match self.current_entry(u) {
+                    Some(item) if !item.failed => translated += 1,
+                    None => append(&mut tr, u),
+                    _ => {}
+                }
             }
         }
         let rtf = self.asr_rtf();
@@ -612,7 +807,10 @@ mod tests {
                 u.id.clone(),
                 store::Translation {
                     source_hash: store::hash(u.text.as_ref().unwrap()),
+                    context_hash: Some(t.context_hash(&u, None)),
+                    source_language: Some("ja".into()),
                     text: target.into(),
+                    aligned_phrases: Vec::new(),
                     failed: false,
                 },
             );
@@ -635,6 +833,239 @@ mod tests {
         assert!(reopened.translations.items.is_empty());
         reopened.set_target("fr", settings.translation_context)?;
         assert!(reopened.translations.items.is_empty());
+        Ok(())
+    }
+    #[test]
+    fn ordered_context_stops_at_language_gap_and_byte_budget() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let mut t = Timeline::load(dir.path().join("track-0"), &Settings::default(), "test")?;
+        for index in [3, 1, 4, 0, 2] {
+            let row = utterance(index, "en");
+            t.rows.insert(row.id.clone(), row);
+        }
+        assert_eq!(
+            t.background(&t.rows["u000004"]).as_deref(),
+            Some("phrase 1\nphrase 2\nphrase 3")
+        );
+        t.rows.get_mut("u000002").unwrap().language = Some(LangCode("fr".into()));
+        assert_eq!(
+            t.background(&t.rows["u000004"]).as_deref(),
+            Some("phrase 3")
+        );
+        t.rows.get_mut("u000003").unwrap().text = Some("音".repeat(900));
+        let bg = t.background(&t.rows["u000004"]).unwrap();
+        assert_eq!(bg.len(), 1023);
+        assert!(bg.chars().all(|c| c == '音'));
+        t.rows.get_mut("u000003").unwrap().status = UttStatus::Pending;
+        assert!(t.background(&t.rows["u000004"]).is_none());
+        t.rows.get_mut("u000003").unwrap().status = UttStatus::Done;
+        t.rows.get_mut("u000004").unwrap().start_ms = 40_000;
+        assert!(t.background(&t.rows["u000004"]).is_none());
+        Ok(())
+    }
+    #[test]
+    fn seeked_line_is_immediate_and_refreshes_when_missing_background_arrives() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let s = Settings {
+            process_whole_file: false,
+            target_language: "zh".into(),
+            source_language: "auto-per-line".into(),
+            ..Settings::default()
+        };
+        let mut t = Timeline::load(dir.path().join("track-0"), &s, "test")?;
+        t.audio_complete = true;
+        let first = utterance(0, "en");
+        let mut anchor = utterance(1, "en");
+        anchor.end_ms = 8_000;
+        anchor.regions[0].end_ms = 8_000;
+        for mut row in [first.clone(), anchor.clone()] {
+            row.text = None;
+            row.status = UttStatus::Pending;
+            t.rows.insert(row.id.clone(), row);
+        }
+        let playhead = 6500;
+        assert_eq!(t.pick(false, playhead, &s).unwrap().id, anchor.id);
+        let observed = |line: &str| ParsedAsr::Text {
+            text: line.into(),
+            language: Some(LangCode("en".into())),
+        };
+        t.apply(&anchor.id, observed("There it is."), None);
+        let current = t.pick(true, playhead, &s).unwrap();
+        assert_eq!(current.id, anchor.id);
+        assert!(t.background(current).is_none());
+        let (source_hash, context_hash) = t.translation_keys[&anchor.id].clone();
+        t.translations.items.insert(
+            anchor.id.clone(),
+            store::Translation {
+                source_hash,
+                context_hash: Some(context_hash),
+                source_language: Some("en".into()),
+                text: "在那里。".into(),
+                aligned_phrases: Vec::new(),
+                failed: false,
+            },
+        );
+        assert!(!t.tr_needed(&t.rows[&anchor.id]));
+        assert_eq!(t.pick(false, playhead, &s).unwrap().id, first.id);
+        t.apply(&first.id, observed("Watch for the boat."), None);
+        assert_eq!(
+            t.background(&t.rows[&anchor.id]).as_deref(),
+            Some("Watch for the boat.")
+        );
+        assert_eq!(t.pick(true, playhead, &s).unwrap().id, anchor.id);
+        assert_eq!(
+            t.translation(&t.rows[&anchor.id]).map(|v| v.text.as_str()),
+            Some("在那里。")
+        );
+        t.set_target("fr", true)?;
+        assert!(t.translation(&t.rows[&anchor.id]).is_none());
+        let mut other = Timeline::load(dir.path().join("track-1"), &s, "other")?;
+        assert!(
+            other.cues().is_empty()
+                && other.translations.items.is_empty()
+                && other.translations.fallback.is_empty()
+        );
+        Ok(())
+    }
+    #[test]
+    fn background_translation_waits_for_recognition_without_delaying_an_urgent_line() -> Result<()>
+    {
+        let dir = tempfile::tempdir()?;
+        let s = Settings {
+            target_language: "zh".into(),
+            source_language: "auto-per-line".into(),
+            ..Settings::default()
+        };
+        let mut t = Timeline::load(dir.path().join("track-0"), &s, "test")?;
+        let mut prev = utterance(0, "en");
+        let row = utterance(1, "en");
+        prev.status = UttStatus::Pending;
+        prev.text = None;
+        t.rows.insert(prev.id.clone(), prev.clone());
+        t.rows.insert(row.id.clone(), row.clone());
+        assert!(t.pick(true, 20_000, &s).is_none());
+        assert_eq!(t.pick(true, row.start_ms, &s).unwrap().id, row.id);
+        t.apply(&prev.id, ParsedAsr::NoSpeech, None);
+        assert_eq!(t.pick(true, 20_000, &s).unwrap().id, row.id);
+        Ok(())
+    }
+
+    #[test]
+    fn legacy_subtitles_survive_an_upgrade_and_reopen_without_any_model() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let track = dir.path().join("track-0");
+        let s = Settings {
+            target_language: "zh".into(),
+            source_language: "auto-per-line".into(),
+            ..Settings::default()
+        };
+        let row = utterance(1, "en");
+        store::atomic_write(&track.join("audio.pcm"), &[0; 32])?;
+        store::write_json(
+            &track.join("audio.json"),
+            &Audio {
+                sample_rate: 16000,
+                total_samples: 16,
+                complete: true,
+                dialogue_focus: true,
+            },
+        )?;
+        let mut t = Timeline::load(track.clone(), &s, "backup")?;
+        t.rows.insert(row.id.clone(), row.clone());
+        t.persist()?;
+        let legacy = Translations::path(&track, "zh", false);
+        let old = serde_json::json!({"translatorId":"hy-mt2-1.8b-q4km","promptVersion":1,"context":false,"items":{row.id.clone():{"sourceHash":store::hash("phrase 1"),"text":"旧字幕"}}});
+        store::write_json(&legacy, &old)?;
+        let original = std::fs::read(&legacy)?;
+        let mut ctx = Timeline::load(track.clone(), &s, "reopen")?;
+        assert_eq!(ctx.cues()[0].translation.as_deref(), Some("旧字幕"));
+        assert!(ctx.tr_needed(&row));
+        let (source_hash, context_hash) = ctx.translation_keys[&row.id].clone();
+        ctx.translations.items.insert(
+            row.id.clone(),
+            store::Translation {
+                source_hash,
+                context_hash: Some(context_hash),
+                source_language: Some("en".into()),
+                text: "新字幕".into(),
+                aligned_phrases: Vec::new(),
+                failed: false,
+            },
+        );
+        ctx.persist()?;
+        let mut reopened = Timeline::load(track.clone(), &s, "again")?;
+        assert!(!reopened.tr_needed(&row));
+        assert_eq!(reopened.cues()[0].translation.as_deref(), Some("新字幕"));
+        assert_eq!(std::fs::read(&legacy)?, original);
+        reopened.set_target("zh", false)?;
+        assert_eq!(reopened.cues()[0].translation.as_deref(), Some("旧字幕"));
+        assert!(!reopened.tr_needed(&row));
+        Ok(())
+    }
+
+    #[test]
+    fn saved_phrase_alignment_reaches_the_picture_after_reopen_and_mode_switch() -> Result<()> {
+        use hlp_core::cues::AlignedPhrase;
+        let dir = tempfile::tempdir()?;
+        let track = dir.path().join("track-0");
+        let s = Settings {
+            source_language: "auto-per-line".into(),
+            target_language: "zh".into(),
+            translation_context: true,
+            ..Settings::default()
+        };
+        let sources = [
+            "I found the missing keys under the old kitchen table ",
+            "before everyone else had even opened their eyes",
+        ];
+        let targets = ["我在旧餐桌下面找到了丢失的钥匙", "那时候其他人都还没有睁眼"];
+        let mut row = utterance(0, "en");
+        row.text = Some(sources.concat());
+        store::write_json(
+            &track.join("audio.json"),
+            &Audio {
+                sample_rate: 16_000,
+                total_samples: 0,
+                complete: false,
+                dialogue_focus: s.dialogue_channel_focus,
+            },
+        )?;
+        let mut t = Timeline::load(track.clone(), &s, "saved")?;
+        t.rows.insert(row.id.clone(), row.clone());
+        t.refresh_keys_from(&row.id);
+        let (source_hash, context_hash) = t.translation_keys[&row.id].clone();
+        t.translations.items.insert(
+            row.id.clone(),
+            store::Translation {
+                source_hash,
+                source_language: Some("en".into()),
+                context_hash: Some(context_hash),
+                text: targets.concat(),
+                aligned_phrases: vec![
+                    AlignedPhrase {
+                        source_end: sources[0].len(),
+                        target_end: targets[0].len(),
+                    },
+                    AlignedPhrase {
+                        source_end: sources.concat().len(),
+                        target_end: targets.concat().len(),
+                    },
+                ],
+                failed: false,
+            },
+        );
+        t.persist()?;
+        let mut reopened = Timeline::load(track, &s, "reopened")?;
+        assert!(!reopened.tr_needed(&row));
+        for mode in [true, false] {
+            reopened.set_target("zh", mode)?;
+            let cues = reopened.cues();
+            assert_eq!(cues.len(), 2);
+            for ((cue, source), target) in cues.iter().zip(sources).zip(targets) {
+                assert_eq!(cue.original, source.trim());
+                assert_eq!(cue.translation.as_deref(), Some(target));
+            }
+        }
         Ok(())
     }
 }

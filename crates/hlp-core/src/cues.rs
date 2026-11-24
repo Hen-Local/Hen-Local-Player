@@ -1,8 +1,12 @@
+mod alignment;
+pub use alignment::align_translated_phrases;
+
 use crate::types::*;
 use icu_properties::{
     props::{GeneralCategory, GeneralCategoryGroup},
     CodePointMapData,
 };
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
@@ -10,6 +14,7 @@ use unicode_width::UnicodeWidthStr;
 // Aim for a single line in each language. Fast speech can share a longer
 // timed cue when an individual phrase would otherwise flash for under 500 ms.
 const PAGE_COLS: usize = 42;
+const RETRANSLATE_COLS: usize = 120;
 const MAX_CUE_COLS: usize = 2 * PAGE_COLS;
 const MIN_CUE_MS: Ms = 1000;
 const MAX_CUE_MS: Ms = 7000;
@@ -17,7 +22,9 @@ const MIN_GAP_MS: Ms = 80;
 const LINGER_MS: Ms = 500;
 const READ_COLS_PER_SEC: Ms = 20;
 const END: &str = ".!?。！？…؟।";
-const CLAUSE: &str = ",;:，；：、—؛،";
+const CLAUSE: &str = ",;:，；：、—–؛،";
+// A prefix such as “Today,” is too short to read as a page on its own.
+const MIN_PHRASE_COLS: usize = 8;
 const CLOSE: &str = "”’'\"）)]}】》」』»";
 
 pub fn display_cols(text: &str) -> usize {
@@ -76,27 +83,105 @@ fn boundaries(text: &str) -> Vec<Boundary> {
     result
 }
 
-/// Favor a nearby phrase/word boundary; a distant comma must not cause a
-/// one-word flash followed by another oversized page.
-fn page_cut(text: &str, fraction: f64) -> Option<usize> {
-    let end = text.trim_end().len();
-    let leading = text.len() - text.trim_start().len();
-    let leading_cols = display_cols(&text[..leading]);
-    let width = display_cols(text.trim());
-    let target = (width as f64 * fraction).round() as usize;
-    let tolerance = (target.min(width.saturating_sub(target)) / 3).max(2);
-    let choices = boundaries(text);
-    let usable = |b: &&Boundary| b.byte > leading && b.byte < end;
-    let candidates = choices.iter().filter(usable);
-    let has_words = candidates.clone().any(|b| b.kind != Break::Grapheme);
-    if !has_words && width <= PAGE_COLS {
-        return None; // Keep a short indivisible word whole on its companion page.
+// Common clause introducers also work when one recognizer or translator
+// omits the comma. Match whole English words, and only test Chinese prefixes
+// at dictionary word boundaries.
+fn connector(right: &str) -> Option<usize> {
+    const GROUPS: &[(&[&str], &[&str])] = &[
+        (
+            &["but", "however", "instead", "whereas"],
+            &["但是", "可是", "不过", "然而", "而是", "但"],
+        ),
+        (&["then", "next", "afterwards"], &["然后", "接着", "随后"]),
+        (&["because", "since"], &["因为", "由于"]),
+        (&["therefore", "so", "thus"], &["因此", "所以"]),
+        (&["if", "unless"], &["如果", "假如", "除非"]),
+        (&["although", "though"], &["虽然", "尽管"]),
+        (&["finally", "ultimately"], &["最后", "最终"]),
+    ];
+    let right = right.trim_start();
+    let first = right
+        .split(|c: char| !c.is_ascii_alphabetic())
+        .next()
+        .unwrap_or("");
+    GROUPS.iter().position(|(en, zh)| {
+        en.iter().any(|w| first.eq_ignore_ascii_case(w)) || zh.iter().any(|w| right.starts_with(w))
+    })
+}
+
+fn dangling_word(left: &str, right: &str) -> bool {
+    let last = left.split_whitespace().next_back().unwrap_or("");
+    [
+        "a", "an", "the", "that", "my", "your", "our", "their", "to", "of", "for", "with", "and",
+        "or", "in", "at", "from", "into", "is", "are", "can", "but", "will",
+    ]
+    .iter()
+    .any(|w| last.eq_ignore_ascii_case(w))
+        || [
+            "的", "就", "把", "被", "将", "个", "很", "高", "这", "那", "到", "但", "和", "从",
+            "与",
+        ]
+        .iter()
+        .any(|w| left.ends_with(w))
+        || ["的", "地", "得", "了", "吗", "呢"]
+            .iter()
+            .any(|w| right.trim_start().starts_with(w))
+}
+
+// Without a translation, prefer clauses and complete word groups. A modest
+// overrun is more readable than separating a determiner from its noun.
+fn source_cut(text: &str, for_translation: bool) -> Option<usize> {
+    let text_width = display_cols(text);
+    let count = text_width.div_ceil(PAGE_COLS).max(2);
+    let target = text_width * (count / 2) / count;
+    let candidates = boundaries(text);
+    let words = candidates.iter().any(|b| b.kind != Break::Grapheme);
+    if !words && (for_translation || text_width <= MAX_CUE_COLS) {
+        return None;
     }
     candidates
-        .filter(|b| !has_words || b.kind != Break::Grapheme)
+        .iter()
+        .filter(|b| !words || b.kind != Break::Grapheme)
+        .filter(|b| b.cols.min(text_width.saturating_sub(b.cols)) >= MIN_PHRASE_COLS)
+        .filter(|b| {
+            let enough = |part: &str| {
+                part.split_whitespace()
+                    .filter(|w| w.chars().any(char::is_alphanumeric))
+                    .take(2)
+                    .count()
+                    == 2
+                    || part.chars().filter(|&c| unspaced(c)).take(4).count() == 4
+            };
+            !for_translation || (enough(&text[..b.byte]) && enough(&text[b.byte..]))
+        })
         .min_by_key(|b| {
-            let dist = b.cols.saturating_sub(leading_cols).abs_diff(target);
-            (dist.saturating_sub(tolerance), b.kind, dist)
+            let (left, right) = text.split_at(b.byte);
+            let distance = b.cols.abs_diff(target);
+            let first = right.split_whitespace().next().unwrap_or("");
+            let word_group = [
+                "that",
+                "which",
+                "when",
+                "where",
+                "into",
+                "with",
+                "without",
+                "before",
+                "after",
+                "until",
+                "including",
+                "about",
+            ]
+            .iter()
+            .any(|w| first.eq_ignore_ascii_case(w));
+            let clause = b.kind == Break::Clause || connector(right).is_some();
+            (
+                distance.saturating_sub(PAGE_COLS / 2),
+                dangling_word(left, right),
+                !clause,
+                !word_group,
+                distance,
+            )
         })
         .map(|b| b.byte)
 }
@@ -157,6 +242,8 @@ fn aligned_translation<'a>(originals: &[&str], translation: &'a str) -> Vec<&'a 
     result
 }
 
+/// Fixed-count text allocation for clients with a pre-existing list of source
+/// lines. The player builds both sides together using sentence and clause pairs.
 pub fn distribute(originals: &[String], translation: &str) -> Vec<String> {
     let originals: Vec<_> = originals.iter().map(String::as_str).collect();
     aligned_translation(&originals, translation.trim())
@@ -165,45 +252,207 @@ pub fn distribute(originals: &[String], translation: &str) -> Vec<String> {
         .collect()
 }
 
+struct PhraseBreak {
+    byte: usize,
+    cols: usize,
+    punctuation: bool,
+    sentence: bool,
+    connector: Option<usize>,
+}
+
+fn phrase_breaks(text: &str) -> Vec<PhraseBreak> {
+    boundaries(text)
+        .into_iter()
+        .filter(|b| b.kind != Break::Grapheme)
+        .filter_map(|b| {
+            let punctuation = b.kind == Break::Clause;
+            let connector = connector(&text[b.byte..]);
+            if !punctuation && dangling_word(&text[..b.byte], &text[b.byte..]) {
+                return None;
+            }
+            (punctuation || connector.is_some()).then_some(PhraseBreak {
+                byte: b.byte,
+                cols: b.cols,
+                punctuation,
+                sentence: punctuation && text[..b.byte].ends_with(|ch| END.contains(ch)),
+                connector,
+            })
+        })
+        .collect()
+}
+
+/// A cached translation belongs to its entire utterance. Its words can be in
+/// a different order, so only cut at corresponding clauses. An unmatched
+/// pair stays together, even when the longer language exceeds the width goal.
+fn clause_pair(source: &str, target: &str) -> Option<(usize, usize)> {
+    let sources = phrase_breaks(source);
+    let targets = phrase_breaks(target);
+    let sw = display_cols(source);
+    let tw = display_cols(target);
+    let mut best = None;
+    let mut consider = |s: &PhraseBreak, t: &PhraseBreak, matches_connector: bool| {
+        // Avoid orphaning an introductory word or pairing grossly different
+        // positions merely because the two sentences have the same comma count.
+        let sp = 100 * s.cols / sw;
+        let tp = 100 * t.cols / tw;
+        if s.cols
+            .min(sw.saturating_sub(s.cols))
+            .min(t.cols)
+            .min(tw.saturating_sub(t.cols))
+            < MIN_PHRASE_COLS
+            || sp.abs_diff(tp) > 30
+            || matches!((s.connector, t.connector), (Some(a), Some(b)) if a != b)
+        {
+            return;
+        }
+        let quality = (!matches_connector, sp.abs_diff(50).max(tp.abs_diff(50)));
+        if best.is_none_or(|(score, _)| quality < score) {
+            best = Some((quality, (s.byte, t.byte)));
+        }
+    };
+
+    let sc: Vec<_> = sources.iter().filter(|b| b.punctuation).collect();
+    let tc: Vec<_> = targets.iter().filter(|b| b.punctuation).collect();
+    if sc.len() == tc.len() {
+        for (s, t) in sc.into_iter().zip(tc) {
+            consider(s, t, false);
+        }
+    }
+    // A translator may join two sentences or promote a clause to a sentence.
+    // Recover unambiguous nearby sentence endings in that case. Cuts must
+    // be actual punctuation on both sides and each must be the other's sole
+    // candidate within this narrow window, not an arbitrary nearby word.
+    let near = |s: &PhraseBreak, t: &PhraseBreak| {
+        s.punctuation
+            && t.punctuation
+            && (s.sentence || t.sentence)
+            && (100 * s.cols / sw).abs_diff(100 * t.cols / tw) <= 8
+    };
+    for s in sources.iter().filter(|b| b.punctuation) {
+        let mut matching = targets.iter().filter(|t| near(s, t));
+        if let (Some(t), None) = (matching.next(), matching.next()) {
+            if sources.iter().filter(|b| near(b, t)).count() == 1 {
+                consider(s, t, false);
+            }
+        }
+    }
+    for s in sources.iter().filter(|s| s.connector.is_some()) {
+        let mut matching = targets.iter().filter(|t| t.connector == s.connector);
+        if let (Some(t), None) = (matching.next(), matching.next()) {
+            if sources
+                .iter()
+                .filter(|b| b.connector == s.connector)
+                .count()
+                == 1
+            {
+                consider(s, t, true);
+            }
+        }
+    }
+    best.map(|(_, pair)| pair)
+}
+
 fn paired_pages<'a>(original: &'a str, translation: &'a str) -> Vec<(&'a str, &'a str)> {
-    let originals: Vec<_> = original.split_sentence_bounds().collect();
-    let targets = aligned_translation(&originals, translation);
-    let mut pending = if !translation.is_empty() && targets.iter().any(|s| s.trim().is_empty()) {
-        // More source sentences than target words. Split the pair jointly.
-        vec![(original, translation)]
+    let sources: Vec<_> = original.split_sentence_bounds().collect();
+    let targets: Vec<_> = translation.split_sentence_bounds().collect();
+    let mut pending: Vec<_> = if translation.is_empty() {
+        sources.into_iter().map(|s| (s, "")).rev().collect()
+    } else if sources.len() == targets.len() {
+        sources.into_iter().zip(targets).rev().collect()
     } else {
-        originals.into_iter().zip(targets).rev().collect()
+        vec![(original, translation)]
     };
     let mut pages = Vec::new();
     while let Some((source, target)) = pending.pop() {
-        let sw = display_cols(source.trim());
-        let tw = display_cols(target.trim());
-        let width = sw.max(tw);
-        if width > PAGE_COLS {
-            let count = width.div_ceil(PAGE_COLS);
-            let (long, companion) = if sw >= tw {
-                (source, target)
+        if display_cols(source.trim()).max(display_cols(target.trim())) > PAGE_COLS {
+            let cut = if target.is_empty() {
+                source_cut(source, false).map(|i| (i, 0))
             } else {
-                (target, source)
+                clause_pair(source, target)
             };
-            if let Some(i) = page_cut(long, (count / 2) as f64 / count as f64) {
-                let fraction = display_cols(long[..i].trim()) as f64 / width as f64;
-                let j = if companion.is_empty() {
-                    Some(0)
-                } else {
-                    page_cut(companion, fraction)
-                };
-                if let Some(j) = j {
-                    let (s, t) = if sw >= tw { (i, j) } else { (j, i) };
-                    pending.push((&source[s..], &target[t..]));
-                    pending.push((&source[..s], &target[..t]));
-                    continue;
-                }
+            if let Some((s, t)) = cut {
+                pending.push((&source[s..], &target[t..]));
+                pending.push((&source[..s], &target[..t]));
+                continue;
             }
         }
         pages.push((source, target));
     }
     pages
+}
+
+/// Cumulative UTF-8 offsets into the ASR text and its stored translation.
+/// The last span includes the end of both strings.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlignedPhrase {
+    pub source_end: usize,
+    pub target_end: usize,
+}
+
+/// Reuse the translation of each aligned clause that already fits. Only the
+/// source slices marked None need another translation request. Slices retain
+/// interword spaces so the caller can record exact offsets in the cache.
+pub fn translation_plan<'a>(
+    source: &'a str,
+    translation: &'a str,
+) -> Option<Vec<(&'a str, Option<&'a str>)>> {
+    if display_cols(source).max(display_cols(translation)) <= RETRANSLATE_COLS
+        || translation.trim().is_empty()
+    {
+        return None;
+    }
+    let mut plan = Vec::new();
+    let mut changed = false;
+    for (s, t) in paired_pages(source, translation) {
+        let width = display_cols(s.trim()).max(display_cols(t.trim()));
+        if width > RETRANSLATE_COLS {
+            // A single word (including an identifier or proper name) cannot
+            // support multiple independent translations. Keep that pair intact.
+            if let Some(i) = source_cut(s, true) {
+                let mut remaining = vec![&s[i..], &s[..i]];
+                while let Some(piece) = remaining.pop() {
+                    // Only split further when the source phrase itself is long.
+                    // Each translation request must contain a meaningful group.
+                    if display_cols(piece.trim()) > MAX_CUE_COLS {
+                        if let Some(i) = source_cut(piece, true) {
+                            remaining.push(&piece[i..]);
+                            remaining.push(&piece[..i]);
+                            continue;
+                        }
+                    }
+                    plan.push((piece, None));
+                }
+                changed = true;
+                continue;
+            }
+        }
+        plan.push((s, Some(t)));
+    }
+    changed.then_some(plan)
+}
+
+fn stored_pages<'a>(
+    source: &'a str,
+    target: &'a str,
+    alignment: &[AlignedPhrase],
+) -> Option<Vec<(&'a str, &'a str)>> {
+    let last = alignment.last()?;
+    if last.source_end != source.len() || last.target_end != target.len() {
+        return None;
+    }
+    let mut pages = Vec::with_capacity(alignment.len());
+    let (mut start_s, mut start_t) = (0, 0);
+    for p in alignment {
+        let s = source.get(start_s..p.source_end)?;
+        let t = target.get(start_t..p.target_end)?;
+        if s.trim().is_empty() || t.trim().is_empty() {
+            return None;
+        }
+        pages.push((s, t));
+        (start_s, start_t) = (p.source_end, p.target_end);
+    }
+    Some(pages)
 }
 
 // These marks carry information inside a word, identifier or number.
@@ -257,8 +506,8 @@ fn speech_time(regions: &[SpeechRegion], mut offset: Ms, is_start: bool) -> Ms {
     regions.last().map_or(0, |r| r.end_ms)
 }
 
-fn utterance_cues(utt: &Utterance, translation: &str) -> Vec<Cue> {
-    let Some(text) = utt.text.as_deref().map(str::trim).filter(|s| !s.is_empty()) else {
+fn utterance_cues(utt: &Utterance, translation: &str, alignment: &[AlignedPhrase]) -> Vec<Cue> {
+    let Some(text) = utt.text.as_deref().filter(|s| !s.trim().is_empty()) else {
         return Vec::new();
     };
     // Pending lines retain their previous transcript while a language override runs.
@@ -281,7 +530,8 @@ fn utterance_cues(utt: &Utterance, translation: &str) -> Vec<Cue> {
         });
     }
     let total: Ms = regions.iter().map(|r| r.end_ms - r.start_ms).sum();
-    let pages = paired_pages(text, translation.trim());
+    let pages = stored_pages(text, translation, alignment)
+        .unwrap_or_else(|| paired_pages(text.trim(), translation.trim()));
     let weights: Vec<_> = pages
         .iter()
         .map(|(s, _)| display_cols(s.trim()).max(1))
@@ -343,11 +593,19 @@ fn finish_timing(cues: &mut [Cue]) {
             .unwrap_or(Ms::MAX)
             .saturating_sub(MIN_GAP_MS)
             .max(cue.start_ms.saturating_add(1));
+        // An indivisible bilingual clause can cover more than seven seconds
+        // of actual speech. Cap any added linger, but keep its spoken end.
+        let end_cap = cue.start_ms.saturating_add(MAX_CUE_MS);
+        let end_cap = if cue_width(cue) > PAGE_COLS {
+            end_cap.max(cue.end_ms)
+        } else {
+            end_cap
+        };
         cue.end_ms = cue
             .end_ms
             .max(needed)
             .saturating_add(LINGER_MS)
-            .min(cue.start_ms.saturating_add(MAX_CUE_MS))
+            .min(end_cap)
             .min(limit);
     }
 }
@@ -356,7 +614,9 @@ pub fn build_cues(utterances: &[Utterance], translations: &HashMap<String, Strin
     finish_cues(
         utterances
             .iter()
-            .flat_map(|u| utterance_cues(u, translations.get(&u.id).map_or("", String::as_str)))
+            .flat_map(|u| {
+                utterance_cues(u, translations.get(&u.id).map_or("", String::as_str), &[])
+            })
             .collect(),
     )
 }
@@ -368,6 +628,7 @@ pub struct CueBuilder {
 struct CachedPages {
     utterance: Utterance,
     translation: String,
+    alignment: Vec<AlignedPhrase>,
     cues: Vec<Cue>,
 }
 impl CueBuilder {
@@ -377,22 +638,32 @@ impl CueBuilder {
         &mut self,
         rows: impl IntoIterator<Item = (&'a Utterance, &'a str)>,
     ) -> Vec<Cue> {
+        self.update_aligned(rows.into_iter().map(|(u, t)| (u, t, &[][..])))
+    }
+
+    pub fn update_aligned<'a>(
+        &mut self,
+        rows: impl IntoIterator<Item = (&'a Utterance, &'a str, &'a [AlignedPhrase])>,
+    ) -> Vec<Cue> {
         let mut previous = std::mem::take(&mut self.pages);
         let mut cues = Vec::new();
-        for (row, translation) in rows {
+        for (row, translation, alignment) in rows {
             if row.text.is_none() {
                 continue;
             }
             let (id, pages) = previous
                 .remove_entry(&row.id)
-                .filter(|(_, p)| &p.utterance == row && p.translation == translation)
+                .filter(|(_, p)| {
+                    &p.utterance == row && p.translation == translation && p.alignment == alignment
+                })
                 .unwrap_or_else(|| {
                     (
                         row.id.clone(),
                         CachedPages {
                             utterance: row.clone(),
                             translation: translation.to_owned(),
-                            cues: utterance_cues(row, translation),
+                            alignment: alignment.to_vec(),
+                            cues: utterance_cues(row, translation, alignment),
                         },
                     )
                 });
@@ -427,9 +698,13 @@ fn finish_cues(mut cues: Vec<Cue>) -> Vec<Cue> {
                 {
                     left.push_str(&right);
                 }
-                cues[left].end_ms = right
-                    .end_ms
-                    .min(cues[left].start_ms.saturating_add(MAX_CUE_MS));
+                cues[left].end_ms = if cue_width(&cues[left]) > PAGE_COLS {
+                    right.end_ms
+                } else {
+                    right
+                        .end_ms
+                        .min(cues[left].start_ms.saturating_add(MAX_CUE_MS))
+                };
                 i = left;
                 continue;
             }

@@ -278,8 +278,7 @@ time, kbd {
 }
 .subtitle-overlay {
   position: absolute;
-  left: max(5%, calc(var(--caption-left) - var(--picture-gutter) + 8px));
-  right: max(5%, calc(var(--caption-right) - var(--picture-gutter) + 8px));
+  inset-inline: 5%;
   text-align: center;
   font-size: var(--main-size);
   font-weight: 600;

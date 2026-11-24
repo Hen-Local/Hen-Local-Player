@@ -6,6 +6,7 @@ use super::{
 use anyhow::{bail, Context as _, Result};
 use hlp_core::{
     asr_text::{self, ParsedAsr},
+    cues::AlignedPhrase,
     events::*,
     lang,
     settings::Settings,
@@ -96,7 +97,8 @@ enum Work {
         epoch: u64,
         id: String,
         source_hash: String,
-        result: Result<String>,
+        context_hash: String,
+        result: Result<(String, Vec<AlignedPhrase>)>,
         elapsed: u64,
     },
 }
@@ -331,14 +333,8 @@ impl Running {
                 }
                 let source = t.source_for(u).map(str::to_string);
                 let text = u.text.clone().unwrap_or_default();
-                let bg = if ctx.settings.translation_context {
-                    t.rows
-                        .range(..u.id.clone())
-                        .next_back()
-                        .and_then(|(_, u)| u.text.clone())
-                } else {
-                    None
-                };
+                let bg = t.background(u);
+                let context_hash = t.context_hash(u, bg.as_deref());
                 let (id, target, epoch, tx, mt) = (
                     u.id.clone(),
                     t.target.clone(),
@@ -355,12 +351,13 @@ impl Running {
                     let result = mt
                         .lock()
                         .await
-                        .translate(source.as_deref(), &target, &text, bg.as_deref())
+                        .translate_subtitle(source.as_deref(), &target, &text, bg.as_deref())
                         .await;
                     let _ = tx.send(Work::Translated {
                         epoch,
                         id,
                         source_hash: store::hash(&text),
+                        context_hash,
                         result,
                         elapsed: start.elapsed().as_millis() as u64,
                     });
@@ -559,38 +556,32 @@ async fn drive(
         if !completed {
             run.schedule(ctx, t);
         }
-        let stage = if run.prep_failed || run.engine_failed {
-            "error"
-        } else if run.setup {
-            "needs-setup"
-        } else if !run.generate {
-            "idle"
-        } else if t.vad_complete && !run.asr && !run.mt && !run.prep {
-            if completed {
-                "complete"
-            } else if t
-                .rows
-                .values()
-                .any(|u| u.status == UttStatus::Pending || t.tr_needed(u))
-            {
-                "paused"
-            } else if t.rows.values().any(|u| {
-                matches!(u.status, UttStatus::Failed { .. })
-                    || (t.target != "none"
-                        && t.source_for(u) != Some(&t.target)
-                        && u.text.as_ref().is_some_and(|text| {
-                            t.translations.items.get(&u.id).is_some_and(|item| {
-                                item.failed && item.source_hash == store::hash(text)
-                            })
-                        }))
-            }) {
+        let stage =
+            if run.prep_failed || run.engine_failed {
                 "error"
+            } else if run.setup {
+                "needs-setup"
+            } else if !run.generate {
+                "idle"
+            } else if t.vad_complete && !run.asr && !run.mt && !run.prep {
+                if completed {
+                    "complete"
+                } else if t
+                    .rows
+                    .values()
+                    .any(|u| u.status == UttStatus::Pending || t.tr_needed(u))
+                {
+                    "paused"
+                } else if t.rows.values().any(|u| {
+                    matches!(u.status, UttStatus::Failed { .. }) || t.translation_failed(u)
+                }) {
+                    "error"
+                } else {
+                    "complete"
+                }
             } else {
-                "complete"
-            }
-        } else {
-            "processing"
-        };
+                "processing"
+            };
         let changed = stage_before != stage;
         if matches!(stage, "complete" | "error") {
             run.regenerating = false;
@@ -639,7 +630,9 @@ fn apply_work(ctx: &mut Context, t: &mut Timeline, run: &mut Running, event: Wor
                 .get(&u.id)
                 .is_some_and(|old| old.regions == u.regions)
             {
-                t.rows.insert(u.id.clone(), u);
+                let id = u.id.clone();
+                t.rows.insert(id.clone(), u);
+                t.refresh_keys_from(&id);
                 t.dirty = true
             }
         }
@@ -651,6 +644,7 @@ fn apply_work(ctx: &mut Context, t: &mut Timeline, run: &mut Running, event: Wor
                     t.audio_complete = true;
                     t.vad_complete = true;
                     t.rows.retain(|id, _| run.seen.contains(id));
+                    t.rebuild_keys();
                     t.dirty = true;
                     store::write_json(
                         &t.track.join("audio.json"),
@@ -738,16 +732,40 @@ fn apply_work(ctx: &mut Context, t: &mut Timeline, run: &mut Running, event: Wor
             epoch,
             id,
             source_hash,
+            context_hash,
             result,
             elapsed,
         } => {
             run.mt = false;
-            if epoch == run.tr_epoch {
-                let (text, failed) = match result {
-                    Ok(text) => (text, false),
+            let current = t.rows.get(&id).is_some_and(|u| {
+                u.status == UttStatus::Done
+                    && u.text
+                        .as_deref()
+                        .is_some_and(|text| store::hash(text) == source_hash)
+                    && t.context_hash(u, t.background(u).as_deref()) == context_hash
+            });
+            if epoch == run.tr_epoch && current {
+                let source_language = t
+                    .rows
+                    .get(&id)
+                    .and_then(|u| t.source_for(u))
+                    .map(str::to_owned);
+                let failed = result.is_err();
+                let (text, aligned_phrases) = match result {
+                    Ok(translation) => translation,
                     Err(e) => {
                         ctx.error("Translation", format!("{e:#}"), true);
-                        (String::new(), true)
+                        t.translations
+                            .items
+                            .get(&id)
+                            .filter(|v| {
+                                v.source_hash == source_hash
+                                    && v.source_language
+                                        .as_ref()
+                                        .is_none_or(|lang| Some(lang) == source_language.as_ref())
+                            })
+                            .map(|v| (v.text.clone(), v.aligned_phrases.clone()))
+                            .unwrap_or_default()
                     }
                 };
                 t.tr_count += 1;
@@ -756,7 +774,10 @@ fn apply_work(ctx: &mut Context, t: &mut Timeline, run: &mut Running, event: Wor
                     id,
                     store::Translation {
                         source_hash,
+                        context_hash: Some(context_hash),
+                        source_language,
                         text,
+                        aligned_phrases,
                         failed,
                     },
                 );

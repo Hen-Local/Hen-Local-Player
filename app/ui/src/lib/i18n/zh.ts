@@ -196,7 +196,7 @@ export default {
   dialogue: '优先对白声道',
   lookahead: '预处理时长（秒）',
   model: '语音识别模型',
-  context: '使用上一行作为翻译上下文',
+  context: '翻译时参考前文',
   downloadDir: '下载文件夹',
   cacheLimit: '缓存上限（GB）',
   clearCache: '清除缓存',

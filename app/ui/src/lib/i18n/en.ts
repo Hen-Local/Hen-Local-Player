@@ -195,7 +195,7 @@ export default {
   dialogue: 'Focus on Dialogue Channel',
   lookahead: 'Lookahead (s)',
   model: 'Speech Recognition Model',
-  context: 'Use Previous Line as Translation Context',
+  context: 'Use Previous Dialogue for Translation',
   downloadDir: 'Download Folder',
   cacheLimit: 'Cache Limit (GB)',
   clearCache: 'Clear Cache',

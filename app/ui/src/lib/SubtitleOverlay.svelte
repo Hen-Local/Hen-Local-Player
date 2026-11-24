@@ -45,7 +45,6 @@
 
 {#if lines.length && box.height > 0}<div
     class="content-area"
-    style:--picture-gutter={box.left + 'px'}
     style:width={box.width + 'px'}
     style:height={box.height + 'px'}
     style:left={box.left + 'px'}
