@@ -23,6 +23,8 @@ try {
         npm.cmd --prefix app/ui ci
         if ($LASTEXITCODE) { throw "Frontend dependencies failed ($LASTEXITCODE)." }
     }
+    python scripts/stage_licenses.py $triple
+    if ($LASTEXITCODE) { throw "License staging failed ($LASTEXITCODE)." }
     Push-Location app
     try {
         & ./ui/node_modules/.bin/tauri.cmd build --target $triple --bundles nsis --config tauri.bundle.conf.json

@@ -13,7 +13,7 @@ import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RELEASE_REPOSITORY = "Hen-Local/Hen-Local-Player"
+RELEASE_REPOSITORY = (ROOT / "app/release-repository.txt").read_text().strip()
 PAYLOADS = {"darwin-aarch64": "macos-arm64.app.tar.gz", "windows-x86_64": "windows-x64-setup.exe"}
 
 

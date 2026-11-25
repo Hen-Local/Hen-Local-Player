@@ -243,7 +243,7 @@
     }
   })
   $effect(() => {
-    if (!p.settings.autoDownloadUpdates || p.media || appUpdates.hasAccess === false) return
+    if (!p.settings.autoDownloadUpdates || p.media) return
     const eligible = () => p.settings.autoDownloadUpdates && !p.media
     const check = async () => {
       const version = await appUpdates.automatic(eligible)

@@ -30,12 +30,6 @@ tokio-util.workspace = true
 dirs.workspace = true
 reqwest.workspace = true
 
-[target.'cfg(target_os = "macos")'.dependencies]
-keyring = { version = "3.6", default-features = false, features = ["apple-native"] }
-
-[target.'cfg(windows)'.dependencies]
-keyring = { version = "3.6", default-features = false, features = ["windows-native"] }
-
 [dev-dependencies]
 axum.workspace = true
 

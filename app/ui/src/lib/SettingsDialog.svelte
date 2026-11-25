@@ -3,9 +3,13 @@
   import Dialog from './Dialog.svelte'
   import SetupScreen from './SetupScreen.svelte'
   import SoftwareUpdate from './SoftwareUpdate.svelte'
-  import { player as p, backend } from './stores.svelte'
+  import { invoke } from '@tauri-apps/api/core'
+  import { player as p, backend, mockMode } from './stores.svelte'
   import { size } from './format'
   import type { Settings } from './types'
+  // A release without a creator handle has no funding link or external requests.
+  const coffeeHandle = (import.meta.env.VITE_BUY_ME_A_COFFEE_USERNAME ?? '').trim()
+  const coffeeUrl = /^[a-z0-9_-]+$/i.test(coffeeHandle) ? `https://buymeacoffee.com/${coffeeHandle}` : ''
   const themes = [
     {id:'neon-blue', label:'themeBlue', color:'#0003fe'},
     {id:'neon-orange', label:'themeOrange', color:'#ff5705'},
@@ -97,6 +101,16 @@
         {updating ? p.t('busy') : p.t('updateTool')}
       </button>
     </div>
+    {#if coffeeUrl}
+      <div class="setting-block">
+        <strong>{p.t('supportProject')}</strong>
+        <a href={coffeeUrl} target="_blank" rel="noreferrer" onclick={(event) => {
+          if (mockMode) return
+          event.preventDefault()
+          void p.act(() => invoke('plugin:opener|open_url', { url: coffeeUrl }))
+        }}>{p.t('buyMeACoffee')}</a>
+      </div>
+    {/if}
   {:else if tab === 'processing'}
     <label>
       {p.t('model')}

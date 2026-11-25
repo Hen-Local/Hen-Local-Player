@@ -60,8 +60,6 @@ fn main() {
         .menu(player_menu::build)
         .on_menu_event(|app, event| player_menu::handle(app, event.id().as_ref()))
         .invoke_handler(tauri::generate_handler![
-            app_updates::app_update_access,
-            app_updates::set_app_update_access,
             app_updates::list_app_releases,
             app_updates::download_app_release,
             app_updates::prepared_app_release,

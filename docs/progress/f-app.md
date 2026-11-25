@@ -31,7 +31,7 @@ The initial Wikimedia Apollo clip returned HTTP 429 from the upstream service du
 
 `cargo check --locked -p hlp-core -p hlp-media -p hlp-models -p hlp-pipeline -p hlp-cli -p henlocal-player`, `cargo clippy -p henlocal-player --no-deps`, `npm --prefix app/ui run check` and `npm --prefix app/ui run build` passed. Svelte reported zero errors and warnings. The tests used `CARGO_TARGET_DIR="$TMPDIR/hlp-target-f"`, `HLP_OMINIX_ROOT` and `HLP_DATA_DIR` overrides. Launch the player with `bash scripts/dev.sh` to repeat the interactive checks in PLAN §8.4.
 
-The preparation screenshot uses a 180-second repeat of the French fixture to keep the progress state visible during capture. The cached-remux screenshot shows restored transcript rows before the first video frame. The YouTube screenshots show the live preview and the downloaded video with its real overlay. [Native screenshots](../screenshots/native/)
+The preparation screenshot uses a 180-second repeat of the French fixture to keep the progress state visible during capture. The cached-remux screenshot shows restored transcript rows before the first video frame. The URL preview screenshot shows the native dialog. The playback screenshot of third-party footage is retained privately. [Native screenshots](../screenshots/native/)
 
 ## Regenerating saved subtitles
 

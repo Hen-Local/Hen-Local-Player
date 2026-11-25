@@ -1,20 +1,15 @@
 # Signed desktop releases
 
-Version 0.1.0 ships the locally notarized Apple Silicon build. The two-platform workflow described below was prepared separately for later releases.
+## Publishing an Apple Silicon update
 
-## Package and manifest checks
+1. Set the version with `python3 scripts/version.py set <version>`. Verify it with `python3 scripts/version.py check`, then commit and tag the same revision as `v<version>`.
+2. In Actions, select **Publish signed macOS release**, choose **Run workflow**, and select that tag. The workflow checks the version and repository before building on a macOS arm64 runner. The runner imports the Developer ID certificate into a temporary keychain and removes it after the job.
+3. The build runs `bash scripts/build_macos_app.sh --updater`. It signs and notarizes the app, staples its ticket, verifies the updater archive, and then signs, notarizes and staples the DMG. `scripts/prepare_app_release.py` signs the update and verifies it against the public key embedded in the app.
+4. GitHub Releases hosts the DMG, the update archive, its signature and `latest.json`. Public downloads work without an account. In the app, **Settings → General → Software Update** lists published stable releases. An installation of the original private 0.1.0 build can switch to this channel by installing the public DMG once.
 
-On November 24, 2026, `actionlint .github/workflows/release.yml` and `bash -n scripts/build_macos_app.sh` passed. Stable source tags trigger the release workflow in the private Hen-Local/Hen-Local-Player repository. The two build jobs run on macOS 15 arm64 and Windows Server 2022 x64. The Mac build takes its precompiled macOS 14 Metal kernels from the pinned MLX wheel through `prepare_mlx.py`. [Hosted runner architectures](https://docs.github.com/en/actions/reference/runners/github-hosted-runners#standard-runners-for-private-repositories)
+## Release credentials
 
-The Mac build with `--updater` archives the final, signed app after the Metal library and worker resources have been staged. Locally, extracting an archive made with the release tar command preserved the app signature under `codesign --verify --deep --strict`. Windows reuses the NSIS installer as its updater payload. [Supported Tauri updater formats](https://v2.tauri.app/plugin/updater/#building)
-
-In an isolated directory, `python3 scripts/prepare_app_release.py v0.1.0 darwin-aarch64` signed a copy of the Mac payload with a disposable key and generated a one-platform manifest. A second run with `darwin-aarch64 windows-x86_64` used a synthetic Windows payload to exercise the two-platform manifest. The Tauri CLI signed each payload with its app version in the trusted comment. Minisign verified the content and the comment with the matching verification key. Independent reads matched the byte length and SHA-256 recorded in each platform entry. The script rejected a mismatched release tag and a nonmatching signing key. A failed signing attempt preserved the previous manifest and signature sidecars. The Windows packaging job and an upgrade on a real Windows installation require a Windows runner.
-
-The signing job requires `TAURI_SIGNING_PRIVATE_KEY` and its `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` if encrypted. Each tag's `latest.json` contains only the signed platforms selected for that run. The workflow uploads the DMG, updater payloads, signatures and manifest together in a private draft, then finalizes the release. An interrupted draft upload can be retried. Source repository access controls cover both the packages and the manifest. The payment service can use this private release as its upstream and issue an expiring download URL after checking the purchase.
-
-## Apple distribution credentials
-
-For a Developer ID release, configure these five Actions secrets in the private source repository.
+Store the following values as GitHub Actions secrets when using the hosted release workflow. Local releases can use the existing notarization Keychain profile and local update key as described in the README.
 
 | Secret | Value |
 | --- | --- |
@@ -23,12 +18,10 @@ For a Developer ID release, configure these five Actions secrets in the private 
 | `APPLE_NOTARY_APPLE_ID` | Apple Account email authorized for notarization. |
 | `APPLE_NOTARY_TEAM_ID` | Developer Team ID of the imported certificate. |
 | `APPLE_NOTARY_PASSWORD` | App-specific password for the Apple Account. |
+| `TAURI_SIGNING_PRIVATE_KEY` | Publisher key matching `app/updater.pub`. |
+| `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | Password when the publisher key is encrypted. |
 
-The workflow imports the certificate into a temporary runner keychain, checks for one valid Developer ID Application identity for the configured team, and stores the notarization profile in that keychain. The bundle is signed, notarized and stapled before the updater archive is created. The build extracts that archive to verify its code signature and staple, then signs, notarizes and staples the DMG. The job removes the keychain after packaging. Leaving all five secrets empty produces an ad-hoc private test build. An incomplete set fails before the build begins. [GitHub certificate setup](https://docs.github.com/en/actions/how-tos/deploy/deploy-to-third-party-platforms/sign-xcode-applications) · [Apple notarization](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)
-
-Local checks covered empty credentials, five incomplete combinations, team mismatch and simulated full credentials. The updater tar round trip preserved the valid signature and staple of an existing notarized app. GitHub Actions lint and Bash syntax checks passed.
-
-On November 24, 2026, Apple accepted the locally submitted 0.1.0 Apple Silicon DMG under submission `e8f1b58d-d4c8-46e1-a014-486c56cfb576`. The disk image and standalone app received their tickets. The updater archive was rebuilt from the stapled app, extracted for ticket verification, and signed with the publisher’s update key. The final DMG is 126,948,782 bytes with SHA-256 `ee8cd42af06fd404208cea8fce9655b09c15a433f6d0ecf1e0def7145e67a38d`. Gatekeeper accepted the quarantined disk image and the app copied from it. Paid distribution and the production buyer update feed have not been enabled.
+[GitHub certificate setup](https://docs.github.com/en/actions/how-tos/deploy/deploy-to-third-party-platforms/sign-xcode-applications) · [Apple notarization](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow) · [Tauri updater formats](https://v2.tauri.app/plugin/updater/#building)
 
 ## Windows speech model downloads
 

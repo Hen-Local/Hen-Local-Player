@@ -1,6 +1,8 @@
 # Hen Local Player
 
-A local video player with on-device speech recognition, translation and bilingual subtitles. The desktop app and the headless CLI share the same processing pipeline.
+A free, open-source local video player with on-device speech recognition, translation and bilingual subtitles. The desktop app and the headless CLI share the same processing pipeline.
+
+[Download the Apple Silicon installer](https://github.com/Hen-Local/Hen-Local-Player/releases/latest) for macOS 14 or later. Models download separately on first setup.
 
 ## Open the player
 
@@ -51,15 +53,21 @@ Run `bash scripts/e2e.sh` after generating the fixtures and installing the compo
 
 ## Versions and updates
 
-**Settings → General → Software Update** shows the installed version offline. A store can supply a personal update link with a purchase. Once connected, the player can list eligible stable releases and download a selected newer version. Automatic downloads are opt-in. **Install and Restart** applies a verified package at a time you choose.
+**Settings → General → Software Update** shows the installed version. Choose **Check for Updates** to see stable GitHub releases. On a supported platform, select a newer release, download it, then choose **Install and Restart**. The app verifies the package size, SHA-256 and publisher signature. Automatic downloads are opt-in.
 
-Run `python3 scripts/version.py set 0.2.0` when preparing that version, then run `python3 scripts/version.py check`. The current build is 0.1.0. [Release preparation and distribution](docs/progress/release-updates.md)
+To prepare a maintainer release, update the version with `python3 scripts/version.py set <version>` and run `python3 scripts/version.py check`. After tagging the matching commit, a maintainer with signing credentials can dispatch **Publish signed macOS release** on that tag. The workflow uses the Developer ID and notarization credentials described in the [release guide](docs/progress/release-updates.md).
+
+## License and optional support
+
+Hen Local Player source code is available under [Apache License 2.0](LICENSE). Bundled tools, assets and downloaded models have their own terms. See the [component notices](docs/LICENSES.md).
+
+Maintainers can enable an optional Buy Me a Coffee link in Settings by setting `VITE_BUY_ME_A_COFFEE_USERNAME` when building the frontend. With an empty value, the link stays hidden. To show the same link on GitHub, copy [.github/FUNDING.yml.example](.github/FUNDING.yml.example) to `.github/FUNDING.yml` and enter the creator username. Downloads and updates are free for everyone.
 
 ## Build an installer
 
 When testing a rebuilt Mac app, quit the running copy with **⌘Q** and open the new bundle. While the old process is running, both the Dock icon and the terminal’s `open` command bring its existing window forward.
 
-On an Apple Silicon Mac, run `bash scripts/build_macos_app.sh`. It stages the pinned playback tools and produces `dist/Hen Local Player.app` and a versioned arm64 DMG. Set `HLP_BUNDLE_TOOL_CACHE` to reuse an existing component cache during packaging. Local builds use an ad-hoc signature. For customer distribution, set `HLP_DEVELOPER_ID` to the Developer ID Application identity and `HLP_NOTARY_PROFILE` to a configured notarytool Keychain profile. The script submits and staples the app and DMG.
+On an Apple Silicon Mac with the Xcode Command Line Tools, install the media build tools with `brew install meson ninja pkgconf`, then run `bash scripts/build_macos_app.sh`. It builds the pinned media tools from source and produces `dist/Hen Local Player.app` and a versioned arm64 DMG. The matching FFmpeg and dav1d source archives and build recipe ship inside the app. Local builds use an ad-hoc signature. For customer distribution, set `HLP_DEVELOPER_ID` to the Developer ID Application identity and `HLP_NOTARY_PROFILE` to a configured notarytool Keychain profile. The script submits and staples the app and DMG.
 
 On Windows x64, run `.\scripts\build_windows.ps1` from a checkout with the MSVC tools installed. The script builds the worker, includes it beside the app executable, and writes a versioned NSIS installer to `dist`. The Windows fixture scripts also require Python 3 and an English desktop SAPI voice. The manual **Windows installer and fixtures** GitHub Actions workflow can build the installer and run the speech tests on a hosted Windows runner when the workflow is published and dispatched. [Windows test commands and verification status](docs/progress/g-windows.md).
 

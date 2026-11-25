@@ -25,11 +25,9 @@ jobs:
       - name: Build the x64 installer
         shell: powershell
         run: .\scripts\build_windows.ps1
-      - uses: actions/upload-artifact@v4
-        with:
-          name: Hen-Local-Player-Windows-x64
-          path: dist/*-windows-x64-setup.exe
-          if-no-files-found: error
+      - name: Verify the installer was created
+        shell: powershell
+        run: if (!(Test-Path dist/*-windows-x64-setup.exe)) { throw "Missing Windows installer" }
 
   speech:
     if: inputs.test_speech

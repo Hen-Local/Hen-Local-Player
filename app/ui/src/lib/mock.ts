@@ -63,7 +63,6 @@ const initialComponents: [string, number, boolean][] = [
 ]
 export class MockBackend implements Backend {
   async version() { return version }
-  private hasUpdateAccess = false
   private events = new EventTarget()
   private settings = { ...defaults(), ...stored<Partial<Settings>>('settings', {}) }
   private recent = stored<RecentItem[]>('recent', [])
@@ -572,14 +571,7 @@ export class MockBackend implements Backend {
       case 'app_info':
         reply = { version, logDir: 'logs', cacheBytes: 0 }
         break
-      case 'app_update_access':
-        reply = this.hasUpdateAccess
-        break
-      case 'set_app_update_access':
-        if (a && 'url' in a) this.hasUpdateAccess = Boolean(a.url)
-        break
       case 'list_app_releases':
-        if (!this.hasUpdateAccess) throw Error('UPDATE_ACCESS_REQUIRED')
         reply = []
         break
       case 'prepared_app_release':
@@ -587,7 +579,6 @@ export class MockBackend implements Backend {
         break
       case 'download_app_release':
       case 'install_app_release':
-        if (!this.hasUpdateAccess) throw Error('UPDATE_ACCESS_REQUIRED')
         throw Error('Application updates are available in the desktop app.')
       case 'suggest_export_paths':
         if (a && 'variant' in a) reply = this.filename(a.variant, a.format)

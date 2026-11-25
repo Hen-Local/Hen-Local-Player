@@ -1,0 +1,82 @@
+name: Publish signed macOS release
+on: workflow_dispatch
+
+permissions:
+  contents: read
+concurrency:
+  group: macos-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: macos-15
+    permissions:
+      contents: write
+    env:
+      CARGO_TARGET_DIR: /tmp/hlp-release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.92.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the selected version tag
+        run: |
+          [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" == "v$(python3 scripts/version.py check)" ]]
+          [[ "$(cat app/release-repository.txt)" == "$GITHUB_REPOSITORY" ]]
+      - run: npm --prefix app/ui ci
+      - run: brew install minisign meson ninja pkgconf
+      - name: Configure Apple signing and notarization
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
+          APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
+          APPLE_NOTARY_PASSWORD: ${{ secrets.APPLE_NOTARY_PASSWORD }}
+        run: |
+          : "${APPLE_CERTIFICATE_P12_BASE64:?Missing Developer ID Application certificate}"
+          : "${APPLE_CERTIFICATE_PASSWORD:?Missing P12 password}"
+          : "${APPLE_NOTARY_APPLE_ID:?Missing Apple ID}"
+          : "${APPLE_NOTARY_TEAM_ID:?Missing Developer Team ID}"
+          : "${APPLE_NOTARY_PASSWORD:?Missing Apple app-specific password}"
+          umask 077
+          keychain="$RUNNER_TEMP/hen-player.keychain-db"
+          certificate="$RUNNER_TEMP/hen-player.p12"
+          trap 'rm -f "$certificate"' EXIT
+          printf '%s' "$APPLE_CERTIFICATE_P12_BASE64" | base64 -D > "$certificate"
+          password=$(openssl rand -hex 32)
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$certificate" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain"
+          identity=$(security find-identity -v -p codesigning "$keychain" |
+            awk -v team="($APPLE_NOTARY_TEAM_ID)\"" '/"Developer ID Application: / && $NF == team { print $2 }')
+          [[ "$identity" =~ ^[A-Fa-f0-9]{40}$ ]] || { echo "Expected one valid Developer ID Application identity for this team." >&2; exit 1; }
+          xcrun notarytool store-credentials hen-player-release --keychain "$keychain" \
+            --apple-id "$APPLE_NOTARY_APPLE_ID" --team-id "$APPLE_NOTARY_TEAM_ID" --password "$APPLE_NOTARY_PASSWORD"
+          printf 'HLP_DEVELOPER_ID=%s\nHLP_NOTARY_KEYCHAIN=%s\nHLP_NOTARY_PROFILE=hen-player-release\n' "$identity" "$keychain" >> "$GITHUB_ENV"
+      - name: Build, sign and notarize the Apple Silicon installer
+        run: bash scripts/build_macos_app.sh --updater
+      - name: Sign the update manifest
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          : "${TAURI_SIGNING_PRIVATE_KEY:?Configure the publisher update key}"
+          python3 scripts/prepare_app_release.py "$GITHUB_REF_NAME" darwin-aarch64
+      - name: Publish the four verified files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prefix="dist/Hen-Local-Player-${GITHUB_REF_NAME#v}-macos-arm64"
+          gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes \
+            --title "Hen Local Player ${GITHUB_REF_NAME#v}" \
+            "$prefix.dmg" "$prefix.app.tar.gz" "$prefix.app.tar.gz.sig" dist/latest.json
+      - name: Remove the temporary Apple keychain
+        if: always()
+        run: |
+          keychain="$RUNNER_TEMP/hen-player.keychain-db"
+          if [[ -f "$keychain" ]]; then security delete-keychain "$keychain"; fi

@@ -2,9 +2,17 @@
 
 A checked item has been exercised. Worktree branches and tags are local until publication is requested.
 
+## Free open-source Apple Silicon release 0.1.1
+
+- `python3 scripts/version.py check` returned `0.1.1`. `cargo fmt --all --check`, `cargo test --locked --offline --workspace`, the frontend production build and `npm --prefix app/ui run check` passed. `actionlint .github/workflows/*.yml` passed. Release tests check stable GitHub versions and platform-specific signed assets.
+- The source and Mac package include the Apache-2.0 license, project and third-party notices, the revised Japanese demo narration, and sources for the distributed FFmpeg and dav1d. The Mac notice collector resolved 499 locked dependencies. Compared the staged app’s license files against the repository and checked the bundled FFmpeg on AV1, audio extraction and transcoding. [Media build checks](progress/c-models.md)
+- On an isolated Apple Silicon install, `scripts/e2e.sh --report <temporary-file> ja` with the new media tools and installed models passed all nine checks. All six Japanese cues had translations and all nine exports decoded. Maximum onset error was 37 ms.
+- Before public distribution, verified a complete private Git bundle and all four 0.1.0 release assets. Preserved the 64 historical commits, their authors, dates and subjects while excluding the old Apple system voice recording and a screenshot of third-party footage. Ran a redacted credential scan of the Git history.
+- In the native Model Setup window, a clean model directory reported 3.61 GB for the recommended components. An installation with verified default models reported 0 KB. Confirmed the localized Chinese and English states with Automatic selected and the bundled FFmpeg available on first launch.
+
 ## GitHub release v0.1.0 for Apple Silicon
 
-The private [v0.1.0 release](https://github.com/Hen-Local/Hen-Local-Player/releases/tag/v0.1.0) packages the macOS 14+ Apple Silicon player. Its four assets are the notarized DMG, the signed update archive, its detached signature and the update manifest.
+The privately archived v0.1.0 release packaged the macOS 14+ Apple Silicon player. Its four assets are the notarized DMG, the signed update archive, its detached signature and the update manifest.
 
 Before upload, `python3 scripts/version.py check` reported 0.1.0, `cargo fmt --all --check` passed and `npm --prefix app/ui run check` reported zero diagnostics. The disk image passed `hdiutil verify` and `xcrun stapler validate`. Gatekeeper accepted the app and disk image. The update archive matched its publisher signature and the digest in the manifest.
 

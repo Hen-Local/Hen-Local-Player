@@ -1,9 +1,7 @@
-//! The store supplies a personal HTTPS feed. Only the feed receives that link.
-//! Packages are fetched independently and verified with the embedded publisher key.
 use anyhow::{bail, ensure, Context, Result};
 use fs2::FileExt;
 use hlp_pipeline::store;
-use reqwest::{Client, StatusCode, Url};
+use reqwest::{Client, Response, StatusCode, Url};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -20,6 +18,7 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 // The updater requires a configured endpoint even to restore a manifest locally.
 // restore_update never contacts this URL. It is also the non-secret URL used in
 // the staged manifest once the signed artifact has been downloaded.
+const REPOSITORY: &str = include_str!("../release-repository.txt");
 const OFFLINE_URL: &str = "https://offline.invalid/package";
 
 #[derive(Deserialize)]
@@ -34,16 +33,23 @@ struct Platform {
 struct Release {
     version: String,
     #[serde(default)]
-    pub_date: Option<String>,
-    #[serde(default)]
-    notes: Option<String>,
-    #[serde(default)]
     platforms: HashMap<String, Platform>,
 }
 #[derive(Deserialize)]
-struct Feed {
-    releases: Vec<Release>,
+struct GitHubRelease {
+    tag_name: String,
+    draft: bool,
+    prerelease: bool,
+    body: Option<String>,
+    published_at: Option<String>,
+    assets: Vec<GitHubAsset>,
 }
+
+#[derive(Deserialize)]
+struct GitHubAsset {
+    name: String,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppRelease {
@@ -77,7 +83,7 @@ fn https_url(input: &str) -> Result<Url> {
                 && u.password().is_none()
                 && u.fragment().is_none()
         })
-        .context("Enter a full HTTPS update link from the store")
+        .context("Invalid HTTPS release asset URL")
 }
 
 impl Release {
@@ -90,115 +96,80 @@ impl Release {
             && https_url(&p.url).is_ok())
         .then_some(p)
     }
+}
 
+impl GitHubRelease {
     fn summary(self, current: &Version) -> Option<AppRelease> {
-        let version = stable_version(&self.version)?;
-        let installable = version.cmp_precedence(current).is_gt() && self.package().is_some();
+        if self.draft || self.prerelease {
+            return None;
+        }
+        let version = stable_version(self.tag_name.strip_prefix('v')?)?;
+        let suffix = match platform_key() {
+            "darwin-aarch64" => Some("macos-arm64.app.tar.gz"),
+            "windows-x86_64" => Some("windows-x64-setup.exe"),
+            _ => None,
+        };
+        let has = |name: &str| self.assets.iter().any(|a| a.name == name);
+        let installable = version > *current
+            && has("latest.json")
+            && suffix.is_some_and(|suffix| {
+                let filename = format!("Hen-Local-Player-{version}-{suffix}");
+                has(&filename) && has(&format!("{filename}.sig"))
+            });
         Some(AppRelease {
             version,
-            published_at: self.pub_date.unwrap_or_default(),
-            notes: self.notes.unwrap_or_default(),
+            published_at: self.published_at.unwrap_or_default(),
+            notes: self.body.unwrap_or_default(),
             installable,
         })
     }
 }
 
-#[cfg(any(target_os = "macos", windows))]
-fn access_entry() -> Result<keyring::Entry> {
-    Ok(keyring::Entry::new(
-        "com.henlocal.player.update-access",
-        "personal-feed-v1",
-    )?)
-}
-fn saved_access() -> Result<Option<String>> {
-    #[cfg(any(target_os = "macos", windows))]
-    match access_entry()?.get_password() {
-        Ok(url) => Ok(Some(url)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(err) => Err(err.into()),
-    }
-    #[cfg(not(any(target_os = "macos", windows)))]
-    {
-        Ok(None)
-    }
-}
-
-#[tauri::command]
-pub async fn app_update_access() -> Result<bool, String> {
-    saved_access()
-        .map(|value| value.is_some())
-        .map_err(|e| e.to_string())
-}
-
-fn configure_access(url: &str) -> Result<()> {
-    let url = url.trim();
-    if !url.is_empty() {
-        https_url(url)?;
-    }
-    let dir = store::data_root().join("updates");
-    let _lock = operation_lock(&dir)?;
-    #[cfg(any(target_os = "macos", windows))]
-    {
-        if url.is_empty() {
-            match access_entry()?.delete_credential() {
-                Ok(()) | Err(keyring::Error::NoEntry) => {}
-                Err(err) => return Err(err.into()),
-            }
-        } else {
-            access_entry()?.set_password(url)?;
-        }
-        if let Some(previous) = pending(&dir) {
-            forget(&dir, &previous);
-        }
-        Ok(())
-    }
-    #[cfg(not(any(target_os = "macos", windows)))]
-    {
-        bail!("App updates are not supported on this platform")
-    }
-}
-
-#[tauri::command]
-pub async fn set_app_update_access(url: String) -> Result<(), String> {
-    configure_access(&url).map_err(|e| e.to_string())
-}
-
-async fn fetch_feed() -> Result<Feed> {
-    let url = https_url(&saved_access()?.context("UPDATE_ACCESS_REQUIRED")?)?;
-    // A purchaser link can contain a secret in its path or query. Don't forward
-    // it across redirects, include it in a Referer, or surface URLs in errors.
-    let client = Client::builder()
+fn release_client() -> Result<Client> {
+    Ok(Client::builder()
         .https_only(true)
         .referer(false)
-        .redirect(reqwest::redirect::Policy::none())
         .user_agent(concat!("Hen-Local-Player/", env!("CARGO_PKG_VERSION")))
         .timeout(Duration::from_secs(30))
-        .build()?;
+        .build()?)
+}
+
+async fn get_release_data(client: &Client, url: &str) -> Result<Response> {
     let response = client
         .get(url)
         .send()
         .await
         .map_err(reqwest::Error::without_url)?;
     match response.status() {
-        StatusCode::OK => Ok(response.json().await.map_err(reqwest::Error::without_url)?),
-        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN | StatusCode::GONE => {
-            bail!("UPDATE_ACCESS_DENIED")
-        }
+        StatusCode::OK => Ok(response),
+        StatusCode::FORBIDDEN | StatusCode::TOO_MANY_REQUESTS => bail!("UPDATE_RATE_LIMITED"),
         StatusCode::NOT_FOUND => bail!("UPDATE_FEED_UNAVAILABLE"),
-        StatusCode::TOO_MANY_REQUESTS => bail!("UPDATE_RATE_LIMITED"),
         status => bail!("The update service returned {status}"),
     }
 }
 
 async fn releases(current: &Version) -> Result<Vec<AppRelease>> {
-    let mut history = fetch_feed()
-        .await?
-        .releases
-        .into_iter()
-        .filter_map(|r| r.summary(current))
-        .collect::<Vec<_>>();
+    let client = release_client()?;
+    let endpoint = format!(
+        "https://api.github.com/repos/{}/releases",
+        REPOSITORY.trim()
+    );
+    let mut history = Vec::new();
+    for page in 1.. {
+        let url = format!("{endpoint}?per_page=100&page={page}");
+        let response = get_release_data(&client, &url).await?;
+        let batch: Vec<GitHubRelease> = response.json().await?;
+        let last = batch.len() < 100;
+        history.extend(
+            batch
+                .into_iter()
+                .filter_map(|release| release.summary(current)),
+        );
+        if last {
+            break;
+        }
+    }
     history.sort_by(|a, b| b.version.cmp(&a.version));
-    history.dedup_by(|a, b| a.version == b.version);
     Ok(history)
 }
 
@@ -324,12 +295,18 @@ async fn download(app: AppHandle, selected: &str) -> Result<()> {
     {
         return Ok(());
     }
-    let release = fetch_feed()
+    let url = format!(
+        "https://github.com/{}/releases/download/v{version}/latest.json",
+        REPOSITORY.trim()
+    );
+    let release: Release = get_release_data(&release_client()?, &url)
         .await?
-        .releases
-        .into_iter()
-        .find(|r| r.version == selected)
-        .context("This release is unavailable for your purchase")?;
+        .json()
+        .await?;
+    ensure!(
+        release.version == selected,
+        "The release tag and manifest version differ"
+    );
     let package = release
         .package()
         .context("No signed update for this platform")?;
@@ -338,10 +315,8 @@ async fn download(app: AppHandle, selected: &str) -> Result<()> {
         "platforms": { (platform_key()): {"url": OFFLINE_URL, "signature": package.signature} }
     });
     let mut update = restore(&app, &version, manifest.clone())?;
-    // Only the short-lived artifact link goes to the file host. No customer or
-    // GitHub credentials are sent as headers or saved to the staged manifest.
     update.download_url = https_url(&package.url)?;
-    // Tauri sets up its rustls provider in check(). A private feed restores the
+    // Tauri sets up its rustls provider in check(). This client restores the
     // selected manifest directly and therefore has to initialize it for download.
     if rustls::crypto::CryptoProvider::get_default().is_none() {
         let _ = rustls::crypto::ring::default_provider().install_default();
@@ -451,29 +426,36 @@ mod tests {
     use super::*;
 
     #[test]
-    fn private_feed_keeps_only_stable_versions_and_requires_complete_platform_assets() {
-        let current = Version::new(0, 1, 0);
-        let release = |version: &str| Release {
-            version: version.to_owned(),
-            notes: None,
-            pub_date: None,
-            platforms: HashMap::new(),
+    fn public_history_marks_only_new_signed_platform_packages_installable() {
+        let make = |tag: &str, preview: bool| GitHubRelease {
+            tag_name: tag.into(),
+            draft: false,
+            prerelease: preview,
+            body: None,
+            published_at: None,
+            assets: [
+                "latest.json",
+                "Hen-Local-Player-0.2.0-macos-arm64.app.tar.gz",
+                "Hen-Local-Player-0.2.0-macos-arm64.app.tar.gz.sig",
+                "Hen-Local-Player-0.2.0-windows-x64-setup.exe",
+                "Hen-Local-Player-0.2.0-windows-x64-setup.exe.sig",
+            ]
+            .iter()
+            .map(|name| GitHubAsset {
+                name: name.to_string(),
+            })
+            .collect(),
         };
-        assert!(release("1.0.0-beta.1").summary(&current).is_none());
-        assert!(release("not-semver").summary(&current).is_none());
-        assert!(!release("0.0.9").summary(&current).unwrap().installable);
-        let mut upcoming = release("0.10.0");
-        assert!(upcoming.package().is_none());
-        let artifact = Platform {
-            url: "https://downloads.example/movie?temporary=1".into(),
-            size: 700,
-            sha256: "ab".repeat(32),
-            signature: "signature".into(),
-        };
-        upcoming.platforms.insert(platform_key().into(), artifact);
-        assert!(upcoming.summary(&current).unwrap().installable);
-        assert!(https_url("http://example.org/?buyer=test").is_err());
-        assert!(https_url("https://user:pass@example.org/").is_err());
-        assert!(https_url("https://example.org/#secret").is_err());
+        let current = Version::new(0, 1, 1);
+        assert!(make("v0.2.0-beta.1", false).summary(&current).is_none());
+        assert!(make("v0.2.0", true).summary(&current).is_none());
+        assert!(!make("v0.1.0", false).summary(&current).unwrap().installable);
+        let mut missing = make("v0.2.0", false);
+        missing.assets.remove(0);
+        assert!(!missing.summary(&current).unwrap().installable);
+        assert_eq!(
+            make("v0.2.0", false).summary(&current).unwrap().installable,
+            platform_key() != "unsupported"
+        );
     }
 }

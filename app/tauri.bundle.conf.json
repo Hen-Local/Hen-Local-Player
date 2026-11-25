@@ -11,7 +11,12 @@
       "../docs/licenses/ICU4X-LICENSE.txt": "licenses/ICU4X-LICENSE.txt",
       "../docs/licenses/ICU-Dictionary-LICENSE.txt": "licenses/ICU-Dictionary-LICENSE.txt",
       "ui/public/demo/": "demo/",
-      "../docs/licenses/Silero-LICENSE.txt": "licenses/Silero-LICENSE.txt"
+      "../docs/licenses/Silero-LICENSE.txt": "licenses/Silero-LICENSE.txt",
+      "../LICENSE": "licenses/Hen-Local-Player-LICENSE.txt",
+      "../NOTICE": "licenses/NOTICE.txt",
+      "binaries/Dependency-Notices.txt": "licenses/Dependency-Notices.txt",
+      "../docs/licenses/Native-Notices.txt": "licenses/Native-Notices.txt",
+      "../docs/licenses/Mei-Voice-LICENSE.txt": "licenses/Mei-Voice-LICENSE.txt"
     }
   }
 }

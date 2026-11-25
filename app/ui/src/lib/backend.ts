@@ -67,8 +67,6 @@ export interface Commands {
   reveal_in_folder: [ { path: string }, void ]
   app_info: [ undefined, {version:string; logDir:string; cacheBytes:number} ]
   update_ytdlp: [ undefined, void ]
-  app_update_access: [ undefined, boolean ]
-  set_app_update_access: [ { url: string }, void ]
   list_app_releases: [ undefined, AppRelease[] ]
   download_app_release: [ { version: string }, void ]
   prepared_app_release: [ undefined, string | null ]

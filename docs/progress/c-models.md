@@ -14,7 +14,21 @@ The Windows Sherpa archive measured 878,702,423 bytes, SHA-256 `393f8a14e2f5fb96
 
 The yt-dlp 2026.10.26 standalone pins match its SHA2-256SUMS. The Deno v2.9.8 pins match the platform-specific .sha256sum files. The yt-dlp source is Unlicense. The release README identifies the combined PyInstaller executables as GPLv3+. Existing installs and ordinary playback require no release metadata request. The explicit yt-dlp update command checks the release's checksum file before activating its version directory. [yt-dlp release](https://github.com/yt-dlp/yt-dlp/releases/tag/2026.10.26) · [Deno release](https://github.com/denoland/deno/releases/tag/v2.9.8)
 
+## Media tools in the open-source Mac release
+
+The Apple Silicon installer builds two independent executables from the unmodified FFmpeg 9.1 and dav1d 1.5.5 release archives. Both archives, notices and the complete build recipe are included in the app and the update archive. FFmpeg's release signature verified against its published key `FCF986EA15E6E293A5644F10B4322F04D67658D8`. The recipe checks both archive sizes and SHA-256 hashes before extraction. Configure reported LGPL 2.1 or later. The only non-system external library is dav1d (BSD-2-Clause). [FFmpeg release and signing key](https://ffmpeg.org/download.html) · [Official dav1d archive](https://downloads.videolan.org/pub/videolan/dav1d/1.5.5/)
+
+Verified on Apple Silicon:
+
+- `bash scripts/build_macos_media.sh "$media" "$archives"` completed from local source archives using Apple Command Line Tools, Meson 1.9.1, Ninja 1.13.0 and pkgconf 2.5.1. Repeating the command without the archive argument reused the checked output. `shasum -a 256 -c SHA256SUMS` in the output directory passed for all eight files.
+- `otool -L` reported only system library and framework paths for both programs. `vtool -show-build` reported minimum macOS 14.0. `ffmpeg -L` reported LGPL 2.1 or later.
+- FFprobe recognized the H.264 and AC-3 streams in `fixture_fr.mkv`. FFmpeg converted two seconds of VP9/Opus from `fixture_de.webm` with `-vf yadif -c:v h264_videotoolbox -c:a aac`. FFprobe verified H.264/AAC and a duration of 2.000 seconds.
+- `ffmpeg -c:v libdav1d -i av1.ivf -f framecrc -` decoded all 12 AV1 test frames. A one-second audio extraction from `fixture_en.m4a` produced 32,000 bytes at 16 kHz mono signed PCM. `ffmpeg -i app/ui/public/demo/demo.srt -map 0:s:0 -c:s webvtt -f webvtt -` preserved Japanese and English cues. The protocol and demuxer lists include HTTPS and DASH.
+- `python3 scripts/e2e.py --cli "$target/debug/hlp-cli" --ffmpeg "$media/ffmpeg" --report "$audit/e2e-ja-verified.json" ja` passed all nine checks for 0.1.1 in a separate component directory using these same FFmpeg/FFprobe executables, Silero, Qwen3-ASR 1.7B and Hy-MT2 1.8B. All six utterances were detected and translated. Character error was 2.86% and maximum onset error was 37 ms. The first run took 8.662 seconds and the cached run took 0.208 seconds with zero model requests. FFmpeg decoded all nine exported SRT, WebVTT and ASS files.
+
 ## FFmpeg audit evidence
+
+The following details refer to the stand-alone CLI setup downloads and earlier packaging.
 
 The macOS downloads are OSXExperts FFmpeg and ffprobe 9.1 for Apple Silicon. The archive hashes and sizes are in components.json. Both unpacked binaries target macOS 13.0 according to `otool -l`, compatible with the player's macOS 14 minimum. The binaries report VideoToolbox and GPL with version3 enabled. They are invoked as separate programs. The distributor describes its binaries as educational builds. The source link on its page still points to the 6.1 branch. The upstream 9.1 source tag matches the reported version. [Distributor](https://www.osxexperts.net/) · [FFmpeg n9.1](https://github.com/FFmpeg/FFmpeg/tree/n9.1)
 

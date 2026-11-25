@@ -4,112 +4,57 @@ export const updateInterval = 24 * 60 * 60 * 1000
 
 export class AppUpdates {
   version = $state('')
-  hasAccess = $state<boolean | null>(null)
   releases = $state.raw<AppRelease[] | null>(null)
   selected = $state('')
   prepared = $state<string | null>(null)
-  task = $state<'idle' | 'savingAccess' | 'checking' | 'downloading' | 'installing'>('idle')
+  task = $state<'idle' | 'checking' | 'downloading' | 'installing'>('idle')
   progress = $state<{ downloaded: number; total: number | null } | null>(null)
   error = $state('')
   private lastCheck = 0
-  private accessRevision = 0
   private localRequest?: Promise<void>
 
   constructor(private backend: Backend) {}
 
-  private clearReleases() {
-    this.releases = null
-    this.selected = ''
-    this.prepared = null
-    this.progress = null
-  }
-
   private failed(cause: unknown) {
     const message = cause instanceof Error ? cause.message : String(cause)
-    // Transport diagnostics may mention purchaser URLs. Only known codes reach the UI.
-    this.error = ['UPDATE_ACCESS_REQUIRED', 'UPDATE_ACCESS_DENIED', 'UPDATE_RATE_LIMITED', 'UPDATE_FEED_UNAVAILABLE'].includes(message)
-      ? message : 'UPDATE_FAILED'
-    if (this.error === 'UPDATE_ACCESS_REQUIRED' || this.error === 'UPDATE_ACCESS_DENIED') {
-      this.clearReleases()
-      if (this.error === 'UPDATE_ACCESS_REQUIRED') this.hasAccess = false
-    }
+    this.error = ['UPDATE_RATE_LIMITED', 'UPDATE_FEED_UNAVAILABLE'].includes(message) ? message : 'UPDATE_FAILED'
   }
 
   loadLocal() {
-    const revision = this.accessRevision
     this.localRequest ??= Promise.all([
       this.backend.version().then(value => { this.version = value }),
-      this.backend.call('app_update_access').then(async access => {
-        if (revision !== this.accessRevision) return
-        this.hasAccess = access
-        if (!access) return
-        const prepared = await this.backend.call('prepared_app_release')
-        if (revision !== this.accessRevision) return
-        this.prepared = prepared
-        if (prepared && !this.selected) this.selected = prepared
+      this.backend.call('prepared_app_release').then(value => {
+        this.prepared = value
+        if (value && !this.selected) this.selected = value
       }),
     ]).then(() => undefined).catch(error => {
-      if (revision !== this.accessRevision) return
       this.localRequest = undefined
       this.failed(error)
     })
     return this.localRequest
   }
 
-  async setAccess(link: string) {
-    if (this.task !== 'idle' && this.task !== 'checking') return false
-    const value = link.trim()
-    if (value) {
-      try {
-        const url = new URL(value)
-        if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || value.includes('#'))
-          throw new Error()
-      } catch {
-        this.error = 'UPDATE_LINK_INVALID'
-        return false
-      }
-    }
-    // Invalidate an in-flight history lookup even if both accounts offer the same version.
-    this.accessRevision++
-    this.task = 'savingAccess'
-    this.error = ''
-    try {
-      await this.backend.call('set_app_update_access', { url: value })
-      this.hasAccess = Boolean(value)
-      this.lastCheck = 0
-      this.clearReleases()
-      return true
-    } catch {
-      this.error = 'UPDATE_LINK_SAVE_FAILED'
-      return false
-    } finally {
-      this.task = 'idle'
-    }
-  }
-
   async check() {
     await this.loadLocal()
-    if (!this.hasAccess || this.task !== 'idle') return
-    const revision = this.accessRevision
+    if (this.task !== 'idle') return
     this.task = 'checking'
     this.error = ''
     this.lastCheck = Date.now()
     try {
       const releases = await this.backend.call('list_app_releases')
-      if (revision !== this.accessRevision) return
       this.releases = releases
       if (!releases.some(release => release.version === this.selected)) {
         this.selected = releases.find(release => release.installable)?.version ?? releases[0]?.version ?? ''
       }
     } catch (error) {
-      if (revision === this.accessRevision) this.failed(error)
+      this.failed(error)
     } finally {
-      if (revision === this.accessRevision) this.task = 'idle'
+      this.task = 'idle'
     }
   }
 
   async download(version: string) {
-    if (!this.hasAccess || this.task !== 'idle' || !this.releases?.some(release => release.version === version && release.installable)) return
+    if (this.task !== 'idle' || !this.releases?.some(release => release.version === version && release.installable)) return
     this.task = 'downloading'
     this.progress = null
     this.selected = version
@@ -131,7 +76,7 @@ export class AppUpdates {
 
   async install() {
     const version = this.prepared
-    if (!this.hasAccess || !version || this.task !== 'idle') return
+    if (!version || this.task !== 'idle') return
     this.task = 'installing'
     this.error = ''
     try {
@@ -148,11 +93,10 @@ export class AppUpdates {
   async automatic(enabledAndIdle: () => boolean) {
     if (!enabledAndIdle()) return
     await this.loadLocal()
-    if (!this.hasAccess || !enabledAndIdle() || this.task !== 'idle') return
-    const revision = this.accessRevision
+    if (!enabledAndIdle() || this.task !== 'idle') return
     if (Date.now() - this.lastCheck >= updateInterval) await this.check()
     const latest = this.releases?.find(release => release.installable)
-    if (revision !== this.accessRevision || this.error || !enabledAndIdle() || !latest || this.prepared === latest.version) return
+    if (this.error || !enabledAndIdle() || !latest || this.prepared === latest.version) return
     await this.download(latest.version)
     return this.prepared === latest.version ? latest.version : undefined
   }

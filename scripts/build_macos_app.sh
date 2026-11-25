@@ -18,10 +18,14 @@ trap 'rm -rf "$stage"' EXIT
 worker="$CARGO_TARGET_DIR/release/hlp-asr-worker"
 cargo build --locked --release -p hlp-asr-worker
 install -m 755 "$worker" "app/binaries/hlp-asr-worker-$triple"
-HLP_OMINIX_ROOT="${HLP_BUNDLE_TOOL_CACHE:-$CARGO_TARGET_DIR/packaging-tools}" \
-  cargo run --quiet --locked -p hlp-models --example stage_playback_tools -- \
-    app/binaries "$triple" docs/licenses/FFmpeg-COPYING.GPLv3
+media="$CARGO_TARGET_DIR/opensource-media"
+bash scripts/build_macos_media.sh "$media"
+for tool in ffmpeg ffprobe; do
+  install -m 755 "$media/$tool" "app/binaries/$tool-$triple"
+done
+install -m 644 "$media/FFmpeg-LICENSE.txt" app/binaries/FFmpeg-LICENSE.txt
 [[ -x app/ui/node_modules/.bin/tauri ]] || npm --prefix app/ui ci
+python3 scripts/stage_licenses.py "$triple"
 (
   cd app
   ./ui/node_modules/.bin/tauri build --bundles app --config tauri.bundle.conf.json
@@ -32,6 +36,7 @@ bundle="$stage/volume/Hen Local Player.app"
 ditto "$src" "$bundle"
 resources="$bundle/Contents/Resources"
 mkdir -p "$resources/licenses"
+ditto "$media/sources" "$resources/licenses/FFmpeg-sources"
 install -m 644 "$CARGO_TARGET_DIR/release/mlx.metallib" "$resources/mlx.metallib"
 install -m 644 docs/LICENSES.md "$resources/licenses/components.md"
 install -m 644 vendor/qwen3-asr-mlx/LICENSE-* "$resources/licenses"

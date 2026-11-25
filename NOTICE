@@ -1,0 +1,16 @@
+Hen Local Player
+
+The original Hen Local Player code is available under the Apache License,
+Version 2.0. Code and interface artwork adapted from Hen Local Translator
+are credited to the Hen Local Translator Authors (2026). Source files identify
+the original paths. Hen Local names and logos identify the project.
+
+Third-party components retain their own licenses. See docs/LICENSES.md in the
+source distribution, or the licenses directory in the installed app, for the
+dependency notices, license texts and source information.
+
+The Japanese narration in the bundled demonstration uses the HTS Voice "Mei"
+by the MMDAgent Project Team. Copyright (c) 2009-2013 Nagoya Institute of
+Technology, Department of Computer Science. The voice is licensed under
+Creative Commons Attribution 3.0 (https://creativecommons.org/licenses/by/3.0/).
+The project synthesized six new lines and aligned the audio with its animation.
