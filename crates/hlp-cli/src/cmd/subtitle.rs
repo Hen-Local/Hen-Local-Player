@@ -65,7 +65,10 @@ impl PipelineEvents for Printer {
     }
     fn status(&self, e: PipelineStatus) {
         self.emit("pipeline://status", &e);
-        let end = matches!(e.stage.as_str(), "complete" | "error" | "needs-setup");
+        let end = matches!(
+            e.stage.as_str(),
+            "complete" | "partial" | "error" | "needs-setup"
+        );
         if !self.json {
             eprint!(
                 "\r{} · {}/{} transcribed · {} translated     ",
@@ -217,6 +220,13 @@ async fn finish(
             anyhow!("Run hlp-cli setup to install the missing components")
                 .context(crate::ExitCode(2)),
         );
+    }
+    if status.stage == "partial" {
+        return Err(anyhow!(
+            "Untranslated lines: {}. Run the same command again to retry them using the saved transcript.",
+            status.translation_failed
+        )
+        .context(crate::ExitCode(4)));
     }
     if status.stage != "complete" || status.utt_failed > 0 {
         return Err(anyhow!("Subtitle generation failed").context(crate::ExitCode(4)));

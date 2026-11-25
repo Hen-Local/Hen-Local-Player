@@ -64,6 +64,27 @@ fn version_marker_accepts_stable_tags_only() {
     }
 }
 
+#[test]
+fn previously_extracted_windows_model_is_still_ready() {
+    let model = COMPONENTS
+        .iter()
+        .find(|c| c.id == "asr-qwen3-0.6b-sherpa")
+        .unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let directory = root.path().join(&model.directory);
+    for artifact in &model.files {
+        let destination = directory.join(artifact.name.as_ref().unwrap());
+        fs::create_dir_all(destination.parent().unwrap()).unwrap();
+        File::create(destination)
+            .unwrap()
+            .set_len(artifact.bytes)
+            .unwrap();
+    }
+    assert!(ready(root.path(), model));
+    fs::write(directory.join("tokenizer/vocab.json"), b"partial").unwrap();
+    assert!(!ready(root.path(), model));
+}
+
 #[derive(Clone)]
 struct Origin {
     requests: Arc<Mutex<Vec<String>>>,
@@ -128,6 +149,48 @@ async fn fixture(
     };
     (artifact, state, server)
 }
+#[test]
+fn model_source_uses_region_instead_of_interface_language() {
+    for locale in ["en-CN", "zh-Hans-CN", "zh_CN.UTF-8"] {
+        assert!(transfer::mainland_region(locale));
+    }
+    for locale in [
+        "zh-TW",
+        "zh-HK",
+        "zh-Hans-SG",
+        "en-US",
+        "zh",
+        "en-US-u-rg-cnzzzz",
+    ] {
+        assert!(!transfer::mainland_region(locale));
+    }
+}
+
+#[tokio::test]
+async fn automatic_model_source_honors_region_and_falls_back_on_failure() {
+    let (mut artifact, _, origin) = fixture(false, false).await;
+    let (other, _, mirror) = fixture(false, false).await;
+    artifact.mirror = Some(other.url);
+    let client = transfer::client().unwrap();
+    let cancel = CancellationToken::new();
+    assert!(!transfer::prefer_mirror(&client, &artifact, false, &cancel)
+        .await
+        .unwrap());
+    assert!(transfer::prefer_mirror(&client, &artifact, true, &cancel)
+        .await
+        .unwrap());
+    artifact.url.push_str("unavailable");
+    assert!(transfer::prefer_mirror(&client, &artifact, false, &cancel)
+        .await
+        .unwrap());
+    cancel.cancel();
+    assert!(transfer::prefer_mirror(&client, &artifact, true, &cancel)
+        .await
+        .is_err());
+    origin.abort();
+    mirror.abort();
+}
+
 #[tokio::test]
 async fn cancelled_download_resumes_at_verified_offset() {
     let (f, origin, server) = fixture(true, true).await;
@@ -211,7 +274,8 @@ async fn bad_complete_digest_is_repaired() {
 }
 #[tokio::test]
 async fn two_callers_publish_one_verified_copy() {
-    let (a, state, server) = fixture(false, false).await;
+    let (mut a, state, server) = fixture(false, false).await;
+    a.name = Some("tokenizer/vocab.json".into());
     let root = tempfile::tempdir().unwrap();
     let c = Component {
         id: "test".into(),
@@ -231,7 +295,7 @@ async fn two_callers_publish_one_verified_copy() {
     one.unwrap();
     two.unwrap();
     assert_eq!(
-        fs::read(root.path().join("model/test/file")).unwrap(),
+        fs::read(root.path().join("model/test/tokenizer/vocab.json")).unwrap(),
         PAYLOAD
     );
     assert_eq!(state.requests.lock().unwrap().len(), 1);

@@ -28,10 +28,17 @@
         onclick={onclose}><Icon name="close" size={16} /></button>
     </div>
     <SubtitlePanel />
-    {#if p.canRegenerate}
+    {#if p.canDeleteSubtitles}
       <div class="regenerate-footer">
-        <button class="regenerate-button" onclick={regenerate}>
-          <Icon name="refresh" size={15} />{p.t('regenerateSubtitles')}
+        {#if p.canRegenerate}
+          <button class="regenerate-button" aria-label={p.t('regenerateSubtitles')} title={p.t('regenerateSubtitles')}
+            disabled={p.deletingSubtitles} onclick={regenerate}>
+            <Icon name="refresh" size={15} />{p.t('regenerate')}
+          </button>
+        {/if}
+        <button class="delete-button" aria-label={p.t('deleteGeneratedSubtitles')} title={p.t('deleteGeneratedSubtitles')}
+          disabled={p.deletingSubtitles} aria-haspopup="dialog" onclick={() => p.confirmSubtitleDeletion()}>
+          <Icon name="trash" size={15} />{p.t('deleteAction')}
         </button>
       </div>
     {/if}
@@ -43,13 +50,13 @@
     display: flex;
     flex: none;
     justify-content: center;
-    padding: 8px var(--inspector-inset);
-    border-top: 1px solid var(--hairline);
-  }
-  .regenerate-button {
     gap: 6px;
+    padding: 8px var(--inspector-inset);
+  }
+  .regenerate-footer button {
+    gap: 4px;
     min-height: 32px;
-    padding: 5px 11px;
+    padding: 5px 8px;
     font-size: 12px;
     font-weight: 600;
   }

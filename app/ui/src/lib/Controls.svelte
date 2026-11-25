@@ -269,6 +269,10 @@
 
 <style>
   .float-bar {
+    --transport-opacity: 1;
+    --transport-fade: 160ms;
+    --glass-visibility: visible;
+    --glass-hide-delay: 0s;
     position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -284,22 +288,48 @@
     pointer-events: auto;
     user-select: none;
   }
-  /* Keep the optical layer separate so the slider popover samples the movie
-     directly too. Only the small controls area needs a backdrop blur. */
-  .float-bar::before,
-  .speed-popover::before {
+  /* A fading ancestor isolates its descendants from the video backdrop.
+     Fade the glass itself and its neighboring controls on the same clock. */
+  :global(.transport-hidden) .float-bar {
+    --transport-opacity: 0;
+    --glass-visibility: hidden;
+    --glass-hide-delay: var(--transport-fade);
+  }
+  .float-bar::before, .float-bar::after, .speed-popover::before, .speed-popover::after,
+  .speed-popover > label, .speed-popover > input, .speed-presets,
+  .playback-buttons, .tool-buttons, .timeline,
+  .sound > button, .level, .speed-trigger {
+    opacity: var(--transport-opacity);
+    transition: opacity var(--transport-fade) ease-in-out;
+  }
+  .float-bar::before, .float-bar::after, .speed-popover::before, .speed-popover::after {
     content: '';
     position: absolute;
     inset: 0;
-    z-index: -1;
     pointer-events: none;
     border-radius: inherit;
-    border: 1px solid rgb(255 255 255 / 30%);
-    background: linear-gradient(155deg, rgb(62 69 84 / 43%), rgb(17 21 30 / 54%));
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 22%), inset 0 -1px 0 rgb(255 255 255 / 7%),
-      0 5px 22px rgb(0 0 0 / 27%);
-    -webkit-backdrop-filter: saturate(165%) blur(20px);
-    backdrop-filter: saturate(165%) blur(20px);
+  }
+  .float-bar::before, .speed-popover::before {
+    z-index: -1;
+    visibility: var(--glass-visibility);
+    transition: opacity var(--transport-fade) ease-in-out, visibility 0s var(--glass-hide-delay);
+    background: #24262d;
+    box-shadow: 0 5px 20px rgb(0 0 0 / 28%);
+  }
+  .float-bar::after, .speed-popover::after {
+    padding: 1px;
+    background: var(--glass-reflection);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+  }
+  @supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .float-bar::before, .speed-popover::before {
+      background: var(--glass-fill);
+      -webkit-backdrop-filter: var(--glass-backdrop);
+      backdrop-filter: var(--glass-backdrop);
+    }
   }
   .playback-buttons,
   .tool-buttons,
@@ -334,7 +364,7 @@
   .float-bar button.speed-trigger {
     width: 51px;
     height: 33px;
-    border: 1px solid rgb(255 255 255 / 16%);
+    background: rgb(255 255 255 / 9%);
     border-radius: 20px;
     font: 600 12px/1 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-variant-numeric: tabular-nums;
@@ -355,9 +385,6 @@
     border-radius: 15px;
     font-size: 12px;
     font-variant-numeric: tabular-nums;
-  }
-  .speed-popover::before {
-    background: linear-gradient(160deg, rgb(52 58 71 / 62%), rgb(27 30 39 / 71%));
   }
   .speed-popover label,
   .speed-presets {
@@ -385,13 +412,16 @@
   }
   .speed-presets button[aria-pressed='true'] {
     color: white;
-    background: rgb(255 255 255 / 18%);
+    background: var(--surface-selection);
   }
-  .float-bar button:hover:not(:disabled),
+  .float-bar button:hover:not(:disabled) {
+    color: white;
+    background: rgb(255 255 255 / 12%);
+  }
   .float-bar button[aria-pressed='true'],
   .float-bar button[aria-expanded='true'] {
     color: white;
-    background: rgb(255 255 255 / 14%);
+    background: var(--surface-selection);
   }
   .float-bar button:disabled {
     opacity: 0.4;
@@ -399,7 +429,7 @@
   .float-bar button:focus-visible,
   .float-bar input[type='range']:focus-visible,
   .scrubber:has(:focus-visible) {
-    outline: 2px solid #d1d3ff;
+    outline: 2px solid var(--glass-focus);
     outline-offset: 2px;
   }
   .timeline {
@@ -424,7 +454,7 @@
     color: #f3f3f5;
   }
   .timeline time.total {
-    color: #c6c7cd;
+    color: #e0e2e9;
     text-align: right;
   }
   .scrubber {
@@ -480,7 +510,7 @@
     bottom: calc(100% + 3px);
     transform: translateX(-50%);
     background: #1c1d22;
-    border: 1px solid rgb(255 255 255 / 20%);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 28%);
     border-radius: 4px;
     padding: 4px 6px;
     pointer-events: none;
@@ -562,11 +592,15 @@
     .level { width: 24px; }
     .tool-buttons, .playback-buttons { gap: 0; }
   }
+  @media (prefers-reduced-motion: reduce) {
+    .float-bar { --transport-fade: 0s; }
+  }
   @media (prefers-reduced-transparency: reduce) {
     .float-bar::before, .speed-popover::before {
       background: #24262d;
       -webkit-backdrop-filter: none;
       backdrop-filter: none;
     }
+    .float-bar::after, .speed-popover::after { content: none; }
   }
 </style>

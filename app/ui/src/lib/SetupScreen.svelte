@@ -3,8 +3,17 @@
   import Dialog from './Dialog.svelte'
   import { backend, player as p } from './stores.svelte'
   import { size } from './format'
+  import type { Settings } from './types'
   import { componentNames } from './component-names'
   import Icon from './Icon.svelte'
+  import ModelDownloadLinks from './ModelDownloadLinks.svelte'
+  let { back }: { back?: () => void } = $props()
+  let checking = $state(true), savingSource = $state(false)
+  async function setSource(source: Settings['modelDownloadSource']) {
+    savingSource = true
+    try { await p.act(() => p.update({ modelDownloadSource: source })) }
+    finally { savingSource = false }
+  }
   let include = $state(false),
     busy = $state(false),
     error = $state('')
@@ -35,13 +44,26 @@
   onMount(
     () =>
       void p.act(async () => {
-        p.components = await backend.call('get_setup_status')
+        try {
+          p.components = await backend.call('get_setup_status')
+        } finally {
+          checking = false
+        }
       }),
   )
 </script>
 
-<Dialog title={p.t('setup')} icon="download">
+<Dialog title={p.t('setup')} icon="download" {back}>
   <p class="help">{p.t('setupHint')}</p>
+  <label>
+    {p.t('modelDownloadSource')}
+    <select disabled={running || savingSource} value={p.settings.modelDownloadSource}
+      onchange={(e) => void setSource(e.currentTarget.value as Settings['modelDownloadSource'])}>
+      <option value="auto">{p.t('autoModelSource')}</option>
+      <option value="china">{p.t('chinaModelSource')}</option>
+      <option value="global">{p.t('globalModelSource')}</option>
+    </select>
+  </label>
   <div class="component-list">
     {#each p.components as c (c.id)}
       <div class="component-row">
@@ -51,6 +73,8 @@
         <div class="component-name">
           <strong>{componentNames[c.id] ?? c.id}</strong>
           <small>
+            {#if c.id === 'asr-qwen3-1.7b-mlx' || c.id === 'asr-qwen3-0.6b-sherpa'}{p.t('defaultAsr')} ·
+            {:else if c.id === 'mt-hy-mt2-1.8b'}{p.t('defaultTranslation')} · {/if}
             {size(c.bytesTotal)} · {typeof c.state === 'object' ? p.t('failed') : p.t(c.state)}
           </small>
           {#if c.state === 'downloading' || c.state === 'verifying'}<progress
@@ -64,14 +88,15 @@
             class="icon"
             aria-label={p.t('downloadOne') + ' ' + c.id}
             title={p.t('retry')}
-            disabled={running}
+            disabled={running || savingSource}
             onclick={() => start([c.id])}
           >
             <Icon name="download" size={16} />
           </button>{/if}
       </div>
-    {:else}<p>{p.t('noModel')}</p>{/each}
+    {:else}<p role="status">{p.t(checking ? 'checkingModels' : 'noModel')}</p>{/each}
   </div>
+  <ModelDownloadLinks />
   <label class="toggle">
     <input type="checkbox" bind:checked={include} />
     {p.t('includeTools')}
@@ -83,7 +108,7 @@
       </button>{/if}
     <button
       class="primary"
-      disabled={running || !missing.length}
+      disabled={running || savingSource || !missing.length}
       onclick={() => start(missing.map((c) => c.id))}
     >
       {p.t('downloadAll')} ({size(missing.reduce((sum, c) => sum + c.bytesTotal - c.bytesDone, 0))})

@@ -1,11 +1,21 @@
 use crate::types::BilingualOrder;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ModelDownloadSource {
+    #[default]
+    Auto,
+    China,
+    Global,
+}
+
 /// Player preferences. Missing fields receive platform defaults.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Settings {
     pub ui_language: String,
+    pub auto_download_updates: bool,
     pub accent_theme: String,
     pub target_language: String,
     pub source_language: String,
@@ -19,6 +29,7 @@ pub struct Settings {
     pub process_whole_file: bool,
     pub dialogue_channel_focus: bool,
     pub asr_model: String,
+    pub model_download_source: ModelDownloadSource,
     pub translation_context: bool,
     pub download_dir: PathBuf,
     pub cache_limit_gb: u32,
@@ -27,6 +38,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             ui_language: "system".into(),
+            auto_download_updates: false,
             accent_theme: "neon-blue".into(),
             target_language: crate::lang::default_target(
                 &sys_locale::get_locale().unwrap_or_default(),
@@ -36,12 +48,13 @@ impl Default for Settings {
             subtitle_mode: "both".into(),
             bilingual_order: BilingualOrder::TranslationFirst,
             subtitle_scale: 1.,
-            subtitle_background: 0.,
+            subtitle_background: 0.7,
             subtitle_bottom_offset: 0.05,
             show_transcript_panel: false,
             lookahead_seconds: 180,
             process_whole_file: true,
             dialogue_channel_focus: true,
+            model_download_source: ModelDownloadSource::Auto,
             asr_model: if cfg!(windows) {
                 "sherpa-qwen3-asr-0.6b"
             } else {
@@ -65,8 +78,10 @@ mod tests {
         let s: Settings = serde_json::from_str(r#"{"subtitleScale":1.6}"#).unwrap();
         assert_eq!(s.subtitle_scale, 1.6);
         assert_eq!(s.subtitle_bottom_offset, 0.05);
+        assert_eq!(s.subtitle_background, 0.7);
         assert_eq!(s.lookahead_seconds, 180);
         assert_eq!(s.source_language, "auto");
+        assert!(!s.auto_download_updates);
         assert_eq!(
             serde_json::to_value(&s).unwrap()["bilingualOrder"],
             "translation-first"

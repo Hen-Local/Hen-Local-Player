@@ -409,7 +409,59 @@ mod playback_tests {
         let restored = open().await?;
         assert_eq!(wait_for(&mut events, "complete").await?.utt_done, 6);
         assert_eq!(restored.request_counts(), (0, 0));
+        assert!(restored
+            .send(SessionCommand::DeleteGeneratedSubtitles {
+                audio_track_order: 1
+            })
+            .await
+            .is_err());
+        let pcm = std::fs::metadata(track.join("audio.pcm"))?.modified()?;
+        let exported = root.path().join("export.srt");
+        let export = SessionCommand::Export {
+            format: SubtitleFormat::Srt,
+            variant: SubtitleVariant::Original,
+            path: exported.clone(),
+        };
+        restored.send(export.clone()).await?;
+        let original = std::fs::read(&exported)?;
+        assert!(!original.is_empty());
+        // Historical caches can predate the explicit generation marker.
+        std::fs::remove_file(track.join("generate.requested"))?;
+        restored
+            .send(SessionCommand::DeleteGeneratedSubtitles {
+                audio_track_order: 0,
+            })
+            .await?;
+        let empty = wait_for(&mut events, "idle").await?;
+        assert_eq!((empty.utt_total, empty.translated_count), (0, 0));
+        assert!(!empty.vad_complete);
+        assert_eq!(std::fs::read(&exported)?, original);
+        assert_eq!(sink.opened.load(Ordering::Relaxed), 2);
         restored.shutdown().await?;
+
+        sink.status.send_replace(None);
+        let cleared = open().await?;
+        assert_eq!(wait_for(&mut events, "idle").await?.utt_total, 0);
+        assert_eq!(cleared.request_counts(), (0, 0));
+        cleared.send(export).await?;
+        assert!(std::fs::read(&exported)?.is_empty());
+        cleared
+            .send(SessionCommand::StartTranscription {
+                components_ready: true,
+                regenerate: false,
+                audio_track_order: Some(0),
+            })
+            .await?;
+        assert!(cleared
+            .send(SessionCommand::DeleteGeneratedSubtitles {
+                audio_track_order: 0
+            })
+            .await
+            .is_err());
+        assert_eq!(wait_for(&mut events, "complete").await?.utt_done, 6);
+        assert_eq!(cleared.request_counts(), (6, 0));
+        assert_eq!(std::fs::metadata(track.join("audio.pcm"))?.modified()?, pcm);
+        cleared.shutdown().await?;
         engines.shutdown().await;
         Ok(())
     }

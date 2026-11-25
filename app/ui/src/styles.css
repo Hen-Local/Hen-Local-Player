@@ -1,4 +1,4 @@
-/* Brand, type scale, outline controls and section rules follow
+/* Brand and type scale adapted from
    Hen-Local-Translator/hen-local-translator-shell/ui/src/styles.css.
    The mask is the matching mark from the Translator's icons/logo-mark.png. */
 :root {
@@ -22,6 +22,7 @@
   --accent: #0003fe;
   --accent-soft: #e9eaff;
   --accent-text: #0003b8;
+  --glass-focus: #f5f6f9;
   --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   --mark: url('./assets/hen-mark.png');
 }
@@ -52,9 +53,9 @@ button {
   justify-content: center;
   gap: 8px;
   padding: 8px 12px;
-  border: 1px solid var(--ink);
-  border-radius: 0;
-  background: white;
+  border: 0;
+  border-radius: 7px;
+  background: var(--hover);
   color: var(--ink);
   cursor: pointer;
   line-height: 1.25;
@@ -71,7 +72,7 @@ button:focus-visible,
 select:focus-visible,
 input:focus-visible,
 summary:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--glass-focus);
   outline-offset: 2px;
   z-index: 2;
 }
@@ -261,7 +262,7 @@ button.link-action:hover:not(:disabled) {
   object-fit: contain;
 }
 .dragging {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--glass-focus);
   outline-offset: -3px;
 }
 .hide-cursor {
@@ -316,7 +317,8 @@ time, kbd {
   top: 14px;
   z-index: 2;
   padding: 6px 10px;
-  border: 1px solid #ffffff55;
+  border: 0;
+  border-radius: 8px;
   background: #121319d9;
   color: white;
   font-size: 12px;
@@ -331,13 +333,11 @@ button.stage-chip:hover:not(:disabled) {
   min-width: 0;
   min-height: 0;
   background: white;
-  border-left: 1px solid var(--ink);
 }
 .panel-title {
   flex: none;
   min-height: 52px;
   padding: 0 14px 0 18px;
-  border-bottom: 1px solid var(--ink);
 }
 .side-panel {
   display: flex;
@@ -390,7 +390,6 @@ button.stage-chip:hover:not(:disabled) {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  border-top: 1px solid var(--line);
   padding: 12px 16px;
 }
 .drawer-footer > .outline {
@@ -404,8 +403,7 @@ button.stage-chip:hover:not(:disabled) {
   padding-right: 8px;
 }
 .queue-row.current {
-  background-color: var(--accent-soft);
-  box-shadow: inset 3px 0 var(--accent);
+  background-color: var(--surface-selection);
 }
 .queue-file {
   min-width: 0;
@@ -481,7 +479,6 @@ button.stage-chip:hover:not(:disabled) {
   justify-content: flex-start;
   gap: 12px;
   border: 0;
-  border-left: 2px solid transparent;
   border-bottom: 1px solid var(--hairline);
   text-align: left;
 }
@@ -507,8 +504,7 @@ button.stage-chip:hover:not(:disabled) {
   font-size: 10px;
 }
 .cue-row.active {
-  border-left-color: var(--accent);
-  background: var(--accent-soft);
+  background: var(--surface-selection);
 }
 .cue-row.active time {
   color: var(--accent-text);
@@ -596,17 +592,10 @@ kbd {
   font-size: 11px;
   font-weight: 650;
 }
-.mode-group button:nth-child(odd) {
-  border-right: 1px solid var(--ink);
-}
-.mode-group button:nth-child(-n + 2) {
-  border-bottom: 1px solid var(--ink);
-}
 .mode-group .selected,
 .tabs .selected {
   color: var(--accent-text);
   background: var(--accent-soft);
-  box-shadow: inset 0 -2px var(--accent);
 }
 dialog {
   width: min(480px, calc(100vw - 32px));
@@ -614,14 +603,12 @@ dialog {
   margin: auto;
   padding: 0;
   background: white;
-  border: 1px solid var(--ink);
+  border: 0;
   color: var(--ink);
   overflow: hidden auto;
-  box-shadow: 8px 8px 0 #10111220;
 }
 dialog::backdrop {
-  background: #f6f7faac;
-  backdrop-filter: blur(4px);
+  background: rgb(4 6 10 / 28%);
 }
 .dialog-heading {
   min-height: 62px;
@@ -629,7 +616,6 @@ dialog::backdrop {
   display: flex;
   align-items: center;
   gap: 10px;
-  border-bottom: 1px solid var(--ink);
 }
 .dialog-heading h2 {
   font-size: 20px;
@@ -705,7 +691,6 @@ progress {
 }
 .url-card {
   padding: 12px;
-  border: 1px solid var(--hairline);
   margin: 15px 0;
   background: #f8f8fa;
 }
@@ -745,7 +730,6 @@ progress {
 }
 .component-row {
   padding: 10px 0;
-  border-bottom: 1px solid var(--hairline);
 }
 .component-icon {
   color: var(--muted);
@@ -770,7 +754,6 @@ progress {
 .setting-block {
   justify-content: space-between;
   padding: 13px 0;
-  border-top: 1px solid var(--hairline);
 }
 .slider-setting span {
   display: flex;
@@ -852,6 +835,10 @@ html.native-mac, html.native-mac body, html.native-mac #app { background: transp
   --menu-right: 12px;
   --glass-ink: #f2f3f6;
   --glass-accent: color-mix(in srgb, var(--accent) 58%, white);
+  --glass-backdrop: blur(11px) saturate(185%);
+  --glass-fill: linear-gradient(145deg, rgb(219 233 255 / 8%), transparent 28%, rgb(2 5 12 / 8%) 76%, rgb(222 238 255 / 5%)), rgb(5 8 14 / 66%);
+  --glass-reflection: linear-gradient(145deg, rgb(255 255 255 / 40%), transparent 24% 72%, rgb(255 255 255 / 14%) 87%, transparent);
+  --surface-selection: rgb(245 246 251 / 19%);
   position: relative;
   isolation: isolate;
   width: 100%;
@@ -866,6 +853,7 @@ html.native-mac, html.native-mac body, html.native-mac #app { background: transp
 .idle-stage {
   height: 100%;
   display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
   background:
     radial-gradient(ellipse at 50% 43%, color-mix(in srgb, var(--accent) 3%, transparent), transparent 57%),
@@ -875,12 +863,16 @@ html.native-mac, html.native-mac body, html.native-mac #app { background: transp
   background: linear-gradient(145deg, rgb(28 30 39 / 57%), rgb(18 20 26 / 66%));
 }
 .welcome {
+  --recent-row: 27px;
+  --recent-gap: 2px;
+  display: flex;
+  flex-direction: column;
+  row-gap: 27px;
   width: min(534px, calc(100% - 72px));
   max-height: calc(100% - 84px);
-  overflow: hidden auto;
 }
 .welcome-heading, .idle-brand, .start-actions { display: flex; align-items: center; }
-.welcome-heading { justify-content: space-between; gap: 20px; }
+.welcome-heading { flex: none; justify-content: space-between; gap: 20px; }
 .idle-brand { gap: 12px; }
 .hen-mark {
   flex: none;
@@ -891,6 +883,7 @@ html.native-mac, html.native-mac body, html.native-mac #app { background: transp
   -webkit-mask: var(--mark) center / contain no-repeat;
 }
 .idle-brand h1 {
+  min-width: 7.6em;
   margin: 0;
   font-size: 20px;
   font-weight: 640;
@@ -900,24 +893,30 @@ html.native-mac, html.native-mac body, html.native-mac #app { background: transp
 }
 .start-actions { gap: 8px; }
 button.open-file {
+  min-width: 108px;
   white-space: nowrap;
   gap: 7px;
   min-height: 32px;
   padding: 6px 13px;
-  border: 1px solid rgb(255 255 255 / 13%);
+  border: 0;
   border-radius: 16px;
-  background: rgb(255 255 255 / 8%);
-  box-shadow: inset 0 1px rgb(255 255 255 / 4%);
+  background: rgb(255 255 255 / 10%);
   color: #f3f4f7;
   font-size: 12px;
   font-weight: 560;
 }
 button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
 .welcome-recent {
+  /* Reserve four rows from first paint. Only the list scrolls in short windows. */
+  height: calc(4 * var(--recent-row) + 3 * var(--recent-gap));
+  min-height: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-auto-rows: minmax(var(--recent-row), max-content);
   align-content: start;
-  gap: 2px;
-  margin-top: 27px;
+  gap: var(--recent-gap);
+  overflow: hidden auto;
+  overscroll-behavior: contain;
 }
 .welcome-recent button {
   justify-content: start;
@@ -933,6 +932,7 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
 .welcome-recent svg { flex: none; color: var(--glass-accent); }
 .welcome-recent span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .welcome-recent button:hover:not(:disabled) { background: #ffffff12; }
+.welcome-recent button:focus-visible { outline-offset: -2px; }
 .window-chrome {
   position: absolute;
   top: 0;
@@ -978,7 +978,6 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
 .watching .window-chrome {
   height: 42px;
   background: linear-gradient(150deg, rgb(36 39 49 / 51%), rgb(20 22 29 / 42%));
-  border-bottom: 1px solid rgb(255 255 255 / 8%);
   -webkit-backdrop-filter: blur(14px) saturate(125%);
   backdrop-filter: blur(14px) saturate(125%);
   opacity: 0;
@@ -1015,8 +1014,8 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
   bottom: 0;
   max-width: calc(100% - 22px);
 }
-.app .left-inspector { width: var(--playlist-width); left: 0; border-radius: 0; border-width: 0 1px 0 0; }
-.app .right-inspector { width: var(--settings-width); right: 0; border-radius: 0; border-width: 0 0 0 1px; }
+.app .left-inspector { width: var(--playlist-width); left: 0; border-radius: 0; }
+.app .right-inspector { width: var(--settings-width); right: 0; border-radius: 0; }
 .native-mac .app:not(.fullscreen) .left-inspector { padding-top: 36px; }
 .panel-dismiss-surface { display: none; }
 @media (max-width: 980px), (max-height: 540px) {
@@ -1068,9 +1067,8 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
   .app.watching .inspector .panel-title { min-height: 30px; padding-block: 2px; }
 }
 @media (max-width: 530px) {
-  .welcome { width: min(360px, calc(100% - 46px)); }
+  .welcome { width: min(360px, calc(100% - 46px)); row-gap: 18px; }
   .welcome-heading { flex-direction: column; gap: 21px; }
-  .welcome-recent { margin-top: 18px; }
 }
 .player-menu {
   position: absolute;
@@ -1082,11 +1080,11 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
   padding: 5px;
   overflow: hidden auto;
   overscroll-behavior: none contain;
-  border: 1px solid rgb(255 255 255 / 17%);
+  border: 0;
   border-radius: 11px;
-  background: rgb(35 36 43 / 93%);
-  -webkit-backdrop-filter: blur(20px);
-  backdrop-filter: blur(20px);
+  background: var(--glass-fill);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  backdrop-filter: var(--glass-backdrop);
   box-shadow: 0 5px 22px #0006;
 }
 .watching .player-menu {
@@ -1110,13 +1108,13 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
   text-align: start;
 }
 .player-menu button svg { color: #bfc1ce; }
-.player-menu button:hover:not(:disabled), .player-menu button:focus-visible {
-  outline: none;
-  background: rgb(255 255 255 / 11%);
+.player-menu button:hover:not(:disabled) { background: rgb(255 255 255 / 11%); }
+.player-menu button:focus-visible {
+  outline-offset: -2px;
+  background: var(--surface-selection);
 }
 .menu-divider { height: 1px; margin: 4px 6px; background: rgb(255 255 255 / 11%); }
 .app .toast { bottom: calc(var(--bar-clearance) + 4px); border-radius: 8px; }
-.open-file:focus-visible, .window-more:focus-visible { outline-color: var(--glass-accent); }
 @media (prefers-reduced-transparency: reduce) {
   .watching .window-chrome {
     background: #202127;
@@ -1128,7 +1126,7 @@ button.open-file:hover:not(:disabled) { background: rgb(255 255 255 / 15%); }
 }
 @media (max-height: 340px) {
   .hen-mark { width: 36px; height: 36px; }
-  .welcome { max-height: calc(100% - 68px); }
+  .welcome { max-height: calc(100% - 56px); }
 }
 @media (prefers-reduced-motion: reduce) {
   .watching .window-chrome { transition: none; }

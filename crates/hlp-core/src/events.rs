@@ -55,6 +55,8 @@ pub struct PipelineStatus {
     pub utt_no_speech: usize,
     pub utt_failed: usize,
     pub translated_count: usize,
+    #[serde(default)]
+    pub translation_failed: usize,
     pub asr_pending_spans: Vec<[Ms; 2]>,
     pub tr_pending_spans: Vec<[Ms; 2]>,
     pub asr_rtf: f32,

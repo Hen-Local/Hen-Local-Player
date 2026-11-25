@@ -141,6 +141,23 @@ pub async fn start_transcription(
 }
 
 #[tauri::command]
+pub async fn delete_generated_subtitles(
+    state: State<'_, Desktop>,
+    session_id: String,
+    audio_track_order: usize,
+) -> Reply<()> {
+    let player = state.player.lock().await;
+    let file = player.file().map_err(err)?;
+    if file.session.id != session_id {
+        return Err("The open movie has changed.".into());
+    }
+    file.session
+        .send(SessionCommand::DeleteGeneratedSubtitles { audio_track_order })
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
 pub async fn retry_failed(state: State<'_, Desktop>) -> Reply<()> {
     let p = state.player.lock().await;
     p.file()
@@ -241,8 +258,10 @@ pub async fn start_setup(
 ) -> Reply<()> {
     let job = state.setup.begin().map_err(err)?;
     let ids = ids.unwrap_or_else(|| hlp_models::required_ids(include_url_tools));
-    hlp_models::download(
+    let source = state.player.lock().await.settings.model_download_source;
+    hlp_models::download_from(
         &ids,
+        source,
         |e| emit(&app, "setup://progress", e),
         job.cancel.clone(),
     )

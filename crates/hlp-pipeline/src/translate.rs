@@ -15,6 +15,11 @@ struct LlamaServer {
     base_url: String,
     client: reqwest::Client,
 }
+
+#[derive(Debug, thiserror::Error)]
+#[error("No usable translation was returned for this subtitle.")]
+pub(super) struct UntranslatedLine;
+
 impl LlamaServer {
     async fn spawn() -> Result<Self> {
         let port = TcpListener::bind("127.0.0.1:0")?.local_addr()?.port();
@@ -86,7 +91,11 @@ impl LlamaServer {
         let response:Value=self.client.post(format!("{}/v1/chat/completions",self.base_url)).json(&json!({
             "messages":[{"role":"user","content":prompt}], "temperature":TEMPERATURE,"repeat_penalty":REPEAT_PENALTY,"max_tokens":MAX_TOKENS,"cache_prompt":true,"stream":false
         })).send().await?.error_for_status()?.json().await?;
-        Ok(response["choices"][0]["message"]["content"]
+        let message = &response["choices"][0]["message"];
+        if message["content"].is_null() && message["reasoning_content"].is_string() {
+            return Ok(String::new());
+        }
+        Ok(message["content"]
             .as_str()
             .context("Translation server returned no text")?
             .to_owned())
@@ -155,16 +164,30 @@ impl Translator {
         text: &str,
         context: Option<&str>,
     ) -> Result<String> {
-        for english in [false, true] {
-            let raw = self
-                .request(&translation_prompt(source, target, text, context, english))
-                .await?;
+        for attempt in 0..2 {
+            let prompt = if attempt == 0 {
+                translation_prompt(source, target, text, context, false)
+            } else {
+                // The contextual template can repeatedly echo a fragment such as "I.".
+                // Give the model the language and only the words that were spoken.
+                let source = source.and_then(hlp_core::lang::lookup).map_or_else(
+                    || "speech".to_owned(),
+                    |l| format!("spoken {}", l.english_name),
+                );
+                let target = hlp_core::lang::lookup(target).map_or(target, |l| l.english_name);
+                format!("Translate this fragment of {source} into {target}. It may be an incomplete sentence. Translate only the words spoken and return only the translation.\n\n{text}")
+            };
+            let raw = self.request(&prompt).await?;
             let clean = clean_output(&raw, text);
-            if !clean.is_empty() && (clean != text.trim() || source == Some(target)) {
+            if !clean.is_empty()
+                && (clean != text.trim()
+                    || source == Some(target)
+                    || !text.chars().any(char::is_alphabetic))
+            {
                 return Ok(clean);
             }
         }
-        bail!("Translation was empty, unchanged or contained reasoning after retry")
+        Err(UntranslatedLine.into())
     }
 
     pub(crate) async fn translate_subtitle(
@@ -211,14 +234,11 @@ fn clean_output(raw: &str, source: &str) -> String {
     if "<think>".starts_with(text) {
         return String::new();
     }
-    if text.starts_with("<think>") {
-        let Some((_, after)) = text.split_once("</think>") else {
-            return String::new();
-        };
-        text = after.trim();
+    if let Some((_, answer)) = text.rsplit_once("</think>") {
+        text = answer.trim();
     }
-    if let Some((before, _)) = text.split_once("</think>") {
-        text = before.trim()
+    if text.contains("<think>") {
+        return String::new();
     }
     for label in ["Translation:", "译文：", "翻译："] {
         if let Some(s) = text.strip_prefix(label) {
@@ -246,4 +266,16 @@ fn clean_output(raw: &str, source: &str) -> String {
         return String::new();
     }
     text.to_owned()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clean_output;
+
+    #[test]
+    fn reasoning_is_never_used_as_a_missing_translation() {
+        assert_eq!(clean_output("internal reasoning</think>", "I."), "");
+        assert_eq!(clean_output("<think>still thinking", "I."), "");
+        assert_eq!(clean_output("<think>reasoning</think>我。", "I."), "我。");
+    }
 }

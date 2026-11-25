@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, tick } from 'svelte'
   import Dialog from './Dialog.svelte'
-  import SubtitleAppearance from './SubtitleAppearance.svelte'
+  import SetupScreen from './SetupScreen.svelte'
+  import SoftwareUpdate from './SoftwareUpdate.svelte'
   import { player as p, backend } from './stores.svelte'
   import { size } from './format'
-  import { languages, languageName } from './languages'
   import type { Settings } from './types'
   const themes = [
     {id:'neon-blue', label:'themeBlue', color:'#0003fe'},
@@ -12,19 +12,24 @@
     {id:'neon-pink', label:'themePink', color:'#ff0073'},
     {id:'neon-green', label:'themeGreen', color:'#51f91b'},
   ] as const
-  let tab = $state<'general' | 'subtitles' | 'processing' | 'storage'>('general'),
+  const tabs = ['general', 'processing', 'storage'] as const
+  let tab = $state<(typeof tabs)[number]>('general'),
     confirm = $state(false),
     updating = $state(false)
+  let showingSetup = $state(false)
+  let setupButton = $state<HTMLButtonElement>()
+  async function returnToSettings() {
+    showingSetup = false
+    await tick()
+    setupButton?.focus()
+  }
   function set<K extends keyof Settings>(k: K, value: Settings[K]) {
     void p.act(() => p.update({ [k]: value }))
   }
-  onMount(
-    () =>
-      void p.act(async () => {
-        p.info = await backend.call('app_info')
-        p.components = await backend.call('get_setup_status')
-      }),
-  )
+  onMount(() => {
+    void p.act(async () => { p.components = await backend.call('get_setup_status') })
+    void p.act(async () => { p.info = await backend.call('app_info') })
+  })
   async function update() {
     updating = true
     try {
@@ -38,17 +43,22 @@
   }
 </script>
 
+{#if showingSetup}
+  <SetupScreen back={returnToSettings} />
+{:else}
 <Dialog title={p.t('settings')} icon="settings">
-  <div class="tabs">
-    {#each ['general', 'subtitles', 'processing', 'storage'] as k}<button
+  <div class="tabs settings-tabs" style:--selected-tab={tabs.indexOf(tab)}>
+    {#each tabs as k, index}<button
+        style:grid-column={index + 1}
         class:selected={tab === k}
         aria-pressed={tab === k}
-        onclick={() => (tab = k as typeof tab)}
+        onclick={() => (tab = k)}
       >
-        {p.t(k as typeof tab)}
+        {p.t(k)}
       </button>{/each}
   </div>
   {#if tab === 'general'}
+    <SoftwareUpdate />
     <label>
       {p.t('uiLang')}
       <select
@@ -64,27 +74,19 @@
       <legend>{p.t('accentColor')}</legend>
       <div>{#each themes as theme}
         <button aria-pressed={p.settings.accentTheme === theme.id} onclick={() => set('accentTheme', theme.id)}>
-          <i aria-hidden="true" style:background={theme.color}></i>{p.t(theme.label)}
+          <i aria-hidden="true" style:background-color={theme.color}></i>{p.t(theme.label)}
         </button>
       {/each}</div>
     </fieldset>
-    <label class="toggle">
-      <input
-        type="checkbox"
-        checked={p.settings.showTranscriptPanel}
-        onchange={(e) => set('showTranscriptPanel', e.currentTarget.checked)}
-      />
-      {p.t('transcriptSetting')}
-    </label>
     <div class="setting-block">
       <div>
         <strong>{p.t('models')}</strong>
-        <small>
-          {p.components.filter((c) => c.ready).length}/{p.components.length}
-          {p.t('installed')}
-        </small>
+        {#if p.components.length}
+          <small>{p.components.filter((c) => c.ready).length}/{p.components.length} {p.t('installed')}</small>
+        {/if}
+        <small>{p.t('defaultModels')} · Qwen3-ASR {p.settings.asrModel.startsWith('sherpa') ? '0.6B' : '1.7B'} + Hy-MT2 1.8B</small>
       </div>
-      <button onclick={() => (p.dialog = 'setup')}>{p.t('setup')}</button>
+      <button bind:this={setupButton} onclick={() => (showingSetup = true)}>{p.t('setup')}</button>
     </div>
     <div class="setting-block">
       <div>
@@ -95,30 +97,6 @@
         {updating ? p.t('busy') : p.t('updateTool')}
       </button>
     </div>
-  {:else if tab === 'subtitles'}
-    <label>
-      {p.t('target')}
-      <select
-        value={p.settings.targetLanguage}
-        onchange={(e) => p.act(() => p.setTarget(e.currentTarget.value))}
-      >
-        <option value="none">{p.t('none')}</option>
-        {#each languages.filter((l) => l.target) as l}<option value={l.code}>
-            {languageName(l.code, p.locale, true)}
-          </option>{/each}
-      </select>
-    </label>
-    <label>
-      {p.t('order')}
-      <select
-        value={p.settings.bilingualOrder}
-        onchange={(e) => set('bilingualOrder', e.currentTarget.value as Settings['bilingualOrder'])}
-      >
-        <option value="translation-first">{p.t('trFirst')}</option>
-        <option value="original-first">{p.t('origFirst')}</option>
-      </select>
-    </label>
-    <SubtitleAppearance />
   {:else if tab === 'processing'}
     <label>
       {p.t('model')}
@@ -135,12 +113,14 @@
         type="number"
         min="1"
         max="86400"
+        aria-describedby="lookahead-help"
         value={p.settings.lookaheadSeconds}
         onchange={(e) => {
           if (e.currentTarget.validity.valid) set('lookaheadSeconds', +e.currentTarget.value)
         }}
       />
     </label>
+    <p id="lookahead-help" class="help field-hint">{p.t('lookaheadHelp')}</p>
     {#each [['processWholeFile', 'whole'], ['dialogueChannelFocus', 'dialogue'], ['translationContext', 'context']] as [key, label]}<label
         class="toggle"
       >
@@ -174,7 +154,7 @@
     <div class="setting-block">
       <div>
         <strong>{p.t('cache')}</strong>
-        <small>{size(p.info.cacheBytes)}</small>
+        {#if p.info.logDir}<small>{size(p.info.cacheBytes)}</small>{/if}
       </div>
       <button
         onclick={() => {
@@ -194,17 +174,50 @@
       </button>
     </div>
     {#if confirm}<p class="warn">{p.t('confirmClear')}</p>{/if}
-    <button onclick={() => p.act(() => backend.call('reveal_in_folder', { path: p.info.logDir }))}>
+    <button disabled={!p.info.logDir} onclick={() => p.act(() => backend.call('reveal_in_folder', { path: p.info.logDir }))}>
       {p.t('logs')}
     </button>{/if}
 </Dialog>
+{/if}
 
 <style>
+  .settings-tabs {
+    --tab-gap: 2px;
+    isolation: isolate;
+  }
+  .settings-tabs::before {
+    content: '';
+    grid-area: 1 / 1;
+    pointer-events: none;
+    border-radius: 7px;
+    background: linear-gradient(155deg, rgb(255 255 255 / 7%), transparent 68%), var(--surface-selection);
+    box-shadow: 0 1px 4px rgb(0 0 0 / 15%);
+    transform: translateX(calc(var(--selected-tab) * (100% + var(--tab-gap))));
+    transition: transform 200ms cubic-bezier(.2, .8, .2, 1);
+  }
+  .settings-tabs button {
+    grid-row: 1;
+    position: relative;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .settings-tabs::before { transition: none; }
+  }
+  @media (forced-colors: active) {
+    .settings-tabs::before { background: Highlight; forced-color-adjust: none; }
+    .settings-tabs button[aria-pressed="true"] { color: HighlightText; forced-color-adjust: none; }
+  }
+  .field-hint { margin: -8px 0 16px; }
   .theme-picker { padding:0; border:0; margin:0 0 16px; min-width:0; }
   .theme-picker legend { margin-bottom:8px; padding:0; font-size:12px; font-weight:630; }
   .theme-picker > div { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; }
   .theme-picker button { gap:5px; padding:6px 2px; font-size:12px; }
-  .theme-picker i { display:block; width:11px; height:11px; border:1px solid #ffffff55; border-radius:50%; }
+  .theme-picker i {
+    display: block;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background-image: linear-gradient(145deg, rgb(255 255 255 / 35%), transparent 65%);
+  }
   @media (max-width: 399px) {
     .theme-picker > div { grid-template-columns:repeat(2,minmax(0,1fr)); }
   }

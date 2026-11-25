@@ -33,10 +33,8 @@
       p.components.some((c) => c.state === 'downloading' || c.state === 'verifying'),
   )
   let working = $derived(
-    p.transcriptionRequested &&
-      !missing.length &&
-      !p.subtitleError &&
-      !['complete', 'error', 'needs-setup', 'paused'].includes(stage),
+    p.transcriptionRequested && !missing.length &&
+      (stage === 'processing' || (stage === 'idle' && !p.subtitleError)),
   )
   let hasLines = $derived(!!(generated ? p.cues.length : tracks.authored?.cues.length))
   let empty = $derived(!hasLines && !tracks.loading && !tracks.discovering)
@@ -54,11 +52,11 @@
   )
   let cached = $derived(
     generated && hasLines && !p.transcriptionRequested && p.status?.stage === 'idle' &&
-    (!p.status.vadComplete || p.status.uttDone + p.status.uttNoSpeech < p.status.uttTotal || p.status.trPendingSpans.length > 0),
+    (!p.status.vadComplete || p.status.uttDone + p.status.uttNoSpeech < p.status.uttTotal || p.status.trPendingSpans.length > 0 || p.status.translationFailed > 0),
   )
   let retry = $derived(
     generated &&
-      (stage === 'error' || !!p.subtitleError || stage === 'needs-setup' || stage === 'paused') &&
+      (['error', 'needs-setup', 'paused', 'partial'].includes(stage) || (stage !== 'processing' && !!p.subtitleError)) &&
       !missing.length &&
       !p.startingTranscription,
   )
@@ -125,13 +123,17 @@
                 >
               {/if}
             {:else if retry || cached}
+              {#if stage === 'partial'}
+                <p role="status">{p.t('untranslatedLines')} · {p.status?.translationFailed}</p>
+              {/if}
               <button class="create-subtitles" onclick={() => p.startTranscription()}
                 >{p.t(
-                  cached || stage === 'paused' ? 'continueTranscription' : 'retryTranscription',
+                  stage === 'partial' ? 'retryTranslation' :
+                    cached || stage === 'paused' ? 'continueTranscription' : 'retryTranscription',
                 )}</button
               >
             {/if}
-            {#if p.subtitleError}<small class="form-error" role="alert">{p.subtitleError}</small>{/if}
+            {#if p.subtitleError && stage !== 'processing'}<small class="form-error" role="alert">{p.subtitleError}</small>{/if}
           {/if}
         </div>
       {/if}
@@ -163,7 +165,6 @@
     flex: none;
     max-height: 49%;
     overflow: hidden auto;
-    border-top: 1px solid var(--hairline);
     overscroll-behavior: contain;
   }
   .subtitle-options .empty-note {
@@ -185,9 +186,9 @@
   .generation-actions .create-subtitles {
     width: 100%;
     min-height: 34px;
-    border-color: var(--accent-text);
+    border: 0;
     color: var(--ink);
-    background: var(--accent-soft);
+    background: var(--surface-selection);
   }
   .missing-component {
     display: flex;

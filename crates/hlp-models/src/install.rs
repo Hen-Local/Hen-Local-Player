@@ -147,8 +147,11 @@ pub(crate) async fn install_locked(
         }
         publish_directory(&candidate, &dir, &stage)?;
     } else {
-        fs::create_dir_all(&dir)?;
         for (part, dest) in raw_files {
+            fs::create_dir_all(
+                dest.parent()
+                    .context("missing file installation directory")?,
+            )?;
             if c.ready == Check::Tool {
                 archive::set_executable(&part)?;
                 #[cfg(not(windows))]

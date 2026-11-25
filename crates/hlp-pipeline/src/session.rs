@@ -401,6 +401,11 @@ pub(super) async fn serve(ctx: &mut Context, mut requests: mpsc::Receiver<Reques
             .dir()
             .join(format!("track-{}", ctx.project.audio_track_order));
         let mut timeline = Timeline::load(track, &ctx.settings, &ctx.id)?;
+        if ctx.automatic_transcription {
+            // An explicit CLI run retries missing output. Desktop playback restores
+            // the saved result until the viewer requests a retry.
+            timeline.retry_failed_translations();
+        }
         if ctx.project.probe.video.is_some() && ctx.project.probe.audio.is_empty() {
             // Silent recordings can play immediately and have no recognition work.
             timeline.vad_complete = true;
@@ -551,51 +556,57 @@ async fn drive(
     let mut last_cues = Instant::now();
     let mut last_save = Instant::now();
     let mut last_status = Instant::now() - Duration::from_secs(1);
-    let mut stage_before = String::new();
+    let mut stage_before = "";
     let mut pending_save = true;
     let mut ticker = tokio::time::interval(Duration::from_millis(100));
     ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
-        // Once complete, idle ticks and playhead reports cannot add work. Transcript,
+        // Once settled, idle ticks and playhead reports cannot add work. Transcript,
         // audio, language and translation changes all mark the timeline dirty.
-        let completed = stage_before == "complete" && !t.dirty;
-        if !completed {
+        let settled = matches!(stage_before, "complete" | "partial") && !t.dirty;
+        if !settled {
             run.schedule(ctx, t);
         }
-        let stage =
-            if run.prep_failed || run.engine_failed {
+        let stage = if run.prep_failed || run.engine_failed {
+            "error"
+        } else if run.setup {
+            "needs-setup"
+        } else if !run.generate {
+            "idle"
+        } else if t.vad_complete && !run.asr && !run.mt && !run.prep {
+            if settled {
+                stage_before
+            } else if t
+                .rows
+                .values()
+                .any(|u| u.status == UttStatus::Pending || t.tr_needed(u))
+            {
+                "paused"
+            } else if t
+                .rows
+                .values()
+                .any(|u| matches!(u.status, UttStatus::Failed { .. }))
+            {
                 "error"
-            } else if run.setup {
-                "needs-setup"
-            } else if !run.generate {
-                "idle"
-            } else if t.vad_complete && !run.asr && !run.mt && !run.prep {
-                if completed {
-                    "complete"
-                } else if t
-                    .rows
-                    .values()
-                    .any(|u| u.status == UttStatus::Pending || t.tr_needed(u))
-                {
-                    "paused"
-                } else if t.rows.values().any(|u| {
-                    matches!(u.status, UttStatus::Failed { .. }) || t.translation_failed(u)
-                }) {
-                    "error"
-                } else {
-                    "complete"
-                }
+            } else if t.rows.values().any(|u| t.translation_failed(u)) {
+                "partial"
             } else {
-                "processing"
-            };
+                "complete"
+            }
+        } else {
+            "processing"
+        };
         let changed = stage_before != stage;
         if stage != "processing" && !run.asr && !run.mt {
             run.model_use = None;
         }
-        if matches!(stage, "complete" | "error") {
+        let finished = matches!(stage, "complete" | "partial");
+        if finished || stage == "error" {
             run.regenerating = false;
         }
-        if t.dirty && (last_cues.elapsed() >= Duration::from_millis(250) || stage == "complete") {
+        if t.dirty
+            && (last_cues.elapsed() >= Duration::from_millis(250) || finished || !run.generate)
+        {
             diff_cues(ctx, t, &mut previous);
             t.dirty = false;
             pending_save = true;
@@ -605,8 +616,7 @@ async fn drive(
             ctx.events.language(t.language.clone());
             t.language_dirty = false
         }
-        if pending_save
-            && (last_save.elapsed() >= Duration::from_secs(2) || (changed && stage == "complete"))
+        if pending_save && (last_save.elapsed() >= Duration::from_secs(2) || (changed && finished))
         {
             ctx.persist(t)?;
             pending_save = false;
@@ -614,7 +624,7 @@ async fn drive(
         }
         if changed || last_status.elapsed() >= Duration::from_millis(500) && stage == "processing" {
             ctx.events.status(t.status(stage));
-            stage_before = stage.into();
+            stage_before = stage;
             last_status = Instant::now()
         }
         tokio::select! {biased;
@@ -762,20 +772,23 @@ fn apply_work(ctx: &mut Context, t: &mut Timeline, run: &mut Running, event: Wor
                 let failed = result.is_err();
                 let (text, aligned_phrases) = match result {
                     Ok(translation) => translation,
-                    Err(e) => {
+                    Err(e) if !e.is::<super::translate::UntranslatedLine>() => {
+                        run.engine_failed = true;
                         ctx.error("Translation", format!("{e:#}"), true);
-                        t.translations
-                            .items
-                            .get(&id)
-                            .filter(|v| {
-                                v.source_hash == source_hash
-                                    && v.source_language
-                                        .as_ref()
-                                        .is_none_or(|lang| Some(lang) == source_language.as_ref())
-                            })
-                            .map(|v| (v.text.clone(), v.aligned_phrases.clone()))
-                            .unwrap_or_default()
+                        return Ok(());
                     }
+                    Err(_) => t
+                        .translations
+                        .items
+                        .get(&id)
+                        .filter(|v| {
+                            v.source_hash == source_hash
+                                && v.source_language
+                                    .as_ref()
+                                    .is_none_or(|lang| Some(lang) == source_language.as_ref())
+                        })
+                        .map(|v| (v.text.clone(), v.aligned_phrases.clone()))
+                        .unwrap_or_default(),
                 };
                 t.tr_count += 1;
                 t.tr_ms += elapsed;
@@ -802,7 +815,7 @@ fn resume_transcription(ctx: &mut Context, t: &mut Timeline, run: &mut Running) 
             u.status = UttStatus::Pending;
         }
     }
-    t.translations.items.retain(|_, v| !v.failed);
+    t.retry_failed_translations();
     run.engine_failed = false;
     run.setup = false;
     t.dirty = true;
@@ -906,6 +919,9 @@ fn handle_command(
                 run.setup = true;
                 return Ok(None);
             }
+            if t.track.join("subtitles.deleting").try_exists()? {
+                *t = Timeline::load(t.track.clone(), &ctx.settings, &ctx.id)?;
+            }
             anyhow::ensure!(
                 !ctx.project.probe.audio.is_empty(),
                 "This file has no audio track to transcribe."
@@ -921,6 +937,25 @@ fn handle_command(
             }
             run.generate = true;
             resume_transcription(ctx, t, run)?;
+        }
+        SessionCommand::DeleteGeneratedSubtitles { audio_track_order } => {
+            anyhow::ensure!(
+                audio_track_order == ctx.project.audio_track_order,
+                "The selected audio track changed. Try again."
+            );
+            anyhow::ensure!(
+                !run.asr && !run.mt && !run.extracting,
+                "Subtitle generation is in progress. Try again when it finishes."
+            );
+            // Commit the intent before removing any files. A quit or I/O
+            // failure partway through will resume cleanup on the next load.
+            store::atomic_write(&t.track.join("subtitles.deleting"), b"1")?;
+            run.generate = false;
+            run.regenerating = false;
+            *t = Timeline::load(t.track.clone(), &ctx.settings, &ctx.id)?;
+            run.setup = false;
+            run.engine_failed = false;
+            run.seen.clear();
         }
         SessionCommand::RetryFailed => {
             // A development install can open a file before ffprobe is available.

@@ -173,6 +173,14 @@ pub struct Desktop {
     pub preview: SyncMutex<Option<(String, UrlInfo)>>,
 }
 impl Desktop {
+    pub async fn shutdown(&self) {
+        self.setup.cancel();
+        self.url.cancel();
+        let mut player = self.player.lock().await;
+        player.close().await;
+        player.engines.shutdown().await;
+    }
+
     #[cfg(target_os = "macos")]
     pub fn window_closed(&self) {
         self.url.cancel();

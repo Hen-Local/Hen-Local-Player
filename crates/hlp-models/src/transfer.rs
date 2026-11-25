@@ -15,10 +15,73 @@ use tokio_util::sync::CancellationToken;
 
 pub fn client() -> Result<Client> {
     Ok(Client::builder()
-        .user_agent("Hen-Local-Player/0.1")
+        .user_agent(concat!("Hen-Local-Player/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(20))
         .read_timeout(Duration::from_secs(75))
         .build()?)
+}
+pub(super) fn mainland_region(locale: &str) -> bool {
+    locale
+        .split(['-', '_', '.', '@'])
+        .skip(1)
+        .take_while(|part| part.len() > 1)
+        .any(|part| part.eq_ignore_ascii_case("CN"))
+}
+
+// Give the regional source a head start. Probe the pinned file itself so a
+// reachable home page or an error page cannot select an unavailable model.
+pub(super) async fn prefer_mirror(
+    client: &Client,
+    artifact: &Artifact,
+    mainland: bool,
+    cancel: &CancellationToken,
+) -> Result<bool> {
+    let Some(mirror) = artifact.mirror.as_deref() else {
+        return Ok(false);
+    };
+    let (first, second) = if mainland {
+        (mirror, artifact.url.as_str())
+    } else {
+        (artifact.url.as_str(), mirror)
+    };
+    let probe = |url: String| async {
+        let response = client
+            .get(url)
+            .header(reqwest::header::RANGE, "bytes=0-0")
+            .timeout(Duration::from_secs(4))
+            .send()
+            .await
+            .ok()?;
+        if !matches!(
+            response.status(),
+            StatusCode::OK | StatusCode::PARTIAL_CONTENT
+        ) || response
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| v.starts_with("text/html"))
+        {
+            return None;
+        }
+        response
+            .bytes_stream()
+            .next()
+            .await?
+            .ok()
+            .filter(|bytes| !bytes.is_empty())
+    };
+    let preferred = probe(first.to_owned());
+    tokio::pin!(preferred);
+    tokio::select! {
+        _ = cancel.cancelled() => bail!("Setup cancelled"),
+        result = &mut preferred => return Ok(if result.is_some() { mainland } else { !mainland }),
+        _ = tokio::time::sleep(Duration::from_millis(650)) => {}
+    }
+    tokio::select! {
+        _ = cancel.cancelled() => bail!("Setup cancelled"),
+        result = &mut preferred => Ok(if result.is_some() { mainland } else { !mainland }),
+        result = probe(second.to_owned()) => Ok(if result.is_some() { !mainland } else { mainland }),
+    }
 }
 pub fn part_path(stage: &Path, artifact: &Artifact) -> PathBuf {
     stage.join(format!("{}.part", artifact.sha256))

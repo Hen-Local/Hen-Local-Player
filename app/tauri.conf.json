@@ -2,6 +2,12 @@
   "productName": "Hen Local Player",
   "version": "0.1.0",
   "identifier": "com.henlocal.player",
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "requireSignedVersion": true
+    }
+  },
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://127.0.0.1:1420",

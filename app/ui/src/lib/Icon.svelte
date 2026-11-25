@@ -36,6 +36,7 @@
     alert: 'm12 3 10 17H2zM12 9v5m0 3v.1',
     monitor: 'M3 4h18v13H3zM8 21h8m-4-4v4',
     refresh: 'M3 10a9 9 0 1 1 1 8M3 4v6h6',
+    trash: 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',
     keyboard: 'M2 5h20v14H2zM6 9h1m3 0h1m3 0h1m3 0h1M6 14h2m2 0h8',
   }
 </script>

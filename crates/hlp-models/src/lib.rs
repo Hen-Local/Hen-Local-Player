@@ -53,21 +53,8 @@ pub fn llama_server_path() -> PathBuf {
 pub fn gguf_path() -> PathBuf {
     model_root().join("Hy-MT2-1.8B-Q4_K_M.gguf")
 }
-static BUNDLED_VAD: OnceLock<PathBuf> = OnceLock::new();
-
-pub fn use_bundled_vad(path: &Path) {
-    if let Some(c) = component("vad-silero") {
-        if verified_single_file(path, c) {
-            let _ = BUNDLED_VAD.set(path.to_owned());
-        }
-    }
-}
-
 pub fn vad_path() -> PathBuf {
-    BUNDLED_VAD
-        .get()
-        .cloned()
-        .unwrap_or_else(|| model_root().join("silero-vad/silero_vad.onnx"))
+    model_root().join("silero-vad/silero_vad.onnx")
 }
 // Only the desktop shell opts into its signed, adjacent playback executables.
 // Installer destinations and the CLI continue to use their own component root.
@@ -214,21 +201,12 @@ fn ready(root: &Path, c: &Component) -> bool {
             })
         }
         Check::File => {
-            if c.id == "vad-silero" && BUNDLED_VAD.get().is_some() {
-                return true;
-            }
             verified_single_file(&dir.join(first.name.as_ref().expect("raw filename")), c)
         }
-        Check::Sherpa => [
-            "conv_frontend.onnx",
-            "encoder.int8.onnx",
-            "decoder.int8.onnx",
-            "tokenizer/vocab.json",
-            "tokenizer/merges.txt",
-            "tokenizer/tokenizer_config.json",
-        ]
-        .iter()
-        .all(|p| file_len(&dir.join(p)) > 0),
+        Check::Sherpa => c.files.iter().all(|f| {
+            let name = f.name.as_deref().expect("raw Sherpa filename");
+            file_len(&dir.join(name)) == f.bytes
+        }),
         Check::Gguf => {
             let path = dir.join(first.name.as_ref().expect("GGUF filename"));
             let mut magic = [0; 4];
@@ -311,11 +289,63 @@ pub async fn download(
     progress: impl Fn(ComponentStatus) + Send + Sync,
     cancel: CancellationToken,
 ) -> anyhow::Result<()> {
+    download_from(
+        ids,
+        hlp_core::settings::ModelDownloadSource::Auto,
+        progress,
+        cancel,
+    )
+    .await
+}
+
+pub async fn download_from(
+    ids: &[String],
+    source: hlp_core::settings::ModelDownloadSource,
+    progress: impl Fn(ComponentStatus) + Send + Sync,
+    cancel: CancellationToken,
+) -> anyhow::Result<()> {
+    use hlp_core::settings::ModelDownloadSource;
     let root = ominix_root();
     let client = transfer::client()?;
     for id in ids {
         let c = component(id)
             .ok_or_else(|| anyhow::anyhow!("Unknown or unavailable component: {id}"))?;
+        let mut regional;
+        let c = if let Some(probe) = c
+            .files
+            .iter()
+            .filter(|f| f.mirror.is_some())
+            .max_by_key(|f| f.bytes)
+        {
+            if ready(&root, c) {
+                let done = event(c, ComponentState::Ready, c.total());
+                record(&root, &done);
+                progress(done);
+                continue;
+            }
+            let prefer = match source {
+                ModelDownloadSource::China => true,
+                ModelDownloadSource::Global => false,
+                ModelDownloadSource::Auto => {
+                    let mainland =
+                        transfer::mainland_region(&sys_locale::get_locale().unwrap_or_default());
+                    transfer::prefer_mirror(&client, probe, mainland, &cancel).await?
+                }
+            };
+            if prefer {
+                regional = c.clone();
+                for file in &mut regional.files {
+                    if let Some(mirror) = &mut file.mirror {
+                        std::mem::swap(&mut file.url, mirror);
+                    }
+                }
+                &regional
+            } else {
+                c
+            }
+        } else {
+            c
+        };
         let report = |event: ComponentStatus| {
             record(&root, &event);
             progress(event);

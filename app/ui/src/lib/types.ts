@@ -127,6 +127,7 @@ export interface PipelineStatus {
   uttNoSpeech: number
   uttFailed: number
   translatedCount: number
+  translationFailed: number
   asrPendingSpans: [number, number][]
   trPendingSpans: [number, number][]
   asrRtf: number
@@ -141,6 +142,7 @@ export interface ErrorEvent {
   recoverable: boolean
 }
 export interface Settings {
+  autoDownloadUpdates: boolean
   accentTheme: 'neon-blue' | 'neon-orange' | 'neon-pink' | 'neon-green'
   uiLanguage: string
   targetLanguage: string
@@ -155,6 +157,7 @@ export interface Settings {
   processWholeFile: boolean
   dialogueChannelFocus: boolean
   asrModel: string
+  modelDownloadSource: 'auto' | 'china' | 'global'
   translationContext: boolean
   downloadDir: string
   cacheLimitGb: number

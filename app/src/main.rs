@@ -2,6 +2,7 @@
     all(not(debug_assertions), target_os = "windows"),
     windows_subsystem = "windows"
 )]
+mod app_updates;
 mod commands;
 mod events;
 mod online_subtitles;
@@ -49,21 +50,22 @@ fn main() {
     let mut launched = false;
     tauri::Builder::default()
         .manage(desktop)
+        .plugin(
+            tauri_plugin_updater::Builder::new()
+                .pubkey(include_str!("../updater.pub").trim())
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .setup(|app| {
-            if let Ok(resources) = app.path().resource_dir() {
-                hlp_models::use_bundled_vad(&resources.join("speech/silero_vad.onnx"));
-            }
-            #[cfg(debug_assertions)]
-            hlp_models::use_bundled_vad(
-                &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("binaries/silero_vad.onnx"),
-            );
-            Ok(())
-        })
         .menu(player_menu::build)
         .on_menu_event(|app, event| player_menu::handle(app, event.id().as_ref()))
         .invoke_handler(tauri::generate_handler![
+            app_updates::app_update_access,
+            app_updates::set_app_update_access,
+            app_updates::list_app_releases,
+            app_updates::download_app_release,
+            app_updates::prepared_app_release,
+            app_updates::install_app_release,
             set_playback_capabilities,
             open_media,
             close_media,
@@ -87,6 +89,7 @@ fn main() {
             report_playback_error,
             retry_failed,
             start_transcription,
+            delete_generated_subtitles,
             export_subtitles,
             suggest_export_paths,
             get_settings,
@@ -156,15 +159,7 @@ fn main() {
             }
             RunEvent::Exit => {
                 let state = app.state::<Desktop>();
-                state.setup.cancel();
-                state.url.cancel();
-                tauri::async_runtime::block_on(async {
-                    let mut p = state.player.lock().await;
-                    if let Some(file) = p.active.take() {
-                        let _ = file.session.shutdown().await;
-                    }
-                    p.engines.shutdown().await;
-                });
+                tauri::async_runtime::block_on(state.shutdown());
             }
             _ => (),
         });

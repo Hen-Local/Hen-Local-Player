@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 hlp-core.workspace = true
 anyhow.workspace = true
+sys-locale.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

@@ -12,6 +12,7 @@ import { defaults } from './defaults'
 import { readSubtitleFile } from './subtitle-tracks'
 import { languages } from './languages'
 import mediaExtensions from '../../../media-formats.json'
+import { version } from '../../package.json'
 
 const demoPath = 'fixture_ja.mp4'
 const sample = [
@@ -61,6 +62,8 @@ const initialComponents: [string, number, boolean][] = [
   ['deno', 40000000, false],
 ]
 export class MockBackend implements Backend {
+  async version() { return version }
+  private hasUpdateAccess = false
   private events = new EventTarget()
   private settings = { ...defaults(), ...stored<Partial<Settings>>('settings', {}) }
   private recent = stored<RecentItem[]>('recent', [])
@@ -214,6 +217,16 @@ export class MockBackend implements Backend {
   private saveSampleCache() {
     persist('samples', [...this.cueCache].filter(([k]) => JSON.parse(k)[0] === demoPath))
   }
+  private clearGeneratedCues(sessionId: string, sourceLanguage?: string) {
+    this.emit('pipeline://cues', { sessionId, removedIds: [...this.visibleCues.keys()], upserts: [] })
+    this.visibleCues.clear()
+    for (const key of this.cueCache.keys()) {
+      const [path, source] = JSON.parse(key)
+      if (path === this.currentPath && (sourceLanguage === undefined || sourceLanguage === source))
+        this.cueCache.delete(key)
+    }
+    if (this.currentPath === demoPath) this.saveSampleCache()
+  }
   private stream(path: string, restored: Cue[] = []) {
     const session = this.current
     if (!session) return
@@ -258,6 +271,7 @@ export class MockBackend implements Backend {
         uttDone: doneIds.size,
         uttNoSpeech: 0,
         uttFailed: 0,
+        translationFailed: 0,
         translatedCount: [...this.visibleCues.values()].filter((c) => c.translation).length,
         asrPendingSpans: spans,
         trPendingSpans: this.settings.targetLanguage === 'none' ? [] : spans,
@@ -556,8 +570,25 @@ export class MockBackend implements Backend {
         persist('samples', [])
         break
       case 'app_info':
-        reply = { version: '0.1.0', logDir: 'logs', cacheBytes: 0 }
+        reply = { version, logDir: 'logs', cacheBytes: 0 }
         break
+      case 'app_update_access':
+        reply = this.hasUpdateAccess
+        break
+      case 'set_app_update_access':
+        if (a && 'url' in a) this.hasUpdateAccess = Boolean(a.url)
+        break
+      case 'list_app_releases':
+        if (!this.hasUpdateAccess) throw Error('UPDATE_ACCESS_REQUIRED')
+        reply = []
+        break
+      case 'prepared_app_release':
+        reply = null
+        break
+      case 'download_app_release':
+      case 'install_app_release':
+        if (!this.hasUpdateAccess) throw Error('UPDATE_ACCESS_REQUIRED')
+        throw Error('Application updates are available in the desktop app.')
       case 'suggest_export_paths':
         if (a && 'variant' in a) reply = this.filename(a.variant, a.format)
         break
@@ -602,6 +633,25 @@ export class MockBackend implements Backend {
       }
       case 'read_embedded_subtitle':
         throw Error('Open this file in the desktop player for embedded tracks.')
+      case 'delete_generated_subtitles': {
+        if (!a || !('audioTrackOrder' in a) || a.sessionId !== this.current?.sessionId || a.audioTrackOrder !== 0)
+          throw Error('The media or audio track changed.')
+        clearInterval(this.timer)
+        this.generating = false
+        this.clearGeneratedCues(a.sessionId)
+        this.current.cues = []
+        const recent = this.recent.find((item) => item.path === this.currentPath)
+        if (recent) {
+          recent.progress = 0
+          persist('recent', this.recent.filter((r) => r.path === demoPath))
+        }
+        this.emit('pipeline://status', {
+          sessionId: a.sessionId, stage: 'idle', extractedUntilMs: 0, vadComplete: false,
+          uttTotal: 0, uttDone: 0, uttNoSpeech: 0, uttFailed: 0, translatedCount: 0, translationFailed: 0,
+          asrPendingSpans: [], trPendingSpans: [], asrRtf: 0, msPerTranslation: 0, etaSeconds: null,
+        })
+        break
+      }
       case 'start_transcription': {
         if (!a || !('sessionId' in a) || a.sessionId !== this.current?.sessionId)
           throw Error('Media changed')
@@ -623,18 +673,7 @@ export class MockBackend implements Backend {
           if ('regenerate' in a && a.regenerate) {
             if (a.audioTrackOrder !== undefined && a.audioTrackOrder !== 0)
               throw Error('Audio track changed')
-            this.emit('pipeline://cues', {
-              sessionId: a.sessionId,
-              removedIds: [...this.visibleCues.keys()],
-              upserts: [],
-            })
-            this.visibleCues.clear()
-            for (const key of this.cueCache.keys()) {
-              const [path, source] = JSON.parse(key)
-              if (path === this.currentPath && source === this.settings.sourceLanguage)
-                this.cueCache.delete(key)
-            }
-            if (this.currentPath === demoPath) this.saveSampleCache()
+            this.clearGeneratedCues(a.sessionId, this.settings.sourceLanguage)
           }
           this.generating = true
           this.stream(this.currentPath, [...this.visibleCues.values()])

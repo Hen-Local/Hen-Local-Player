@@ -39,6 +39,7 @@
     try {
       if (finish) {
         await p.update({ processWholeFile: true })
+        if (p.status?.stage === 'partial') return
         if (p.status?.stage !== 'complete') {
           p.scheduleExport(perform)
           p.toast(p.t('queued'))
@@ -56,8 +57,10 @@
   }
   function choose(multiple: boolean) {
     all = multiple
-    if (p.status?.stage !== 'complete') partial = true
-    else void run(false)
+    const stage = p.status?.stage
+    if (stage === 'complete' || (stage === 'partial' && (!availableTranslation || (!all && content === 'original'))))
+      void run(false)
+    else partial = true
   }
 </script>
 
@@ -78,9 +81,11 @@
       <option value="ass">Advanced SubStation Alpha (.ass)</option>
     </select>
   </label>
-  {#if partial}<p class="help">{Math.round(p.progress * 100)}% {p.t('incomplete')}</p>
+  {#if partial}<p class="help">{p.status?.stage === 'partial' ? p.t('partialExport') : Math.round(p.progress * 100) + '% ' + p.t('incomplete')}</p>
     <div class="dialog-actions">
-      <button disabled={busy} onclick={() => run(true)}>{p.t('finish')}</button>
+      {#if p.status?.stage !== 'partial'}
+        <button disabled={busy} onclick={() => run(true)}>{p.t('finish')}</button>
+      {/if}
       <button class="primary" disabled={busy} onclick={() => run(false)}>{p.t('exportNow')}</button>
     </div>
   {:else}<div class="dialog-actions">

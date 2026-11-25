@@ -83,3 +83,9 @@ On November 23, 2026, the subtitle drawer opened directly to the track picker, w
 `node /tmp/hen-subtitle-playlist-inspector.cjs` passed four browser-and-locale runs against the Vite mock. Each run imported a local SRT, opened online search and export, changed the display language, vertical position and subtitle delay, and expanded a virtualized list of 1,807 generated cues. Regeneration displayed progress and restored the footer action when complete. The playlist cycled through all repeat modes, navigated two files, sought to a chapter and reopened without issuing another chapter query. A file with no chapters displayed only the playlist controls.
 
 `npm --prefix app/ui run check` reported zero diagnostics, and `npm --prefix app/ui run build` produced the production frontend.
+
+## Delete generated subtitles for one audio track
+
+`node /tmp/hen-delete-ui.cjs` exercised the right inspector in Chromium (English) and WebKit (Chinese) using a local Vite server and the sample movie. **Regenerate** and **Delete** stayed on one row inside the inspector at widths of 320, 480, 720 and 1050 CSS pixels. Escape and Cancel preserved all six generated cues. Keyboard focus opened on a safe control and returned to Delete after cancellation. A simulated disk error kept the captions available for another attempt.
+
+Confirming deletion sent one request with the open session ID and audio-track order. With a sidecar SRT selected, its text, selection, playback URL and paused playhead stayed intact. The generated track offered **Transcribe** again, and the deleted cues stayed absent after reopening the file. A new transcription completed successfully. Opening another video dismissed the previous confirmation. Separate checks covered saved partial translations and a completed track with no speech. `npm --prefix app/ui run check` reported zero diagnostics and `npm --prefix app/ui run build` succeeded.

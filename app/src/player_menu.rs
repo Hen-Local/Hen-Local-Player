@@ -35,7 +35,6 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         ("open", "Open File…", Some("CmdOrCtrl+O")),
         ("open-folder", "Open Folder…", Some("CmdOrCtrl+Shift+O")),
         ("url", "Open URL…", Some("CmdOrCtrl+L")),
-        ("close-media", "Close File", None),
     ]
     .into_iter()
     .enumerate()
@@ -52,29 +51,21 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let playback = Submenu::new(app, "Playback", true)?;
     for (id, label) in [
         ("play-pause", "Play / Pause"),
-        ("seek-backward", "Back 10 Seconds"),
-        ("seek-forward", "Forward 10 Seconds"),
         ("previous-file", "Previous File"),
         ("next-file", "Next File"),
-        ("repeat", "Cycle Repeat Mode"),
         ("playlist", "Show Playlist"),
     ] {
         playback.append(&item(app, id, label, None)?)?;
     }
-    let audio = Submenu::new(app, "Audio", true)?;
-    audio.append(&item(app, "mute", "Mute / Unmute", None)?)?;
-    audio.append(&item(app, "volume-up", "Volume Up", None)?)?;
-    audio.append(&item(app, "volume-down", "Volume Down", None)?)?;
     let subtitles = Submenu::new(app, "Subtitles", true)?;
     for (id, label, key) in [
+        ("transcript", "Show Subtitles Panel", None),
         ("subtitle-file", "Import Subtitles…", None),
         (
             "find-subtitles",
             "Find Online Subtitles…",
             Some("CmdOrCtrl+Shift+D"),
         ),
-        ("subtitles", "Cycle Generated Subtitles", None),
-        ("transcript", "Show Subtitles Panel", None),
         ("export", "Export Generated Subtitles…", Some("CmdOrCtrl+E")),
     ] {
         subtitles.append(&item(app, id, label, key)?)?;
@@ -86,8 +77,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         .unwrap_or(0)
         + 1;
     menu.insert(&playback, slot)?;
-    menu.insert(&audio, slot + 1)?;
-    menu.insert(&subtitles, slot + 2)?;
+    menu.insert(&subtitles, slot + 1)?;
     Ok(menu)
 }
 
@@ -114,20 +104,12 @@ pub fn handle(app: &AppHandle, id: &str) {
         "open"
             | "open-folder"
             | "url"
-            | "close-media"
             | "play-pause"
-            | "seek-backward"
-            | "seek-forward"
             | "previous-file"
             | "next-file"
-            | "repeat"
             | "playlist"
-            | "mute"
-            | "volume-up"
-            | "volume-down"
             | "subtitle-file"
             | "find-subtitles"
-            | "subtitles"
             | "transcript"
             | "export"
             | "settings"

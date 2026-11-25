@@ -1,6 +1,7 @@
 import mediaExtensions from '../../../media-formats.json'
 import type { Caps, MediaOpened, PlaybackPrep, CueBatch, PipelineStatus, LanguageEvent, ComponentStatus, ErrorEvent, DownloadProgress, Settings, UrlInfo, RecentItem, SubtitleVariant, SubtitleFormat } from './types'
 import { invoke } from '@tauri-apps/api/core'
+import { getVersion } from '@tauri-apps/api/app'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
 import { getCurrentWindow } from '@tauri-apps/api/window'
@@ -17,6 +18,12 @@ export interface OnlineSubtitleResult {
   fileName: string
   language: string
   release: string
+}
+export interface AppRelease {
+  version: string
+  notes: string
+  publishedAt: string
+  installable: boolean
 }
 export interface SubtitleInventory {
   embedded: EmbeddedTrack[]
@@ -42,6 +49,7 @@ export interface Commands {
   report_playback_error: [ { sessionId: string; code: number }, void ]
   retry_failed: [ undefined, void ]
   start_transcription: [{ sessionId: string; regenerate?: boolean; audioTrackOrder?: number }, { missing: string[] }]
+  delete_generated_subtitles: [{ sessionId: string; audioTrackOrder: number }, void]
   list_subtitle_tracks: [{ sessionId: string }, SubtitleInventory]
   read_embedded_subtitle: [{ sessionId: string; order: number }, string]
   read_sidecar_subtitle: [{ sessionId: string; name: string }, string]
@@ -59,6 +67,12 @@ export interface Commands {
   reveal_in_folder: [ { path: string }, void ]
   app_info: [ undefined, {version:string; logDir:string; cacheBytes:number} ]
   update_ytdlp: [ undefined, void ]
+  app_update_access: [ undefined, boolean ]
+  set_app_update_access: [ { url: string }, void ]
+  list_app_releases: [ undefined, AppRelease[] ]
+  download_app_release: [ { version: string }, void ]
+  prepared_app_release: [ undefined, string | null ]
+  install_app_release: [ { version: string }, void ]
 }
 export interface Events {
   'media://opened': MediaOpened
@@ -68,11 +82,13 @@ export interface Events {
   'pipeline://language': LanguageEvent
   'setup://progress': ComponentStatus
   'download://progress': DownloadProgress
+  'app-update://progress': { version: string; downloaded: number; total: number | null }
   'app://open-files': string[]
-  'app://menu': 'open' | 'open-folder' | 'close-media' | 'url' | 'export' | 'play-pause' | 'playlist' | 'previous-file' | 'next-file' | 'seek-backward' | 'seek-forward' | 'mute' | 'volume-up' | 'volume-down' | 'repeat' | 'fullscreen' | 'subtitles' | 'transcript' | 'subtitle-file' | 'find-subtitles' | 'settings'
+  'app://menu': 'open' | 'open-folder' | 'url' | 'export' | 'play-pause' | 'playlist' | 'previous-file' | 'next-file' | 'transcript' | 'subtitle-file' | 'find-subtitles' | 'settings'
   'app://error': ErrorEvent
 }
 export interface Backend {
+  version(): Promise<string>
   call<K extends keyof Commands>(command: K, args?: Commands[K][0]): Promise<Commands[K][1]>
   listen<K extends keyof Events>(event: K, receive: (payload: Events[K]) => void): Promise<() => void>
   openFiles(): Promise<string[]>
@@ -88,6 +104,7 @@ export function sortMediaPaths(paths: string[]) {
 }
 
 export class TauriBackend implements Backend {
+  version() { return getVersion() }
   call<K extends keyof Commands>(command: K, args?: Commands[K][0]): Promise<Commands[K][1]> {
     return invoke(command, args)
   }

@@ -164,6 +164,9 @@ pub enum SessionCommand {
         #[serde(default)]
         audio_track_order: Option<usize>,
     },
+    DeleteGeneratedSubtitles {
+        audio_track_order: usize,
+    },
     RetryFailed,
     UpdateSettings(crate::settings::Settings),
     Export {

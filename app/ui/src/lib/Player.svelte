@@ -433,10 +433,6 @@
     padding: 0 clamp(8px, 2.2vw, 24px) max(clamp(18px, 4.6vh, 38px), env(safe-area-inset-bottom));
     container-type: inline-size;
     pointer-events: none;
-    transition: opacity 160ms;
-  }
-  .floating-slot.transport-hidden {
-    opacity: 0;
   }
   .floating-slot.transport-hidden :global([data-transport]) {
     pointer-events: none;
@@ -444,11 +440,6 @@
   @media (max-height: 340px) {
     .floating-slot {
       padding-bottom: max(clamp(10px, 3.6vh, 16px), env(safe-area-inset-bottom));
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .floating-slot {
-      transition: none;
     }
   }
 </style>

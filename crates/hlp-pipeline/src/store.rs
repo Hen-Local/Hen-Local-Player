@@ -59,6 +59,43 @@ pub fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
         .with_context(|| format!("Write {}", path.display()))?;
     Ok(())
 }
+
+/// Clear only the generated text and the records that request recognition.
+/// Audio, prepared video, authored tracks and exported subtitle files are separate.
+pub(crate) fn remove_generated_subtitles(track: &Path) -> Result<()> {
+    fn remove_if_present(path: &Path) -> Result<()> {
+        match fs::remove_file(path) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e).with_context(|| format!("Remove {}", path.display())),
+        }
+    }
+    for entry in fs::read_dir(track)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if matches!(
+            name.as_ref(),
+            "generate.requested" | "segments.json" | "transcript.json"
+        ) || (name.starts_with("transcript.") && name.ends_with(".json"))
+        {
+            remove_if_present(&entry.path())?;
+        }
+    }
+    let translations = track.join("translations");
+    if translations.is_symlink() {
+        // Unlink a redirected cache without touching the referenced directory.
+        remove_if_present(&translations)?;
+    } else if translations.try_exists()? {
+        for entry in fs::read_dir(translations)? {
+            let path = entry?.path();
+            if path.extension().is_some_and(|ext| ext == "json") {
+                remove_if_present(&path)?;
+            }
+        }
+    }
+    Ok(())
+}
 pub fn hash(text: &str) -> String {
     hex::encode(&Sha256::digest(text.as_bytes())[..8])
 }

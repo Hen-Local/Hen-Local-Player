@@ -170,11 +170,46 @@
     "ready": "sherpa",
     "files": [
       {
-        "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25.tar.bz2",
-        "bytes": 878702423,
-        "sha256": "393f8a14e2f5fb96746aaab342997a40641001fbd5bf9592a080a8329178ee96",
-        "format": "tbz",
-        "prefix": "sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25"
+        "url": "https://huggingface.co/csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/resolve/68818b2313fe77bd06f6a7c5068ff3ef59d02b8a/conv_frontend.onnx",
+        "bytes": 44148281,
+        "sha256": "d22dc4423e0940e49884e903d2ea2f7e5567c14fc1aed97e4e26d6b8f208ef9e",
+        "name": "conv_frontend.onnx",
+        "mirror": "https://modelscope.cn/models/zengshuishui/Qwen3-ASR-onnx/resolve/de9e449eb376dcb472c1ce8141fbae8d524fabbd/model_0.6B/conv_frontend.onnx"
+      },
+      {
+        "url": "https://huggingface.co/csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/resolve/68818b2313fe77bd06f6a7c5068ff3ef59d02b8a/encoder.int8.onnx",
+        "bytes": 182491662,
+        "sha256": "60748d3e6744a57c9c91e1b17424a6c2990567e8adceb0783940c03ed98fa9d9",
+        "name": "encoder.int8.onnx",
+        "mirror": "https://modelscope.cn/models/zengshuishui/Qwen3-ASR-onnx/resolve/de9e449eb376dcb472c1ce8141fbae8d524fabbd/model_0.6B/encoder.int8.onnx"
+      },
+      {
+        "url": "https://huggingface.co/csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/resolve/68818b2313fe77bd06f6a7c5068ff3ef59d02b8a/decoder.int8.onnx",
+        "bytes": 755914231,
+        "sha256": "4f6885be5959ae26af3089d38ee7972c5fafbeeb1cf8d5e76eab6d8b61ca5771",
+        "name": "decoder.int8.onnx",
+        "mirror": "https://modelscope.cn/models/zengshuishui/Qwen3-ASR-onnx/resolve/de9e449eb376dcb472c1ce8141fbae8d524fabbd/model_0.6B/decoder.int8.onnx"
+      },
+      {
+        "url": "https://huggingface.co/csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/resolve/68818b2313fe77bd06f6a7c5068ff3ef59d02b8a/tokenizer/vocab.json",
+        "bytes": 2776833,
+        "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910",
+        "name": "tokenizer/vocab.json",
+        "mirror": "https://modelscope.cn/models/zengshuishui/Qwen3-ASR-onnx/resolve/de9e449eb376dcb472c1ce8141fbae8d524fabbd/tokenizer/vocab.json"
+      },
+      {
+        "url": "https://huggingface.co/csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/resolve/68818b2313fe77bd06f6a7c5068ff3ef59d02b8a/tokenizer/merges.txt",
+        "bytes": 1671853,
+        "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5",
+        "name": "tokenizer/merges.txt",
+        "mirror": "https://modelscope.cn/models/zengshuishui/Qwen3-ASR-onnx/resolve/de9e449eb376dcb472c1ce8141fbae8d524fabbd/tokenizer/merges.txt"
+      },
+      {
+        "url": "https://huggingface.co/csukuangfj2/sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25/resolve/68818b2313fe77bd06f6a7c5068ff3ef59d02b8a/tokenizer/tokenizer_config.json",
+        "bytes": 12487,
+        "sha256": "4942d005604266809309cabc9f4e9cb89ce855d59b14681fdc0e1cc62ea26c4c",
+        "name": "tokenizer/tokenizer_config.json",
+        "mirror": "https://modelscope.cn/models/zengshuishui/Qwen3-ASR-onnx/resolve/de9e449eb376dcb472c1ce8141fbae8d524fabbd/tokenizer/tokenizer_config.json"
       }
     ]
   },
@@ -187,10 +222,11 @@
     "ready": "file",
     "files": [
       {
-        "url": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/silero_vad.onnx",
+        "url": "https://huggingface.co/R4kSo1997/sherpa-onnx-silero-vad-v5/resolve/4a6e5a75370a3ca741c950f8feda0dbed11c18ac/silero_vad.onnx",
         "bytes": 643854,
         "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
-        "name": "silero_vad.onnx"
+        "name": "silero_vad.onnx",
+        "mirror": "https://hf-mirror.com/R4kSo1997/sherpa-onnx-silero-vad-v5/resolve/4a6e5a75370a3ca741c950f8feda0dbed11c18ac/silero_vad.onnx"
       }
     ]
   },

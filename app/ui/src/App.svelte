@@ -2,7 +2,8 @@
   import { onMount, tick } from 'svelte'
   import { getCurrentWindow } from '@tauri-apps/api/window'
   import { enableWindowDragging } from './lib/window-drag'
-  import { player as p, mockMode, backend } from './lib/stores.svelte'
+  import { player as p, mockMode, backend, appUpdates } from './lib/stores.svelte'
+  import { updateInterval } from './lib/app-updates.svelte'
   import Icon from './lib/Icon.svelte'
   import Player from './lib/Player.svelte'
   import PlayerSettings from './lib/PlayerSettings.svelte'
@@ -12,6 +13,7 @@
   import OpenUrlDialog from './lib/OpenUrlDialog.svelte'
   import OnlineSubtitleDialog from './lib/OnlineSubtitleDialog.svelte'
   import ExportMenu from './lib/ExportMenu.svelte'
+  import Dialog from './lib/Dialog.svelte'
   import SetupScreen from './lib/SetupScreen.svelte'
   import SettingsDialog from './lib/SettingsDialog.svelte'
   import PlayerMenu from './lib/PlayerMenu.svelte'
@@ -21,6 +23,12 @@
   type LeftPanel = 'library' | 'playlist'
   type Panel = LeftPanel | 'subtitles' | 'transcript'
   type Side = 'left' | 'right'
+  async function deleteSubtitles() {
+    if (await p.deleteGeneratedSubtitles()) {
+      await tick()
+      document.querySelector<HTMLElement>('#player-settings .subtitle-workspace')?.focus({ preventScroll: true })
+    }
+  }
   const mac = /Mac/.test(navigator.platform)
   const nativeMac = !mockMode && mac
   let shell: HTMLElement
@@ -235,6 +243,20 @@
     }
   })
   $effect(() => {
+    if (!p.settings.autoDownloadUpdates || p.media || appUpdates.hasAccess === false) return
+    const eligible = () => p.settings.autoDownloadUpdates && !p.media
+    const check = async () => {
+      const version = await appUpdates.automatic(eligible)
+      if (version && eligible() && !p.dialog) p.toast(p.t('readyToRestartNotice').replace('{version}', version))
+    }
+    let daily: number
+    const initial = window.setTimeout(() => {
+      void check()
+      daily = window.setInterval(check, updateInterval)
+    }, 2500)
+    return () => { window.clearTimeout(initial); window.clearInterval(daily) }
+  })
+  $effect(() => {
     // Keep the menu and subtitle clearance aligned to the transport after resize.
     p.media?.sessionId
     const observer = new ResizeObserver(placeOverlays)
@@ -269,7 +291,7 @@
       {subtitlesOpen} playlistOpen={leftPanel === 'playlist'} />
   {:else}
     <section class="idle-stage" aria-label={p.t('player')}>
-      <div class="welcome" class:has-history={p.recent.length > 0}>
+      <div class="welcome">
         <div class="welcome-heading">
           <div class="idle-brand">
             <span class="hen-mark" aria-hidden="true"></span>
@@ -284,15 +306,13 @@
             </button>
           </div>
         </div>
-        {#if p.recent.length}
-          <nav class="welcome-recent" aria-label={p.t('recent')}>
-            {#each p.recent.slice(0, 4) as file (file.path)}
-              <button title={file.path} onclick={() => p.open(file.path)}>
-                <Icon name="film" size={15}/><span>{file.path === samplePath ? p.t('demo') : file.title}</span>
-              </button>
-            {/each}
-          </nav>
-        {/if}
+        <nav class="welcome-recent" aria-hidden={!p.recent.length} aria-label={p.t('recent')}>
+          {#each p.recent.slice(0, 4) as file (file.path)}
+            <button title={file.path} onclick={() => p.open(file.path)}>
+              <Icon name="film" size={15}/><span>{file.path === samplePath ? p.t('demo') : file.title}</span>
+            </button>
+          {/each}
+        </nav>
       </div>
     </section>
   {/if}
@@ -352,10 +372,21 @@
     />{:else if p.dialog === 'settings'}<SettingsDialog />
   {:else if p.dialog === 'online-subtitles'}<OnlineSubtitleDialog />
   {:else if p.dialog === 'setup'}<SetupScreen
-    />{:else if p.dialog === 'export'}<ExportMenu />{/if}
+    />{:else if p.dialog === 'export'}<ExportMenu />
+  {:else if p.dialog && typeof p.dialog === 'object' && p.dialog.kind === 'delete-subtitles'}
+    <Dialog title={p.t('deleteGeneratedSubtitles')} icon="trash">
+      <p class="help">{p.t('deleteSubtitlesPrompt')}</p>
+      <div class="dialog-actions">
+        <button disabled={p.deletingSubtitles} onclick={() => (p.dialog = null)}>{p.t('cancel')}</button>
+        <button class="confirm-subtitle-deletion" disabled={p.deletingSubtitles}
+          onclick={deleteSubtitles}>{p.t('deleteAction')}</button>
+      </div>
+    </Dialog>
+  {/if}
 </main>
 
 <style>
+  .confirm-subtitle-deletion { color: #ffb0aa; }
   .desktop :global(:is(.idle-stage, .video-stage, .panel-title)) {
     -webkit-user-select: none;
     user-select: none;

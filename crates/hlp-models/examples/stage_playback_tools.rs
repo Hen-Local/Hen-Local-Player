@@ -1,4 +1,4 @@
-// Stage the pinned playback tools and voice detector from the component installer.
+// Stage the pinned playback tools from the component installer.
 use anyhow::{Context, Result};
 use std::{fs, path::PathBuf};
 use tokio_util::sync::CancellationToken;
@@ -11,14 +11,7 @@ async fn main() -> Result<()> {
     let triple = triple.to_str().context("Invalid target triple")?;
     let license = args.next().map(PathBuf::from);
     fs::create_dir_all(&destination)?;
-    hlp_models::download(
-        &["ffmpeg".into(), "vad-silero".into()],
-        |_| {},
-        CancellationToken::new(),
-    )
-    .await?;
-    fs::copy(hlp_models::vad_path(), destination.join("silero_vad.onnx"))
-        .context("Stage the verified speech detector")?;
+    hlp_models::download(&["ffmpeg".into()], |_| {}, CancellationToken::new()).await?;
     for name in ["ffmpeg", "ffprobe"] {
         let binary = hlp_models::tool_path(name);
         let filename = format!("{name}-{triple}{}", std::env::consts::EXE_SUFFIX);

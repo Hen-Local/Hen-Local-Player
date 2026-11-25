@@ -13,6 +13,12 @@ anyhow.workspace = true
 tauri.workspace = true
 tauri-plugin-dialog.workspace = true
 tauri-plugin-opener.workspace = true
+tauri-plugin-updater = "2.14.1"
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
+semver = "1"
+sha2.workspace = true
+hex.workspace = true
+fs2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
@@ -23,6 +29,12 @@ tokio.workspace = true
 tokio-util.workspace = true
 dirs.workspace = true
 reqwest.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["apple-native"] }
+
+[target.'cfg(windows)'.dependencies]
+keyring = { version = "3.6", default-features = false, features = ["windows-native"] }
 
 [dev-dependencies]
 axum.workspace = true

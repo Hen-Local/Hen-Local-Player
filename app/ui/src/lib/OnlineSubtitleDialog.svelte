@@ -182,7 +182,7 @@
   .online-search select.search-field { padding-inline-end: 30px; }
   .online-search .dialog-actions { grid-column: 1 / -1; margin: 0; }
   .online-results { margin: 14px 0 0; padding: 0; list-style: none; }
-  .online-results li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-top: 1px solid var(--hairline); }
+  .online-results li { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
   .online-results li > div { flex: 1; min-width: 0; }
   .online-results :is(strong,small) { display: block; overflow-wrap: anywhere; }
   .online-results strong { font-size: 13px; }

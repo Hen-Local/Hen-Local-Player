@@ -100,6 +100,13 @@ pub struct Timeline {
 impl Timeline {
     pub fn load(track: PathBuf, s: &Settings, id: &str) -> Result<Self> {
         std::fs::create_dir_all(&track)?;
+        // Finish an interrupted deletion before the legacy cache loader can
+        // restore an old model's transcript or resume from its speech regions.
+        let deleting = track.join("subtitles.deleting");
+        let finish_deletion = deleting.try_exists()?;
+        if finish_deletion {
+            store::remove_generated_subtitles(&track)?;
+        }
         let segments = store::read::<Segments>(&track.join("segments.json"));
         let hash = crate::vad::params_hash(&hlp_models::vad_path()).unwrap_or_else(|_| {
             segments
@@ -193,6 +200,9 @@ impl Timeline {
         }
         t.vote();
         t.rebuild_keys();
+        if finish_deletion {
+            std::fs::remove_file(deleting)?;
+        }
         Ok(t)
     }
     pub fn set_target(&mut self, target: &str, context: bool) -> Result<()> {
@@ -466,7 +476,12 @@ impl Timeline {
         u.status == UttStatus::Done && self.applicable(u) && self.current_entry(u).is_none()
     }
     pub fn translation_failed(&self, u: &Utterance) -> bool {
-        self.applicable(u) && self.current_entry(u).is_some_and(|item| item.failed)
+        u.status == UttStatus::Done
+            && self.applicable(u)
+            && self.current_entry(u).is_some_and(|item| item.failed)
+    }
+    pub fn retry_failed_translations(&mut self) {
+        self.translations.items.retain(|_, item| !item.failed);
     }
     fn asr_rtf(&self) -> f32 {
         if self.asr_ms == 0 {
@@ -651,6 +666,7 @@ impl Timeline {
             spans.push([u.start_ms, u.end_ms]);
         }
         let (mut done, mut silent, mut failed, mut translated) = (0, 0, 0, 0);
+        let mut translation_failed = 0;
         let (mut asr, mut tr) = (vec![], vec![]);
         for u in self.rows.values() {
             match u.status {
@@ -663,7 +679,7 @@ impl Timeline {
                 match self.current_entry(u) {
                     Some(item) if !item.failed => translated += 1,
                     None => append(&mut tr, u),
-                    _ => {}
+                    Some(_) => translation_failed += 1,
                 }
             }
         }
@@ -683,6 +699,7 @@ impl Timeline {
             utt_no_speech: silent,
             utt_failed: failed,
             translated_count: translated,
+            translation_failed,
             asr_pending_spans: asr,
             tr_pending_spans: tr.clone(),
             asr_rtf: rtf,
@@ -714,6 +731,57 @@ mod tests {
             forced_language: None,
             asr_model: Some("qwen3-asr-1.7b".into()),
         }
+    }
+
+    #[test]
+    fn rejected_translation_does_not_block_other_lines_or_repeat_good_work() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let s = Settings {
+            target_language: "zh".into(),
+            source_language: "auto-per-line".into(),
+            ..Settings::default()
+        };
+        let mut t = Timeline::load(dir.path().join("track"), &s, "test")?;
+        let rows = [utterance(0, "en"), utterance(1, "en"), utterance(2, "en")];
+        for u in &rows {
+            t.rows.insert(u.id.clone(), u.clone());
+            t.refresh_keys_from(&u.id);
+        }
+        for (u, failed) in [(&rows[0], true), (&rows[1], false)] {
+            let (source_hash, context_hash) = t.translation_keys[&u.id].clone();
+            t.translations.items.insert(
+                u.id.clone(),
+                store::Translation {
+                    source_hash,
+                    context_hash: Some(context_hash),
+                    source_language: Some("en".into()),
+                    text: if failed {
+                        String::new()
+                    } else {
+                        "已翻译".into()
+                    },
+                    aligned_phrases: Vec::new(),
+                    failed,
+                },
+            );
+        }
+        let s1 = t.status("processing");
+        assert_eq!(
+            (
+                s1.utt_done,
+                s1.utt_failed,
+                s1.translation_failed,
+                s1.translated_count
+            ),
+            (3, 0, 1, 1)
+        );
+        assert_eq!(t.pick(true, 0, &s).unwrap().id, rows[2].id);
+        t.retry_failed_translations();
+        assert!(t.tr_needed(&rows[0]));
+        assert!(!t.tr_needed(&rows[1]));
+        assert!(t.pick(false, 0, &s).is_none());
+        assert_eq!(t.status("processing").translation_failed, 0);
+        Ok(())
     }
 
     #[test]
@@ -776,6 +844,58 @@ mod tests {
         assert_eq!(t.rows.values().next().unwrap().status, UttStatus::Pending);
         assert!(t.language.detected.is_none());
         assert!(t.cues()[0].stale);
+    }
+
+    #[test]
+    fn interrupted_deletion_clears_all_generated_text_from_only_the_selected_track() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let track = dir.path().join("track-0");
+        let other = dir.path().join("track-1");
+        let settings = Settings {
+            target_language: "en".into(),
+            ..Settings::default()
+        };
+        let mut t = Timeline::load(track.clone(), &settings, "test")?;
+        let u = utterance(0, "ja");
+        t.rows.insert(u.id.clone(), u);
+        t.persist()?;
+        for name in [
+            "generate.requested",
+            "transcript.qwen3-asr-0.6b.json",
+            "translations/zh.context.json",
+            "translations/fr.json",
+            "audio.pcm",
+            "playback.json",
+            "translations/export.srt",
+        ] {
+            store::atomic_write(&track.join(name), b"saved")?;
+        }
+        store::atomic_write(&other.join("transcript.json"), b"other track")?;
+
+        // The process died after recording the intent and removing one file.
+        store::atomic_write(&track.join("subtitles.deleting"), b"1")?;
+        std::fs::remove_file(track.join("transcript.json"))?;
+        let mut reopened = Timeline::load(track.clone(), &settings, "reopen")?;
+        assert!(reopened.cues().is_empty());
+        assert!(reopened.rows.is_empty() && !reopened.vad_complete);
+        for name in [
+            "generate.requested",
+            "subtitles.deleting",
+            "segments.json",
+            "transcript.qwen3-asr-0.6b.json",
+            "translations/zh.context.json",
+            "translations/fr.json",
+        ] {
+            assert!(!track.join(name).exists(), "{name}");
+        }
+        for name in ["audio.pcm", "playback.json", "translations/export.srt"] {
+            assert_eq!(std::fs::read(track.join(name))?, b"saved");
+        }
+        assert_eq!(
+            std::fs::read(other.join("transcript.json"))?,
+            b"other track"
+        );
+        Ok(())
     }
 
     #[test]

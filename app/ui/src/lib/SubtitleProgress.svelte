@@ -5,11 +5,11 @@
   let status = $derived(p.startingTranscription && p.status?.stage === 'complete' ? null : p.status)
   let stage = $derived(status?.stage)
   let paused = $derived(cached || stage === 'paused')
-  let failed = $derived(stage === 'error' || !!p.subtitleError)
+  let failed = $derived(stage === 'error')
   let audio = $derived(status?.vadComplete ? 100 : percent(status?.extractedUntilMs ?? 0, p.duration))
   let transcribed = $derived(Math.round(p.progress * 100))
-  let translated = $derived(status?.trPendingSpans.length
-    ? percent(status.translatedCount + status.uttNoSpeech, status.uttTotal) : transcribed)
+  let translated = $derived(status && (status.trPendingSpans.length || status.translationFailed)
+    ? Math.min(99, percent(status.translatedCount + status.uttNoSpeech, status.uttTotal)) : transcribed)
   let translate = $derived(p.settings.targetLanguage !== 'none')
   let progress = $derived(status?.uttTotal ? Math.min(audio, transcribed, translate ? translated : 100) : undefined)
 
