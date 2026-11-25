@@ -10,6 +10,8 @@ A checked item has been exercised. Worktree branches and tags are local until pu
 - Before public distribution, verified a complete private Git bundle and all four 0.1.0 release assets. Preserved the 64 historical commits, their authors, dates and subjects while excluding the old Apple system voice recording and a screenshot of third-party footage. Ran a redacted credential scan of the Git history.
 - In the native Model Setup window, a clean model directory reported 3.61 GB for the recommended components. An installation with verified default models reported 0 KB. Confirmed the localized Chinese and English states with Automatic selected and the bundled FFmpeg available on first launch.
 
+Apple accepted the 0.1.1 app and DMG for notarization. `xcrun stapler validate` succeeded for both, and `spctl --assess` accepted the mounted app and signed disk image. The read-only mounted image contained version 0.1.1 and its demo and NOTICE matched the source tree. The DMG is 103,433,470 bytes with SHA-256 `0ed5ce140ff1ff4fc8168300e617f9d2e28d848b6e72db45038342b9e8aba943`.
+
 ## GitHub release v0.1.0 for Apple Silicon
 
 The privately archived v0.1.0 release packaged the macOS 14+ Apple Silicon player. Its four assets are the notarized DMG, the signed update archive, its detached signature and the update manifest.

@@ -1,0 +1,2 @@
+# Export tests compare these text fixtures byte for byte.
+/crates/hlp-core/tests/golden/* text eol=lf
