@@ -2,6 +2,10 @@
 
 A checked item has been exercised. Worktree branches and tags are local until publication is requested.
 
+## README screenshots
+
+The homepage shows bilingual playback, the subtitle list and synchronized audio text using the bundled Japanese sample. The [player guide](PLAYER.md) and [development guide](DEVELOPMENT.md) hold the longer instructions. `git diff --check` passed, all three WebP images decoded, and all relative links in the homepage and guides resolved.
+
 ## Free open-source Apple Silicon release 0.1.1
 
 - `python3 scripts/version.py check` returned `0.1.1`. `cargo fmt --all --check`, `cargo test --locked --offline --workspace`, the frontend production build and `npm --prefix app/ui run check` passed. `actionlint .github/workflows/*.yml` passed. Release tests check stable GitHub versions and platform-specific signed assets.

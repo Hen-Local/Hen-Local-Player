@@ -9,7 +9,7 @@
 
 ## Release credentials
 
-Store the following values as GitHub Actions secrets when using the hosted release workflow. Local releases can use the existing notarization Keychain profile and local update key as described in the README.
+Store the following values as GitHub Actions secrets when using the hosted release workflow. Local releases can use the existing notarization Keychain profile and local update key as described in the [development guide](../DEVELOPMENT.md#package-and-release).
 
 | Secret | Value |
 | --- | --- |
