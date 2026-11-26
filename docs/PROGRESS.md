@@ -6,6 +6,8 @@ A checked item has been exercised. Worktree branches and tags are local until pu
 
 - `python3 scripts/version.py check` returned 1.0.0. `cargo test --workspace --locked --offline --release` passed 86 tests, with 10 opt-in tests skipped. The production frontend built and `npm --prefix app/ui run check` passed all 334 messages in each of the 30 interface languages.
 - `node /tmp/hen-about-page-check/check.cjs WebKit` and the Chrome run opened Settings from the home screen and checked General, Processing, Storage and About in order. On English and Chinese layouts, activating the About link from the keyboard opened the project URL and left the player on its original page.
+- `bash scripts/build_macos_app.sh --updater` built the Apple silicon release. Apple notarized both the app and the DMG. On a read-only mount, `xcrun stapler validate` and `spctl --assess` accepted both, and `codesign --verify --deep --strict` passed on the mounted app bundle. [Release commit checks on macOS and Windows](https://github.com/Hen-Local/Hen-Local-Player/actions/runs/45745110669)
+- After publication, an anonymous download of each of the four assets matched the local release by size and SHA-256. The DMG digest is `4b403b43765c47179402cf7cbfa66d68aa78b4b79665cab1d151228880c72096`. The 0.1.1 update feed returned 1.0.0, and `minisign -Vm` verified the downloaded update archive with the public key from tag `v0.1.1`. [GitHub release](https://github.com/Hen-Local/Hen-Local-Player/releases/tag/v1.0.0)
 
 ## Moving the player with side panels open · local 0.2.1
 
