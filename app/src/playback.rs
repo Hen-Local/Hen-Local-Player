@@ -6,7 +6,7 @@ use std::{
     process::{Command, Stdio},
     sync::LazyLock,
 };
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 
 static MEDIA_FORMATS: LazyLock<Vec<String>> = LazyLock::new(|| {
@@ -53,6 +53,53 @@ pub struct FolderMedia {
     files: Vec<PathBuf>,
 }
 
+#[cfg(target_os = "macos")]
+#[derive(Serialize)]
+#[serde(untagged)]
+pub enum MediaSource {
+    File(PathBuf),
+    Folder(FolderMedia),
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub async fn choose_media_sources(
+    window: tauri::Window,
+    title: String,
+) -> Result<Vec<MediaSource>, String> {
+    let Some(selected) = rfd::AsyncFileDialog::new()
+        .set_parent(&window)
+        .set_title(title)
+        .set_can_create_directories(false)
+        .pick_files_or_folders()
+        .await
+    else {
+        return Ok(Vec::new());
+    };
+    tauri::async_runtime::spawn_blocking(move || -> Result<_> {
+        let mut sources = Vec::new();
+        for file in selected {
+            let path = file.path().to_owned();
+            if path.is_dir() {
+                let files = folder_files(&path)?;
+                if !files.is_empty() {
+                    sources.push(MediaSource::Folder(FolderMedia {
+                        folder: path,
+                        files,
+                    }));
+                }
+            } else {
+                sources.push(MediaSource::File(path));
+            }
+        }
+        anyhow::ensure!(!sources.is_empty(), "emptyMediaFolder");
+        Ok(sources)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+    .map_err(|e| format!("{e:#}"))
+}
+
 fn siblings(source: &Path) -> Result<FolderMedia> {
     let folder = source.parent().context("Media has no folder")?;
     let mut files = folder_files(folder)?;
@@ -87,6 +134,26 @@ fn siblings(source: &Path) -> Result<FolderMedia> {
     })
 }
 
+fn modified_ms(path: &Path) -> Option<i64> {
+    let modified = path.metadata().ok()?.modified().ok()?;
+    match modified.duration_since(std::time::UNIX_EPOCH) {
+        Ok(after) => i64::try_from(after.as_millis()).ok(),
+        Err(before) => i64::try_from(before.duration().as_millis())
+            .ok()?
+            .checked_neg(),
+    }
+}
+
+#[tauri::command]
+pub async fn playlist_file_times(paths: Vec<PathBuf>) -> Result<Vec<Option<i64>>, String> {
+    // One background request serves the whole queue, including mixed folders.
+    tauri::async_runtime::spawn_blocking(move || {
+        paths.iter().map(|path| modified_ms(path)).collect()
+    })
+    .await
+    .map_err(|error| error.to_string())
+}
+
 #[tauri::command]
 pub async fn list_media_siblings(
     state: State<'_, Desktop>,
@@ -106,32 +173,13 @@ pub async fn list_media_siblings(
 }
 
 #[tauri::command]
-pub fn get_sample_media(app: AppHandle) -> Option<PathBuf> {
-    let resource = app.path().resource_dir().ok()?.join("demo/demo.mp4");
-    if resource.is_file() {
-        return Some(resource);
-    }
-    #[cfg(debug_assertions)]
-    {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("ui/public/demo/demo.mp4");
-        if path.is_file() {
-            return Some(path);
-        }
-    }
-    None
-}
-
-#[tauri::command]
-pub async fn choose_media_folder(app: AppHandle) -> Result<Vec<PathBuf>, String> {
+pub async fn choose_media_folder(app: AppHandle, title: String) -> Result<Vec<PathBuf>, String> {
     tauri::async_runtime::spawn_blocking(move || -> Result<_> {
-        let Some(folder) = app.dialog().file().blocking_pick_folder() else {
+        let Some(folder) = app.dialog().file().set_title(title).blocking_pick_folder() else {
             return Ok(Vec::new());
         };
         let files = folder_files(&folder.into_path()?)?;
-        anyhow::ensure!(
-            !files.is_empty(),
-            "No playable files were found in this folder."
-        );
+        anyhow::ensure!(!files.is_empty(), "emptyMediaFolder");
         Ok(files)
     })
     .await
@@ -230,6 +278,29 @@ pub async fn list_chapters(
 mod tests {
     use super::*;
     use std::fs;
+
+    #[tokio::test]
+    async fn playlist_dates_preserve_order_and_keep_unavailable_files() {
+        use std::time::{Duration, UNIX_EPOCH};
+
+        let dir = std::env::temp_dir().join(format!("hlp-playlist-dates-{}", std::process::id()));
+        fs::create_dir(&dir).unwrap();
+        let paths: Vec<_> = ["latest.mp4", "absent.m4a", "earliest.mp3"]
+            .map(|name| dir.join(name))
+            .into();
+        for (file, seconds) in [(&paths[0], 1_600_000_004), (&paths[2], 1_600_000_002)] {
+            fs::File::create(file)
+                .unwrap()
+                .set_modified(UNIX_EPOCH + Duration::from_secs(seconds))
+                .unwrap();
+        }
+        let times = playlist_file_times(paths).await.unwrap();
+        assert_eq!(
+            times,
+            [Some(1_600_000_004_000), None, Some(1_600_000_002_000)]
+        );
+        fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn sibling_playlist_lists_playable_neighbors_and_keeps_the_open_file() {

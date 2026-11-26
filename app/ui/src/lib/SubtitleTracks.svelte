@@ -1,29 +1,11 @@
 <script lang="ts">
+  import SelectField from './SelectField.svelte'
   import { untrack } from 'svelte'
   import { player as p } from './stores.svelte'
   import type { EmbeddedTrack } from './backend'
   import Icon from './Icon.svelte'
   import { subtitleTracks as tracks } from './subtitle-tracks.svelte'
 
-  const labels = {
-    en: {
-      track: 'Subtitle Track',
-      generated: 'Generated Subtitles',
-      embedded: 'Embedded',
-      file: 'Subtitle Files',
-      nearby: 'Next to This File',
-      loading: 'Reading subtitles…',
-    },
-    zh: {
-      track: '字幕轨道',
-      generated: '自动生成的字幕',
-      embedded: '内嵌字幕',
-      file: '字幕文件',
-      nearby: '同目录字幕',
-      loading: '正在读取字幕…',
-    },
-  }
-  const copy = $derived(labels[p.locale])
   const names = $derived(new Intl.DisplayNames([p.locale], { type: 'language' }))
   function trackLabel(track: EmbeddedTrack) {
     let language = track.language
@@ -35,7 +17,7 @@
       }
     }
     return [
-      track.title || language || copy.track + ' ' + (track.order + 1),
+      track.title || language || p.t('subtitleTrack') + ' ' + (track.order + 1),
       track.title && language,
     ]
       .filter(Boolean)
@@ -51,10 +33,10 @@
 
 <div class="subtitle-track-tools track-picker">
   <label class="track-field">
-    <span>{copy.track}</span>
-    <span class="select-box">
+    <span>{p.t('subtitleTrack')}</span>
+    <SelectField>
       <select
-        aria-label={copy.track}
+        aria-label={p.t('subtitleTrack')}
         disabled={!p.media}
         value={tracks.selected === 'generated' && p.settings.subtitleMode === 'off'
           ? 'off'
@@ -70,24 +52,23 @@
         }}
       >
         <option value="off">{p.t('off')}</option>
-        <option value="generated">{copy.generated}</option>
-        {#if tracks.embedded.length}<optgroup label={copy.embedded}>
+        <option value="generated">{p.t('generatedSubtitles')}</option>
+        {#if tracks.embedded.length}<optgroup label={p.t('embeddedTracks')}>
             {#each tracks.embedded as track (track.order)}
               <option value={'embedded:' + track.order}>{trackLabel(track)}</option>
             {/each}
           </optgroup>{/if}
-        {#if tracks.sidecars.length}<optgroup label={copy.nearby}>
+        {#if tracks.sidecars.length}<optgroup label={p.t('nearbySubtitles')}>
             {#each tracks.sidecars as name (name)}<option value={'sidecar:' + name}>{name}</option
               >{/each}
           </optgroup>{/if}
-        {#if tracks.files.length}<optgroup label={copy.file}>
+        {#if tracks.files.length}<optgroup label={p.t('subtitleFiles')}>
             {#each tracks.files as file (file.id)}
               <option value={file.id}>{file.name}</option>
             {/each}
           </optgroup>{/if}
       </select>
-      <Icon name="down" size={13} />
-    </span>
+    </SelectField>
   </label>
   <div class="track-sources">
     <button class="import-subtitle" aria-label={p.t('openSubtitleFile')} title={p.t('subtitleFileTypes')}
@@ -105,5 +86,5 @@
   {/if}
 </div>
 {#if tracks.loading || tracks.discovering}<small class="read-status" role="status"
-    >{copy.loading}</small
+    >{p.t('readingSubtitles')}</small
   >{/if}

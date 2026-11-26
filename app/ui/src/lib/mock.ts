@@ -1,40 +1,16 @@
 import type { Backend, Commands, Events } from './backend'
 import type {
   ComponentStatus,
-  Cue,
   MediaOpened,
   RecentItem,
   Settings,
-  SubtitleVariant,
-  SubtitleFormat,
 } from './types'
 import { defaults } from './defaults'
+import { loadMessages, resolveUiLanguage } from './i18n'
 import { readSubtitleFile } from './subtitle-tracks'
-import { languages } from './languages'
 import mediaExtensions from '../../../media-formats.json'
 import { version } from '../../package.json'
 
-const demoPath = 'fixture_ja.mp4'
-const sample = [
-  [500, 2750, '今日はとてもいい天気です', 'The weather is lovely today', '今天的天气很好'],
-  [
-    4056,
-    6300,
-    '駅の前で友達と会いました',
-    'I met a friend outside the station',
-    '我在车站前见到了朋友',
-  ],
-  [7767, 10300, '私たちは公園まで歩きました', 'We walked to the park', '我们步行去了公园'],
-  [11866, 14100, '小さな子供が遊んでいます', 'A little child is playing', '一个小孩正在玩耍'],
-  [15499, 17600, '夕方には家に帰ります', 'I will go home this evening', '傍晚我会回家'],
-  [
-    19072,
-    21000,
-    '明日もここに来たいです',
-    'I would like to come back tomorrow',
-    '明天我还想来这里',
-  ],
-] as const
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 function stored<T>(key: string, fallback: T): T {
   try {
@@ -65,18 +41,14 @@ export class MockBackend implements Backend {
   async version() { return version }
   private events = new EventTarget()
   private settings = { ...defaults(), ...stored<Partial<Settings>>('settings', {}) }
-  private recent = stored<RecentItem[]>('recent', [])
+  // Browser file grants and their object URLs last for this page session only.
+  private recent: RecentItem[] = []
   private sources = new Map<string, string>()
-  private cueCache = new Map<string, Cue[]>(stored<[string, Cue[]][]>('samples', []))
+  private modifiedTimes = new Map<string, number>()
   private companions = new Map<string, File[]>()
-  private generating = false
-  private playhead = 0
-  private visibleCues = new Map<string, Cue>()
   private current: MediaOpened | null = null
-  private timer = 0
   private generation = 0
   private setupRun = 0
-  private downloadRun = 0
   private components: ComponentStatus[] = initialComponents.map(([id, bytesTotal, ready]) => ({
     id,
     bytesTotal,
@@ -104,6 +76,7 @@ export class MockBackend implements Backend {
     const old = this.sources.get(path)
     if (old) URL.revokeObjectURL(old)
     this.sources.set(path, URL.createObjectURL(file))
+    this.modifiedTimes.set(path, file.lastModified)
     return path
   }
   private mediaPaths(selection: FileList | null, directory = false) {
@@ -137,14 +110,16 @@ export class MockBackend implements Backend {
     })
   }
   openFiles(directory = false): Promise<string[]> {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const input = document.createElement('input')
       input.type = 'file'
       input.multiple = true
       input.accept = ['video/*', 'audio/*', ...mediaExtensions.map((ext) => '.' + ext)].join(',')
       if (directory && 'webkitdirectory' in input) input.webkitdirectory = true
       input.onchange = () => {
-        resolve(this.mediaPaths(input.files, directory))
+        const paths = this.mediaPaths(input.files, directory)
+        if (directory && input.files?.length && !paths.length) reject(new Error('emptyMediaFolder'))
+        else resolve(paths)
       }
       input.oncancel = () => resolve([])
       input.click()
@@ -177,128 +152,7 @@ export class MockBackend implements Backend {
       await document.documentElement.requestFullscreen().catch(() => {})
     } else if (!enabled && document.fullscreenElement) await document.exitFullscreen()
   }
-  private cues(target: string, duration = this.current?.durationMs ?? 22500): Cue[] {
-    return Array.from({ length: Math.ceil(duration / 22500) }, (_, loop) =>
-      sample.flatMap(([begin, end, original, en, zh], i) => {
-        const startMs = loop * 22500 + begin
-        if (startMs >= duration) return []
-        const id = 'u' + (loop * sample.length + i)
-        return [
-          {
-            id: id + '-0',
-            utteranceId: id,
-            startMs,
-            endMs: Math.min(duration, loop * 22500 + end),
-            original,
-            translation:
-              target === 'none' || target === 'ja'
-                ? null
-                : target.startsWith('zh')
-                  ? zh
-                  : target === 'en'
-                    ? en
-                    : null,
-            lang: this.settings.sourceLanguage.startsWith('auto')
-              ? 'ja'
-              : this.settings.sourceLanguage,
-            stale: false,
-          },
-        ]
-      }),
-    ).flat()
-  }
-  // Only completed sample runs are cached. Rebuild their fixed display text
-  // when reading an older preview cache, just as the desktop rebuilds cues.
-  private cachedCues(path: string, duration = this.current?.durationMs) {
-    const key = JSON.stringify([path, this.settings.sourceLanguage, this.settings.targetLanguage])
-    if (this.cueCache.has(key)) return this.cues(this.settings.targetLanguage, duration)
-  }
-  private saveSampleCache() {
-    persist('samples', [...this.cueCache].filter(([k]) => JSON.parse(k)[0] === demoPath))
-  }
-  private clearGeneratedCues(sessionId: string, sourceLanguage?: string) {
-    this.emit('pipeline://cues', { sessionId, removedIds: [...this.visibleCues.keys()], upserts: [] })
-    this.visibleCues.clear()
-    for (const key of this.cueCache.keys()) {
-      const [path, source] = JSON.parse(key)
-      if (path === this.currentPath && (sourceLanguage === undefined || sourceLanguage === source))
-        this.cueCache.delete(key)
-    }
-    if (this.currentPath === demoPath) this.saveSampleCache()
-  }
-  private stream(path: string, restored: Cue[] = []) {
-    const session = this.current
-    if (!session) return
-    const key = JSON.stringify([path, this.settings.sourceLanguage, this.settings.targetLanguage])
-    const all = this.cues(this.settings.targetLanguage)
-    this.visibleCues = new Map(restored.map((c) => [c.id, c]))
-    const doneIds = new Set(restored.filter((c) => !c.stale).map((c) => c.id))
-    const step = () => {
-      if (session !== this.current) return
-      const priority = (cue: Cue) =>
-        cue.endMs >= this.playhead
-          ? Math.max(0, cue.startMs - this.playhead)
-          : 1e9 + this.playhead - cue.startMs
-      const pending = all.filter((c) => !doneIds.has(c.id))
-      const next = pending
-        .filter(
-          (c) =>
-            this.settings.processWholeFile ||
-            (c.endMs >= this.playhead - 2000 &&
-              c.startMs <= this.playhead + this.settings.lookaheadSeconds * 1000),
-        )
-        .sort((a, b) => priority(a) - priority(b))[0]
-      if (next) {
-        doneIds.add(next.id)
-        this.visibleCues.set(next.id, next)
-        this.emit('pipeline://cues', {
-          sessionId: session.sessionId,
-          upserts: [next],
-          removedIds: [],
-        })
-      }
-      const done = doneIds.size === all.length,
-        spans = pending
-          .filter((c) => c !== next)
-          .map((c) => [c.startMs, c.endMs] as [number, number])
-      this.emit('pipeline://status', {
-        sessionId: session.sessionId,
-        stage: done ? 'complete' : next ? 'processing' : 'paused',
-        extractedUntilMs: session.durationMs,
-        vadComplete: true,
-        uttTotal: all.length,
-        uttDone: doneIds.size,
-        uttNoSpeech: 0,
-        uttFailed: 0,
-        translationFailed: 0,
-        translatedCount: [...this.visibleCues.values()].filter((c) => c.translation).length,
-        asrPendingSpans: spans,
-        trPendingSpans: this.settings.targetLanguage === 'none' ? [] : spans,
-        asrRtf: 24.2,
-        msPerTranslation: 180,
-        etaSeconds: done ? 0 : all.length - doneIds.size,
-      })
-      if (done) {
-        this.cueCache.set(key, all)
-        if (path === demoPath) this.saveSampleCache()
-        clearInterval(this.timer)
-        const recent = this.recent.find((r) => r.path === path)
-        if (recent) {
-          recent.progress = 1
-          persist(
-            'recent',
-            this.recent.filter((r) => r.path === demoPath),
-          )
-        }
-      }
-    }
-    clearInterval(this.timer)
-    this.timer = window.setInterval(step, 600)
-    step()
-  }
-  private async duration(path: string) {
-    const src = this.sources.get(path)
-    if (!src) return 22500
+  private async duration(src: string) {
     return new Promise<number>((resolve) => {
       const video = document.createElement('video')
       let timer = 0
@@ -310,72 +164,42 @@ export class MockBackend implements Backend {
         video.load()
         resolve(value)
       }
-      timer = window.setTimeout(() => finish(22500), 1500)
+      timer = window.setTimeout(() => finish(0), 1500)
       video.preload = 'metadata'
       video.onloadedmetadata = () =>
-        finish(Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : 22500)
-      video.onerror = () => finish(22500)
+        finish(Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : 0)
+      video.onerror = () => finish(0)
       video.src = src
     })
   }
-  private currentPath = ''
   private async open(path: string) {
+    const mediaUrl = this.sources.get(path)
+    if (!mediaUrl) throw Error('browserUnsupported')
     const turn = ++this.generation
-    this.generating = false
-    clearInterval(this.timer)
-    this.currentPath = path
-    this.playhead = 0
-    const durationMs = await this.duration(path)
+    const durationMs = await this.duration(mediaUrl)
     if (turn !== this.generation) return
-    const title = path.split(/[\\/]/).at(-1) || demoPath
-    const plan = this.sources.has(path)
-      ? 'direct'
-      : /\.mkv$/i.test(title)
-        ? 'remux'
-        : /\.avi$/i.test(title)
-          ? 'transcode'
-          : 'direct'
-    const cached = this.cachedCues(path, durationMs) ?? []
+    const title = path.split('/').at(-1) || path
     const sessionId = String(turn)
     const info: MediaOpened = {
       sessionId,
       sourcePath: path,
       title,
-      mediaUrl: plan === 'direct' ? this.sources.get(path) || '/demo/demo.mp4' : null,
+      mediaUrl,
       durationMs,
-      plan,
+      plan: 'direct',
       language: {
         sessionId,
         mode: this.settings.sourceLanguage,
-        detected: this.settings.sourceLanguage.startsWith('auto')
-          ? 'ja'
-          : this.settings.sourceLanguage,
-        confidence: 0.96,
-        locked: true,
+        detected: null,
+        confidence: 0,
+        locked: false,
         unverifiedTranslation: false,
       },
       target: this.settings.targetLanguage,
-      audioTracks: [
-        {
-          index: 1,
-          order: 0,
-          codecName: 'aac',
-          channels: 1,
-          channelLayout: 'mono',
-          sampleRate: 16000,
-          languageTag: 'ja',
-          default: true,
-        },
-      ],
-      cues: cached,
-    }
-    if (this.sources.has(path)) {
-      info.language = { ...info.language, detected: null, confidence: 0, locked: false }
-      info.audioTracks = []
-      this.visibleCues.clear()
+      audioTracks: [],
+      cues: [],
     }
     this.current = info
-    this.visibleCues = new Map(cached.map((c) => [c.id, c]))
     this.recent = [
       {
         path,
@@ -383,33 +207,12 @@ export class MockBackend implements Backend {
         fingerprint: title,
         durationMs: info.durationMs,
         lastOpened: Date.now(),
-        progress: cached.length ? 1 : 0,
+        progress: 0,
       },
       ...this.recent.filter((r) => r.path !== path),
     ].slice(0, 20)
-    persist(
-      'recent',
-      this.recent.filter((r) => r.path === demoPath),
-    )
     this.emit('media://opened', info)
     this.emit('pipeline://language', info.language)
-    if (this.sources.has(path)) return
-    if (cached.length) {
-      this.generating = true
-      this.stream(path, cached)
-    }
-    if (plan !== 'direct')
-      for (const progress of [0.2, 0.6, 1]) {
-        await wait(400)
-        if (turn !== this.generation) return
-        this.emit('media://prep', {
-          sessionId,
-          plan,
-          progress,
-          mediaUrl: progress === 1 ? '/demo/demo.mp4' : null,
-          error: null,
-        })
-      }
   }
   private async setup(ids: string[]) {
     const run = ++this.setupRun
@@ -427,13 +230,11 @@ export class MockBackend implements Backend {
     }
   }
   async call<K extends keyof Commands>(command: K, args?: Commands[K][0]): Promise<Reply<K>> {
-    // The switch implements the strongly typed desktop command map using browser fixtures.
     const a: Commands[keyof Commands][0] = args
     let reply: unknown
     switch (command) {
-      case 'set_playhead':
-        if (a && 'sessionId' in a && 'ms' in a && a.sessionId === this.current?.sessionId)
-          this.playhead = a.ms
+      case 'system_accent_color':
+        reply = '#007aff'
         break
       case 'get_settings':
         reply = { ...this.settings }
@@ -449,21 +250,18 @@ export class MockBackend implements Backend {
       case 'search_online_subtitles':
       case 'download_online_subtitle':
         throw Error('desktop_only')
-      case 'get_sample_media':
-        reply = demoPath
-        break
       case 'list_chapters':
         reply = []
         break
       case 'close_media':
         this.generation++
-        clearInterval(this.timer)
         this.current = null
-        this.currentPath = ''
-        this.visibleCues.clear()
         break
       case 'open_media':
         if (a && 'path' in a) await this.open(a.path)
+        break
+      case 'playlist_file_times':
+        if (a && 'paths' in a) reply = a.paths.map(path => this.modifiedTimes.get(path) ?? null)
         break
       case 'list_media_siblings':
         // A browser file picker grants access to selected files only.
@@ -474,70 +272,11 @@ export class MockBackend implements Backend {
         if (a && 'modeOrCode' in a) this.settings.sourceLanguage = a.modeOrCode
         if (a && 'code' in a && typeof a.code === 'string') this.settings.targetLanguage = a.code
         persist('settings', this.settings)
-        if (this.current && !this.sources.has(this.currentPath)) {
-          const s = this.current
-          s.target = this.settings.targetLanguage
-          s.language = {
-            ...s.language,
-            unverifiedTranslation: languages.some(
-              (l) => l.code === this.settings.sourceLanguage && !l.target,
-            ),
-            mode: this.settings.sourceLanguage,
-            detected: this.settings.sourceLanguage.startsWith('auto')
-              ? 'ja'
-              : this.settings.sourceLanguage,
-          }
-          this.emit('pipeline://language', s.language)
-          const cached = this.cachedCues(this.currentPath)
-          this.emit('pipeline://cues', {
-            sessionId: s.sessionId,
-            removedIds: [],
-            upserts:
-              cached ??
-              [...this.visibleCues.values()].map((c) => ({
-                ...c,
-                translation: null,
-                stale: command === 'set_source_language',
-              })),
-          })
-          if (this.generating) this.stream(this.currentPath, cached)
-        }
         break
       }
       case 'probe_url':
-        if (a && 'url' in a) {
-          const url = new URL(a.url)
-          if (!['http:', 'https:'].includes(url.protocol)) throw Error('HTTP or HTTPS required')
-          await wait(260)
-          reply = {
-            id: 'demo',
-            title: 'Japanese sample',
-            duration: 22.5,
-            extractor: url.hostname,
-            thumbnail: null,
-            isLive: false,
-          }
-        }
-        break
-      case 'download_url': {
-        const run = ++this.downloadRun
-        for (let i = 1; i <= 12; i++) {
-          await wait(160)
-          if (run !== this.downloadRun) return undefined as Reply<K>
-          this.emit('download://progress', {
-            part: i > 6 ? 2 : 1,
-            parts: 2,
-            downloaded: ((i - 1) % 6) * 200000 + 200000,
-            total: 1200000,
-            eta: Math.ceil((12 - i) * 0.16),
-          })
-        }
-        await this.open(demoPath)
-        break
-      }
-      case 'cancel_download':
-        this.downloadRun++
-        break
+      case 'download_url':
+        throw Error('browserUnsupported')
       case 'get_setup_status':
         reply = structuredClone(this.components)
         break
@@ -564,10 +303,6 @@ export class MockBackend implements Backend {
       case 'update_ytdlp':
         await this.setup(['yt-dlp'])
         break
-      case 'clear_cache':
-        this.cueCache.clear()
-        persist('samples', [])
-        break
       case 'app_info':
         reply = { version, logDir: 'logs', cacheBytes: 0 }
         break
@@ -581,24 +316,17 @@ export class MockBackend implements Backend {
       case 'install_app_release':
         throw Error('Application updates are available in the desktop app.')
       case 'suggest_export_paths':
-        if (a && 'variant' in a) reply = this.filename(a.variant, a.format)
-        break
       case 'export_subtitles':
-        if (a && 'variant' in a && 'path' in a) this.exportSample(a.variant, a.format, a.path)
-        break
+      case 'start_transcription':
+      case 'retry_failed':
+      case 'delete_generated_subtitles': {
+        const locale = resolveUiLanguage(this.settings.uiLanguage, navigator.languages)
+        throw Error((await loadMessages(locale)).transcribeDesktop)
+      }
       case 'list_subtitle_tracks': {
         if (!a || !('sessionId' in a) || a.sessionId !== this.current?.sessionId)
-          throw Error('Media changed')
-        if (this.currentPath === demoPath) {
-          reply = {
-            embedded: [],
-            sidecars: ['demo.srt'],
-            exactSidecar: 'demo.srt',
-            probeFailed: false,
-          }
-          break
-        }
-        const sidecars = (this.companions.get(this.currentPath) ?? []).map((f) => f.name)
+          throw Error('mediaChanged')
+        const sidecars = (this.companions.get(this.current.sourcePath ?? '') ?? []).map((f) => f.name)
         const title = this.current.title.replace(/\.[^.]+$/, '')
         reply = {
           embedded: [],
@@ -610,149 +338,24 @@ export class MockBackend implements Backend {
       }
       case 'read_sidecar_subtitle': {
         if (!a || !('name' in a) || a.sessionId !== this.current?.sessionId)
-          throw Error('Media changed')
-        if (this.currentPath === demoPath && a.name === 'demo.srt') {
-          const response = await fetch('/demo/demo.srt')
-          if (!response.ok) throw Error('Sample subtitles unavailable')
-          reply = await response.text()
-          break
-        }
-        const file = this.companions.get(this.currentPath)?.find((f) => f.name === a.name)
+          throw Error('mediaChanged')
+        const file = this.companions.get(this.current.sourcePath ?? '')?.find((f) => f.name === a.name)
         if (!file) throw Error('Subtitle file unavailable')
-        reply = await readSubtitleFile(file, this.settings.uiLanguage)
+        reply = await readSubtitleFile(file)
         break
       }
       case 'read_embedded_subtitle':
         throw Error('Open this file in the desktop player for embedded tracks.')
-      case 'delete_generated_subtitles': {
-        if (!a || !('audioTrackOrder' in a) || a.sessionId !== this.current?.sessionId || a.audioTrackOrder !== 0)
-          throw Error('The media or audio track changed.')
-        clearInterval(this.timer)
-        this.generating = false
-        this.clearGeneratedCues(a.sessionId)
-        this.current.cues = []
-        const recent = this.recent.find((item) => item.path === this.currentPath)
-        if (recent) {
-          recent.progress = 0
-          persist('recent', this.recent.filter((r) => r.path === demoPath))
-        }
-        this.emit('pipeline://status', {
-          sessionId: a.sessionId, stage: 'idle', extractedUntilMs: 0, vadComplete: false,
-          uttTotal: 0, uttDone: 0, uttNoSpeech: 0, uttFailed: 0, translatedCount: 0, translationFailed: 0,
-          asrPendingSpans: [], trPendingSpans: [], asrRtf: 0, msPerTranslation: 0, etaSeconds: null,
-        })
-        break
-      }
-      case 'start_transcription': {
-        if (!a || !('sessionId' in a) || a.sessionId !== this.current?.sessionId)
-          throw Error('Media changed')
-        if (this.sources.has(this.currentPath))
-          throw Error('Open this file in the desktop player to transcribe it.')
-        const asr =
-          this.settings.asrModel === 'qwen3-asr-0.6b' ? 'asr-qwen3-0.6b-mlx' : 'asr-qwen3-1.7b-mlx'
-        const required = ['ffmpeg', asr, 'vad-silero']
-        if (
-          this.settings.targetLanguage !== 'none' &&
-          this.settings.targetLanguage !== this.current.language.detected
-        )
-          required.push('mt-hy-mt2-1.8b', 'llama-runtime-b11429')
-        const missing = required.filter(
-          (key) => !this.components.some((c) => c.id === key && c.ready),
-        )
-        reply = { missing }
-        if (!missing.length) {
-          if ('regenerate' in a && a.regenerate) {
-            if (a.audioTrackOrder !== undefined && a.audioTrackOrder !== 0)
-              throw Error('Audio track changed')
-            this.clearGeneratedCues(a.sessionId, this.settings.sourceLanguage)
-          }
-          this.generating = true
-          this.stream(this.currentPath, [...this.visibleCues.values()])
-        }
-        break
-      }
-      case 'retry_failed':
-        if (this.current && this.generating && !this.sources.has(this.currentPath))
-          this.stream(this.currentPath, [...this.visibleCues.values()])
-        break
       case 'report_playback_error':
         if (this.current)
           this.emit('app://error', {
             sessionId: this.current.sessionId,
             code: 'media',
-            message: 'This browser could not decode the media.',
+            message: 'browserUnsupported',
             recoverable: true,
           })
         break
     }
     return reply as Reply<K>
-  }
-  private filename(variant: SubtitleVariant, format: SubtitleFormat) {
-    const source = this.current?.language.detected || 'und',
-      target = this.settings.targetLanguage
-    return (
-      (this.current?.title || 'sample').replace(/\.[^.]+$/, '') +
-      '.' +
-      (variant === 'original'
-        ? source
-        : variant === 'translation'
-          ? target
-          : source + '-' + target) +
-      '.' +
-      format
-    )
-  }
-  private exportSample(variant: SubtitleVariant, format: SubtitleFormat, path: string) {
-    const stamp = (ms: number, ass = false) =>
-      new Date(ms)
-        .toISOString()
-        .slice(ass ? 12 : 11, ass ? 22 : 23)
-        .replace('.', format === 'srt' ? ',' : '.')
-    const blocks = [...this.visibleCues.values()]
-      .sort((a, b) => a.startMs - b.startMs)
-      .flatMap((c) => {
-        const parts =
-          variant === 'original'
-            ? [c.original]
-            : variant === 'translation'
-              ? [c.translation]
-              : variant.bilingual === 'translation-first'
-                ? [c.translation, c.original]
-                : [c.original, c.translation]
-        const lines = parts.filter((t): t is string => !!t)
-        return lines.length ? [{ cue: c, lines }] : []
-      })
-    const body =
-      format === 'ass'
-        ? '[Script Info]\nScriptType: v4.00+\nWrapStyle: 2\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,32,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,0,2,20,20,20,1\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n' +
-          blocks
-            .map(
-              ({ cue: c, lines }) =>
-                'Dialogue: 0,' +
-                stamp(c.startMs, true) +
-                ',' +
-                stamp(c.endMs, true) +
-                ',Default,,0,0,0,,' +
-                lines.join('\\N'),
-            )
-            .join('\n')
-        : (format === 'vtt' ? 'WEBVTT\n\n' : '') +
-          blocks
-            .map(
-              ({ cue: c, lines }, i) =>
-                (format === 'srt' ? i + 1 + '\n' : '') +
-                stamp(c.startMs) +
-                ' --> ' +
-                stamp(c.endMs) +
-                '\n' +
-                lines.join('\n'),
-            )
-            .join('\n\n')
-    const url = URL.createObjectURL(new Blob([body], { type: 'text/plain;charset=utf-8' })),
-      a = document.createElement('a')
-    a.href = url
-    a.download = path.split(/[\\/]/).at(-1) || path
-    a.click()
-    setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 }

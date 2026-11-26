@@ -2,7 +2,7 @@
 
 Hen Local Player’s original code is licensed under the Apache License, Version 2.0. The root `LICENSE` contains the terms and `NOTICE` credits Hen Local Translator code and artwork adapted for this project. Source files record the original paths. The interface uses fonts installed on the user’s system. Project names and logos are subject to the trademark provision in section 6 of the Apache License.
 
-The installer contains the player, the speech worker, native libraries and the bundled demo. Setup downloads the selected model weights and optional tools separately. Each third-party component retains its upstream terms.
+The installer contains the player, the speech worker and native libraries. Setup downloads the selected model weights and optional tools separately. Each third-party component retains its upstream terms.
 
 ## Notices included with the installer
 
@@ -11,7 +11,6 @@ On macOS, open the application package and look in `Contents/Resources/licenses`
 - `Hen-Local-Player-LICENSE.txt` and `NOTICE.txt` contain the project license and credits.
 - `Dependency-Notices.txt` identifies the locked Rust and frontend packages, their source URLs and the license texts available with the build. The versioned source links also provide the source for the MPL-2.0 components. Both platform packaging scripts generate this file using `scripts/stage_licenses.py`. Supplementary texts for packages that omit a license file from their registry archive are kept in `docs/licenses/registry`.
 - `Native-Notices.txt` includes the MLX and Metal dependencies, the native libraries linked by sherpa-onnx 2.0.3, and ONNX Runtime 1.28.2’s third-party notices. The upstream revisions are listed alongside their license texts. [sherpa-onnx build inputs](https://github.com/k2-fsa/sherpa-onnx/tree/38016c6e0622e90bf417c35e8b47e0eb805af417/cmake) · [ONNX Runtime notices](https://github.com/microsoft/onnxruntime/blob/v1.28.2/ThirdPartyNotices.txt)
-- `Mei-Voice-LICENSE.txt` credits the voice used for the Japanese narration. The six lines were synthesized, trimmed and timed to the project’s train animation. [MMDAgent](https://www.mmdagent.jp/) · [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/)
 
 ## Components
 
@@ -28,8 +27,7 @@ On macOS, open the application package and look in `Contents/Resources/licenses`
 | yt-dlp | Optional standalone executable | Source code is Unlicense. Upstream identifies the PyInstaller binaries for macOS and Windows as GPL-3.0-or-later combined works. [Distribution licenses](https://github.com/yt-dlp/yt-dlp#licensing). |
 | Deno | Optional separate process | MIT plus notices for its components. [License](https://github.com/denoland/deno/blob/main/LICENSE.md). |
 | Tauri and Svelte | Desktop shell and interface | Tauri uses MIT or Apache-2.0 and Svelte uses MIT. [Tauri](https://github.com/tauri-apps/tauri#license), [Svelte](https://github.com/sveltejs/svelte/blob/main/LICENSE.md). |
-| Hen Local icon and interface artwork | Desktop shell | Adapted from Hen Local Translator, including `hen-local-translator-shell/icons`. See the root `NOTICE`. |
-| Japanese demonstration | Bundled animation, subtitle track and narration | Project animation and subtitles. Japanese speech synthesized with HTS Voice “Mei” from the MMDAgent Project Team, © 2009–2013 Nagoya Institute of Technology, Department of Computer Science. [Voice license](https://creativecommons.org/licenses/by/3.0/). |
+| Hen Local icon and interface artwork | Desktop shell | The player icon’s three footprint shapes come from Hen Local Translator’s `hen-local-translator-shell/icons/logo-mark.png`. The player adds the play control, progress bar and glass finishes. See the root `NOTICE`. |
 | Test speech | Locally generated development fixtures | The fixture scripts can use installed system voices. These fixtures are excluded from the distribution. |
 
 ## FFmpeg builds

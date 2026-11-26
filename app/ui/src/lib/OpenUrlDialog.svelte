@@ -1,6 +1,6 @@
 <script lang="ts">
   import Dialog from './Dialog.svelte'
-  import { backend, player as p } from './stores.svelte'
+  import { backend, mockMode, player as p } from './stores.svelte'
   import { clock, size } from './format'
   import Icon from './Icon.svelte'
   import type { UrlInfo } from './types'
@@ -31,12 +31,10 @@
         if (active) p.dialog = null
       }
     } catch (e) {
-      if (active)
-        error =
-          String(e instanceof Error ? e.message : e)
-            .trim()
-            .split('\n')
-            .pop() ?? ''
+      if (active) {
+        const detail = String(e instanceof Error ? e.message : e).trim().split('\n').pop() ?? ''
+        error = detail === 'browserUnsupported' ? p.t('browserUnsupported') : detail
+      }
     } finally {
       working = null
     }
@@ -93,8 +91,7 @@
       </div>{/if}
     {#if error}<p class="form-error" role="alert">
         {error}
-        <br />
-        {p.t('urlHint')}
+        {#if !mockMode}<br />{p.t('urlHint')}{/if}
       </p>{/if}
     <div class="dialog-actions">
       <button type="button" onclick={close}>{p.t('cancel')}</button>

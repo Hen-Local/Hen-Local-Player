@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SelectField from './SelectField.svelte'
   import { onMount, tick, untrack } from 'svelte'
   import mediaExtensions from '../../../media-formats.json'
   import Dialog from './Dialog.svelte'
@@ -133,13 +134,12 @@
       <input class="search-field" type="search" bind:this={titleField} maxlength="250" required bind:value={query} oninput={resetResults} disabled={working !== null} />
     </label>
     <label>{p.t('language')}
-      <span class="select-box">
-        <select class="search-field" bind:value={language} onchange={resetResults} disabled={working !== null}>
+      <SelectField>
+        <select bind:value={language} onchange={resetResults} disabled={working !== null}>
           <option value="">{p.t('allLanguages')}</option>
           {#each languageCodes as code}<option value={code}>{languageLabel(code)}</option>{/each}
         </select>
-        <Icon name="down" size={13} />
-      </span>
+      </SelectField>
     </label>
     <div class="dialog-actions">
       <button class="primary" type="submit" disabled={!enabled}>
@@ -178,8 +178,7 @@
 <style>
   .online-search { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: end; gap: 10px; }
   .online-search > label { min-width: 0; margin: 0; }
-  .online-search .search-field { display: block; box-sizing: border-box; width: 100%; height: 36px; padding-block: 0; padding-inline-start: 11px; font: inherit; }
-  .online-search select.search-field { padding-inline-end: 30px; }
+  .online-search .search-field { display: block; box-sizing: border-box; width: 100%; height: var(--field-height, 36px); padding-block: 0; padding-inline-start: 11px; font: inherit; }
   .online-search .dialog-actions { grid-column: 1 / -1; margin: 0; }
   .online-results { margin: 14px 0 0; padding: 0; list-style: none; }
   .online-results li { display: flex; align-items: center; gap: 10px; padding: 10px 0; }

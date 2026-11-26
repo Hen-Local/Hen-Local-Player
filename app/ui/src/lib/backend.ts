@@ -1,3 +1,4 @@
+import type { Messages } from './i18n'
 import mediaExtensions from '../../../media-formats.json'
 import type { Caps, MediaOpened, PlaybackPrep, CueBatch, PipelineStatus, LanguageEvent, ComponentStatus, ErrorEvent, DownloadProgress, Settings, UrlInfo, RecentItem, SubtitleVariant, SubtitleFormat } from './types'
 import { invoke } from '@tauri-apps/api/core'
@@ -23,6 +24,7 @@ export interface AppRelease {
   version: string
   notes: string
   publishedAt: string
+  newer: boolean
   installable: boolean
 }
 export interface SubtitleInventory {
@@ -33,10 +35,12 @@ export interface SubtitleInventory {
 }
 export interface Commands {
   set_playback_capabilities: [ { caps: Caps }, void ]
+  set_video_window_aspect: [{ sessionId: string | null; width: number; height: number }, void]
   close_media: [ undefined, void ]
-  choose_media_folder: [ undefined, string[] ]
+  choose_media_folder: [{ title: string }, string[] ]
+  choose_media_sources: [{ title: string }, (string | { folder: string; files: string[] })[]]
   list_media_siblings: [{ path: string }, { folder: string; files: string[] } | null]
-  get_sample_media: [ undefined, string | null ]
+  playlist_file_times: [{ paths: string[] }, (number | null)[]]
   list_chapters: [ { sessionId: string }, { startMs: number; title: string }[] ]
   open_media: [ { path: string }, void ]
   probe_url: [ { url: string }, UrlInfo ]
@@ -58,6 +62,7 @@ export interface Commands {
   export_subtitles: [ { variant: SubtitleVariant; format: SubtitleFormat; path: string }, void ]
   suggest_export_paths: [ { variant: SubtitleVariant; format: SubtitleFormat }, string ]
   get_settings: [ undefined, Settings ]
+  system_accent_color: [ undefined, string | null ]
   update_settings: [ { patch: Partial<Settings> }, Settings ]
   get_setup_status: [ undefined, ComponentStatus[] ]
   start_setup: [ { includeUrlTools: boolean; ids?: string[] }, void ]
@@ -73,6 +78,7 @@ export interface Commands {
   install_app_release: [ { version: string }, void ]
 }
 export interface Events {
+  'system-accent-changed': string
   'media://opened': MediaOpened
   'media://prep': PlaybackPrep
   'pipeline://cues': CueBatch
@@ -82,7 +88,7 @@ export interface Events {
   'download://progress': DownloadProgress
   'app-update://progress': { version: string; downloaded: number; total: number | null }
   'app://open-files': string[]
-  'app://menu': 'open' | 'open-folder' | 'url' | 'export' | 'play-pause' | 'playlist' | 'previous-file' | 'next-file' | 'transcript' | 'subtitle-file' | 'find-subtitles' | 'settings'
+  'app://menu': 'open' | 'open-folder' | 'library' | 'close-file' | 'url' | 'export' | 'play-pause' | 'playlist' | 'previous-file' | 'next-file' | 'transcript' | 'subtitle-file' | 'find-subtitles' | 'settings'
   'app://error': ErrorEvent
 }
 export interface Backend {
@@ -102,6 +108,7 @@ export function sortMediaPaths(paths: string[]) {
 }
 
 export class TauriBackend implements Backend {
+  constructor(private readonly strings: () => Messages) {}
   version() { return getVersion() }
   call<K extends keyof Commands>(command: K, args?: Commands[K][0]): Promise<Commands[K][1]> {
     return invoke(command, args)
@@ -110,12 +117,21 @@ export class TauriBackend implements Backend {
     return listen<Events[K]>(event, ({ payload }) => receive(payload))
   }
   async openFiles() {
-    return (await open({ multiple: true, directory: false, filters: [{ name: 'Media', extensions: mediaExtensions }, { name: 'All Files', extensions: ['*'] }] })) ?? []
+    const s = this.strings()
+    return (await open({
+      title: s.selectFile,
+      multiple: true,
+      directory: false,
+      filters: [
+        { name: s.supported, extensions: mediaExtensions },
+        { name: s.allFiles, extensions: ['*'] },
+      ],
+    })) ?? []
   }
   async openFolder() {
-    return sortMediaPaths(await this.call('choose_media_folder'))
+    return sortMediaPaths(await this.call('choose_media_folder', { title: this.strings().openFolder }))
   }
-  saveFile(defaultPath: string) { return save({ defaultPath }) }
+  saveFile(defaultPath: string) { return save({ defaultPath, title: this.strings().exportSubs.replace(/…$/, '') }) }
   fullscreen(enabled: boolean) { return getCurrentWindow().setFullscreen(enabled) }
   onDrop(receive: (paths:string[]) => void) {
     return getCurrentWebview().onDragDropEvent(({ payload }) => {

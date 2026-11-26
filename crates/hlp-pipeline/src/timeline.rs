@@ -815,8 +815,11 @@ mod tests {
     #[test]
     fn uncertain_first_six_wait_until_twelfth_vote() {
         let temp = tempfile::tempdir().unwrap();
-        let mut t =
-            Timeline::load(temp.path().join("track"), &Settings::default(), "test").unwrap();
+        let settings = Settings {
+            source_language: "auto".into(),
+            ..Settings::default()
+        };
+        let mut t = Timeline::load(temp.path().join("track"), &settings, "test").unwrap();
         for (i, lang) in [
             "en", "ja", "en", "ja", "en", "ja", "en", "en", "en", "en", "en", "en",
         ]
@@ -835,8 +838,11 @@ mod tests {
     #[cfg(not(windows))]
     fn reset_manual_source_queues_forced_text_and_preserves_stale_cues() {
         let temp = tempfile::tempdir().unwrap();
-        let mut t =
-            Timeline::load(temp.path().join("track"), &Settings::default(), "test").unwrap();
+        let settings = Settings {
+            source_language: "ja".into(),
+            ..Settings::default()
+        };
+        let mut t = Timeline::load(temp.path().join("track"), &settings, "test").unwrap();
         let mut u = utterance(0, "ja");
         u.forced_language = u.language.clone();
         t.rows.insert(u.id.clone(), u);

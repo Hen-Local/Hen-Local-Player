@@ -2169,10 +2169,11 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "henlocal-player"
-version = "0.1.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "axum",
+ "block2",
  "dirs 5.0.1",
  "fs2",
  "hex",
@@ -2180,8 +2181,11 @@ dependencies = [
  "hlp-media",
  "hlp-models",
  "hlp-pipeline",
+ "objc2-app-kit",
+ "objc2-foundation",
  "parking_lot",
  "reqwest 0.12.28",
+ "rfd",
  "rustls",
  "semver",
  "serde",
@@ -2197,6 +2201,7 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2213,7 +2218,7 @@ checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
 
 [[package]]
 name = "hlp-asr-worker"
-version = "0.1.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2231,7 +2236,7 @@ dependencies = [
 
 [[package]]
 name = "hlp-cli"
-version = "0.1.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2252,7 +2257,7 @@ dependencies = [
 
 [[package]]
 name = "hlp-core"
-version = "0.1.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "dirs 5.0.1",
@@ -2274,7 +2279,7 @@ dependencies = [
 
 [[package]]
 name = "hlp-media"
-version = "0.1.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -2298,7 +2303,7 @@ dependencies = [
 
 [[package]]
 name = "hlp-models"
-version = "0.1.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -2324,7 +2329,7 @@ dependencies = [
 
 [[package]]
 name = "hlp-pipeline"
-version = "0.1.1"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "crossbeam-channel",

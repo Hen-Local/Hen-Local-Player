@@ -47,22 +47,43 @@ export const languages = [
   { code: 'mk', en: 'Macedonian', zh: '马其顿语', spoken: true, target: false },
 ]
 
-export function languageName(code: string | null, locale: 'en' | 'zh', native = false) {
+export function languageName(code: string | null, locale: string, native = false) {
   if (!code) return ''
-  const label = languages.find((l) => l.code === code)?.[locale] ?? code
-  if (!native) return label
+  const entry = languages.find(language => language.code === code)
+  const tag = code === 'tl' ? 'fil' : code
+  let label = entry?.en ?? code
   try {
-    const endonym = new Intl.DisplayNames([code], { type: 'language' }).of(code)
-    return endonym && endonym.toLocaleLowerCase() !== label.toLocaleLowerCase()
-      ? label + ' · ' + endonym
-      : label
+    label = (locale === 'zh' ? entry?.zh : locale === 'en' ? entry?.en : undefined)
+      ?? new Intl.DisplayNames([locale], { type: 'language' }).of(tag) ?? label
+    if (native) {
+      const endonym = new Intl.DisplayNames([tag], { type: 'language' }).of(tag)
+      if (endonym && endonym.toLocaleLowerCase() !== label.toLocaleLowerCase())
+        return label + ' · ' + endonym
+    }
   } catch {
-    return label
+    // Container language tags can be missing or nonstandard.
   }
+  return label
 }
-export function defaultTarget(locale: string) {
-  const value = locale.toLowerCase()
-  if (/^zh-(tw|hk|hant)/.test(value)) return 'zh-Hant'
-  const base = value.split('-')[0]
-  return languages.some((l) => l.target && l.code === base) ? base : 'en'
+function localeLanguage(locale: string) {
+  const [base, ...subtags] = locale.toLowerCase().split(/[.@]/)[0].replaceAll('_', '-').split('-')
+  let code = base
+  if (base === 'zh') {
+    const scriptOrRegion = subtags.find(tag => ['hans', 'hant', 'tw', 'hk', 'mo'].includes(tag))
+    if (scriptOrRegion && scriptOrRegion !== 'hans') code = 'zh-Hant'
+  } else if (base === 'fil') code = 'tl'
+  else if (base === 'iw') code = 'he'
+  else if (base === 'in') code = 'id'
+  return languages.find(language => language.code === code)
+}
+
+export function defaultSubtitleLanguages(locales: readonly string[]) {
+  const preferred = locales.map(localeLanguage)
+  const targetLanguage = preferred.find(language => language?.target)?.code ?? 'en'
+  if (targetLanguage !== 'en') return { sourceLanguage: 'en', targetLanguage }
+
+  const alternate = preferred.find(language =>
+    language && language.code !== 'en' && (language.spoken || language.code === 'zh-Hant'))
+  const sourceLanguage = alternate?.code === 'zh-Hant' ? 'zh' : alternate?.code ?? 'auto'
+  return { sourceLanguage, targetLanguage }
 }

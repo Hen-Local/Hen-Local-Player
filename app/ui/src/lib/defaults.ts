@@ -1,5 +1,7 @@
-import { defaultTarget } from './languages'
+import { defaultSubtitleLanguages } from './languages'
 import type { Settings } from './types'
+
+export const defaultSubtitleMode = 'translation'
 
 export const subtitleAppearanceDefaults = {
   subtitleScale: 1,
@@ -11,10 +13,9 @@ export function defaults(): Settings {
   return {
     autoDownloadUpdates: false,
     uiLanguage: 'system',
-    accentTheme: 'neon-blue',
-    targetLanguage: defaultTarget(navigator.language),
-    sourceLanguage: 'auto',
-    subtitleMode: 'both',
+    accentTheme: /Mac/.test(navigator.platform) ? 'system' : 'neon-green',
+    ...defaultSubtitleLanguages(navigator.languages.length ? navigator.languages : [navigator.language]),
+    subtitleMode: defaultSubtitleMode,
     bilingualOrder: 'translation-first',
     ...subtitleAppearanceDefaults,
     showTranscriptPanel: false,

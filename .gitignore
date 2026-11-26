@@ -2,10 +2,6 @@
 **/node_modules/
 /app/gen/
 /app/ui/dist/
-!/app/ui/public/demo/
-!/app/ui/public/demo/demo.mp4
-!/app/ui/public/demo/demo.srt
-!/app/ui/public/demo/poster.webp
 /app/binaries/
 /tests/fixtures/
 .DS_Store

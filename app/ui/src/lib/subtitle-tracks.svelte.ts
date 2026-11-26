@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
+import { defaultSubtitleMode } from './defaults'
 import { backend, player } from './stores.svelte'
 import {
   readSubtitleFile,
@@ -178,16 +179,10 @@ class SubtitleTracks {
         const text = await read
         if (revision !== this.request || !this.current(id)) return
         if (!text)
-          throw Error(
-            player.locale === 'zh' ? '请重新打开字幕文件。' : 'Open this subtitle file again.',
-          )
+          throw Error(player.t('reopenSubtitle'))
         timeline = parseSubtitleText(text)
         if (!timeline.cues.length)
-          throw Error(
-            player.locale === 'zh'
-              ? '轨道中没有可读的字幕。'
-              : 'This track contains no readable cues.',
-          )
+          throw Error(player.t('onlineInvalidFile'))
         this.extracted.set(key, timeline)
       } catch (e) {
         if (revision === this.request && this.current(id) && explicit) throw e
@@ -201,7 +196,7 @@ class SubtitleTracks {
     if (explicit) {
       this.save({ choice: key, last: key === 'off' ? last : key })
       if (key === 'generated' && player.settings.subtitleMode === 'off')
-        await player.update({ subtitleMode: 'both' })
+        await player.update({ subtitleMode: defaultSubtitleMode })
     }
   }
 
@@ -224,8 +219,8 @@ class SubtitleTracks {
 
   async importFile(browserFile?: File) {
     return this.importText(async () => browserFile
-      ? { name: browserFile.name, text: await readSubtitleFile(browserFile, player.locale) }
-      : invoke<{ name: string; text: string } | null>('choose_subtitle_file'))
+      ? { name: browserFile.name, text: await readSubtitleFile(browserFile) }
+      : invoke<{ name: string; text: string } | null>('choose_subtitle_file', { title: player.t('subtitleFileTypes') }))
   }
 
   async importOnline(fileId: string, read: () => Promise<{ name: string; text: string } | null>) {
@@ -255,9 +250,7 @@ class SubtitleTracks {
     const timeline = parseSubtitleText(file.text)
     if (!timeline.cues.length)
       throw Error(
-        key ? 'invalid_subtitle' : player.locale === 'zh'
-          ? '文件中没有有效的 SRT 或 WebVTT 字幕。'
-          : 'This file contains no readable SRT or WebVTT cues.',
+        key ? 'invalid_subtitle' : player.t('onlineInvalidFile'),
       )
     const track = { id: key ?? 'file:' + (this.files.length + 1), name: file.name }
     this.extracted.set(track.id, timeline)
@@ -267,9 +260,7 @@ class SubtitleTracks {
       if (!this.current(id)) return
       this.save({ files: this.files })
     } catch {
-      if (this.current(id)) player.toast(player.locale === 'zh'
-        ? '已载入字幕。本机存储空间不足或不可用，下次打开时需重新导入。'
-        : 'Subtitles loaded. Local storage is unavailable, so you’ll need to import them again next time.')
+      if (this.current(id)) player.toast(player.t('subtitleImportTemporary'))
     }
     if (this.current(id) && revision === this.request) await this.select(track.id)
   }

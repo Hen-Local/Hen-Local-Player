@@ -1,4 +1,5 @@
 <script lang="ts">
+  import SelectField from './SelectField.svelte'
   import { onMount } from 'svelte'
   import Dialog from './Dialog.svelte'
   import { backend, player as p } from './stores.svelte'
@@ -57,12 +58,14 @@
   <p class="help">{p.t('setupHint')}</p>
   <label>
     {p.t('modelDownloadSource')}
-    <select disabled={running || savingSource} value={p.settings.modelDownloadSource}
-      onchange={(e) => void setSource(e.currentTarget.value as Settings['modelDownloadSource'])}>
-      <option value="auto">{p.t('autoModelSource')}</option>
-      <option value="china">{p.t('chinaModelSource')}</option>
-      <option value="global">{p.t('globalModelSource')}</option>
-    </select>
+    <SelectField>
+      <select disabled={running || savingSource} value={p.settings.modelDownloadSource}
+        onchange={(e) => void setSource(e.currentTarget.value as Settings['modelDownloadSource'])}>
+        <option value="auto">{p.t('autoModelSource')}</option>
+        <option value="china">{p.t('chinaModelSource')}</option>
+        <option value="global">{p.t('globalModelSource')}</option>
+      </select>
+    </SelectField>
   </label>
   <div class="component-list">
     {#each p.components as c (c.id)}

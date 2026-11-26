@@ -143,7 +143,7 @@ export interface ErrorEvent {
 }
 export interface Settings {
   autoDownloadUpdates: boolean
-  accentTheme: 'neon-blue' | 'neon-orange' | 'neon-pink' | 'neon-green'
+  accentTheme: 'neon-blue' | 'neon-orange' | 'neon-pink' | 'neon-green' | 'system'
   uiLanguage: string
   targetLanguage: string
   sourceLanguage: string

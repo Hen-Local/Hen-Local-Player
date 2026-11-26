@@ -3,7 +3,7 @@
   import { player as p } from './stores.svelte'
   import Icon from './Icon.svelte'
   import SubtitlePanel from './SubtitlePanel.svelte'
-  import { slidePanel } from './panel-transition'
+  import { finishPanelSlide } from './panel-transition'
 
   let { open, onfocus, onclose }: {
     open: boolean
@@ -21,7 +21,7 @@
 
 {#if open}
   <aside id="player-settings" class="inspector right-inspector" aria-labelledby="subtitle-panel-title"
-    onfocusin={onfocus} transition:slidePanel={'right'}>
+    onfocusin={onfocus} out:finishPanelSlide>
     <div class="panel-title">
       <h2 id="subtitle-panel-title">{p.t('subtitles')}</h2>
       <button class="icon panel-close" title={p.t('close')} aria-label={p.t('close')}

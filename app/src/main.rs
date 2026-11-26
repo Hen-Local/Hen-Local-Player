@@ -12,6 +12,9 @@ mod player_menu;
 mod state;
 mod subtitle_search_engine;
 mod subtitle_tracks;
+#[cfg(target_os = "macos")]
+mod system_accent;
+mod video_window;
 use commands::*;
 use state::Desktop;
 use tauri::{Manager, RunEvent};
@@ -48,6 +51,8 @@ fn main() {
     let desktop = tauri::async_runtime::block_on(Desktop::new()).expect("initialize player");
     #[cfg(target_os = "macos")]
     let mut launched = false;
+    #[cfg(target_os = "macos")]
+    let mut stop_observing_accent = None;
     tauri::Builder::default()
         .manage(desktop)
         .plugin(
@@ -57,19 +62,24 @@ fn main() {
         )
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .menu(player_menu::build)
+        .menu(tauri::menu::Menu::default)
         .on_menu_event(|app, event| player_menu::handle(app, event.id().as_ref()))
         .invoke_handler(tauri::generate_handler![
             app_updates::list_app_releases,
             app_updates::download_app_release,
             app_updates::prepared_app_release,
             app_updates::install_app_release,
+            player_menu::set_menu_labels,
+            system_accent_color,
             set_playback_capabilities,
             open_media,
             close_media,
+            set_video_window_aspect,
+            #[cfg(target_os = "macos")]
+            playback::choose_media_sources,
             playback::choose_media_folder,
             playback::list_media_siblings,
-            playback::get_sample_media,
+            playback::playlist_file_times,
             playback::list_chapters,
             subtitle_tracks::list_subtitle_tracks,
             subtitle_tracks::read_sidecar_subtitle,
@@ -108,15 +118,35 @@ fn main() {
                 #[cfg(target_os = "macos")]
                 {
                     launched = true;
+                    let app = app.clone();
+                    stop_observing_accent = Some(system_accent::observe(move || {
+                        if let Some(color) =
+                            app.get_webview_window("main").and_then(system_accent_color)
+                        {
+                            events::emit(&app, "system-accent-changed", color);
+                        }
+                    }));
                 }
                 show_window(app);
             }
-            #[cfg(target_os = "macos")]
+            RunEvent::WindowEvent {
+                label,
+                event: tauri::WindowEvent::Resized(_),
+                ..
+            } if label == "main" && video_window::pending() => {
+                if let Some(window) = app.get_webview_window("main") {
+                    video_window::retry(&window);
+                }
+            }
             RunEvent::WindowEvent {
                 label,
                 event: tauri::WindowEvent::Destroyed,
                 ..
-            } if label == "main" => app.state::<Desktop>().window_closed(),
+            } if label == "main" => {
+                video_window::reset();
+                #[cfg(target_os = "macos")]
+                app.state::<Desktop>().window_closed();
+            }
             #[cfg(target_os = "macos")]
             RunEvent::ExitRequested {
                 code: None, api, ..
@@ -156,6 +186,10 @@ fn main() {
                 }
             }
             RunEvent::Exit => {
+                #[cfg(target_os = "macos")]
+                if let Some(stop) = stop_observing_accent.take() {
+                    stop();
+                }
                 let state = app.state::<Desktop>();
                 tauri::async_runtime::block_on(state.shutdown());
             }

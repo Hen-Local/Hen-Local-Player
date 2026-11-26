@@ -1,164 +1,153 @@
 <script lang="ts">
-  import { tick } from 'svelte'
+  import { onDestroy, tick, untrack } from 'svelte'
+  import { SvelteSet } from 'svelte/reactivity'
+  import Disclosure from './Disclosure.svelte'
   import { player as p, cueAt } from './stores.svelte'
   import Icon from './Icon.svelte'
   import { clock } from './format'
   import { generatedLines, subtitleTracks } from './subtitle-tracks.svelte'
   import { visibleIndices } from './subtitle-tracks'
 
+  let { viewport, browsing = $bindable(false) }: {
+    viewport: HTMLDivElement | undefined
+    browsing: boolean
+  } = $props()
   let expanded = $state(false)
-  let scroller = $state<HTMLDivElement>(),
-    scroll = $state(0),
-    height = $state(500),
-    manualUntil = 0
+  let list = $state<HTMLDivElement>()
   let authored = $derived(subtitleTracks.authored)
   let count = $derived(authored?.cues.length ?? p.cues.length)
-  // Generated lists grow during playback. Use the same row geometry from the
-  // first batch onward so the scrollbar stays anchored as captions arrive.
-  const rowH = 88
-  let virtual = $derived(!authored || count > 32)
-  let start = $derived(virtual ? Math.min(count, Math.max(0, Math.floor(scroll / rowH) - 4)) : 0)
-  let end = $derived(virtual ? Math.min(count, start + Math.ceil(height / rowH) + 9) : count)
-  let rows = $derived.by(() =>
-    authored
-      ? authored.cues.slice(start, end).map((cue, i) => ({
-          id: 'authored-' + (start + i),
-          startMs: cue.startMs,
-          original: cue.text,
-          translation: null,
-          stale: false,
-        }))
-      : p.cues.slice(start, end),
-  )
   let activeAuthored = $derived(expanded && authored ? visibleIndices(authored, p.ms) : [])
   let activeRow = $derived(!expanded ? -1 : authored ? activeAuthored.at(-1) ?? -1
     : cueAt(p.cues, p.ms - subtitleTracks.delayMs))
-
   let pending = $derived(!authored && p.transcriptionRequested ? p.status?.asrPendingSpans ?? [] : [])
-  $effect(() => {
-    if (!expanded || !scroller || Date.now() < manualUntil) return
-    const index = activeRow
-    if (index < 0) return
-    if (virtual) {
-      if (
-        index * rowH < scroller.scrollTop ||
-        (index + 1) * rowH > scroller.scrollTop + scroller.clientHeight
-      )
-        scroller.scrollTop = Math.max(0, index * rowH - scroller.clientHeight / 3)
-    } else
+
+  // Unseen groups reserve space in the panel's own scroll flow. Once read,
+  // reserve their measured height, including every wrapped line of text.
+  const groupSize = 16
+  const nearby = new SvelteSet<number>()
+  const heights = new Map<number, number>()
+  let observer: IntersectionObserver | undefined
+  function observeGroup(node: HTMLDivElement, index: number) {
+    observer ??= new IntersectionObserver(entries => {
+      if (!viewport || !list || !expanded) return
+      const atEnd = viewport.scrollTop > 0 && viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight <= 1
+      const panel = viewport.getBoundingClientRect()
+      const topRow = document.elementFromPoint(panel.left + panel.width / 2, panel.top + 1)
+        ?.closest<HTMLElement>('[data-row], [data-group]')
+      const anchor = topRow && list.contains(topRow) ? topRow : null
+      const anchorTop = anchor?.getBoundingClientRect().top
+      for (const entry of entries) {
+        const group = entry.target as HTMLDivElement
+        const i = Number(group.dataset.group)
+        if (entry.isIntersecting) {
+          nearby.add(i)
+        } else if (!group.contains(document.activeElement)) {
+          if (group.firstElementChild) heights.set(i, group.getBoundingClientRect().height)
+          nearby.delete(i)
+        }
+      }
+      // WebKit does not consistently anchor scrolling when a preceding group
+      // grows. Keep the reader on the same line, including an explicit End.
       void tick().then(() => {
-        const row = scroller?.querySelector('[aria-current="true"]')
-        if (!row || !scroller) return
-        const list = scroller.getBoundingClientRect(),
-          current = row.getBoundingClientRect()
-        if (current.top < list.top) scroller.scrollTop += current.top - list.top
-        else if (current.bottom > list.bottom) scroller.scrollTop += current.bottom - list.bottom
+        if (!viewport || !expanded) return
+        if (atEnd) viewport.scrollTop = viewport.scrollHeight
+        else if (anchor?.isConnected && anchorTop !== undefined) {
+          const delta = anchor.getBoundingClientRect().top - anchorTop
+          if (Math.abs(delta) >= 1) viewport.scrollTop += delta
+        }
       })
-  })
-  function manual() {
-    manualUntil = Date.now() + 5000
+    }, { root: viewport, rootMargin: '100% 0px' })
+    observer.observe(node)
+    return { destroy() { observer?.unobserve(node); nearby.delete(index) } }
   }
+  onDestroy(() => observer?.disconnect())
+
+  function rows(start: number) {
+    return authored
+      ? authored.cues.slice(start, start + groupSize).map((cue, i) => ({
+          id: 'authored-' + (start + i), startMs: cue.startMs,
+          original: cue.text, translation: null, stale: false,
+        }))
+      : p.cues.slice(start, start + groupSize)
+  }
+
+  function followCurrent() {
+    if (!expanded || !viewport || !list || browsing || activeRow < 0) return
+    const row = list.querySelector<HTMLElement>(`[data-row="${activeRow}"]`)
+    if (!row) return
+    const panel = viewport.getBoundingClientRect(), current = row.getBoundingClientRect()
+    if (current.top < panel.top || current.bottom > panel.bottom) {
+      const margin = Math.max(0, Math.min(panel.height / 3, panel.height - current.height))
+      viewport.scrollTop += current.top - panel.top - margin
+    }
+  }
+
+  $effect(() => {
+    void p.track
+    void p.seekRevision
+    // A seek can resume following in the transcript. Leave the options
+    // under the reader's pointer if they have scrolled back to settings.
+    untrack(() => {
+      if (viewport && list && list.getBoundingClientRect().top <= viewport.getBoundingClientRect().top) {
+        browsing = false
+      }
+    })
+  })
+  $effect(() => {
+    if (!expanded || !list || activeRow < 0 || browsing) return
+    const frame = requestAnimationFrame(followCurrent)
+    return () => cancelAnimationFrame(frame)
+  })
 </script>
 
-<div class="transcript" class:expanded>
-  <button
-    class="subtitle-list-toggle"
-    aria-expanded={expanded}
-    aria-controls="subtitle-list"
-    onclick={() => {
-      scroll = 0
-      manualUntil = 0
-      expanded = !expanded
-    }}
-  >
-    <Icon name={expanded ? 'down' : 'right'} size={14} />
-    {p.t('subtitleList')}
+<Disclosure label={p.t('subtitleList')} bind:expanded onrevealed={followCurrent}
+  ontoggle={open => { if (open) browsing = false }}>
+  {#snippet trailing()}
     <span class="row-count" aria-label={count + ' ' + p.t('lines')}>{count}</span>
-  </button>
-  <div id="subtitle-list" hidden={!expanded}>
-    {#if expanded}
-      {#if !authored && p.cues.length}
-        <div class="list-tools">
-          <button onclick={() => (p.dialog = 'export')}><Icon name="export" size={14} />{p.t('exportSubs')}</button>
-        </div>
-      {/if}
-      <div
-        role="region"
-        aria-label={p.t('subtitleList')}
-        class="cue-list"
-        bind:this={scroller}
-        bind:clientHeight={height}
-        onscroll={(e) => (scroll = e.currentTarget.scrollTop)}
-        onwheel={manual}
-        ontouchstart={manual}
-        onpointerdown={manual}
-      >
-        {#if virtual}<div style:height={start * rowH + 'px'}></div>{/if}
-        {#each rows as cue, i (cue.id)}
-          {@const active = authored ? activeAuthored.includes(start + i) : activeRow === start + i}
-          {@const text = authored ? [cue.original] : generatedLines(cue, p.settings)}
-          <button
-            class="cue-row"
-            class:active
-            class:virtual
-            aria-current={active}
-            onclick={() =>
-              p.seek(authored ? cue.startMs : Math.max(0, cue.startMs + subtitleTracks.delayMs))}
-          >
-            <time
-              >{clock(authored ? cue.startMs : Math.max(0, cue.startMs + subtitleTracks.delayMs))}</time
-            >
-            <span>
-              <strong dir="auto" style:white-space={authored ? 'pre-line' : undefined}
-                >{text[0] ?? p.t('translating')}</strong
-              >
-              {#if text[1]}<span dir="auto">{text[1]}</span>{/if}{#if cue.stale}<small>
-                  {p.t('stale')}
-                </small>{/if}
-            </span>
-          </button>
-        {/each}
-        {#if virtual}<div style:height={(count - end) * rowH + 'px'}></div>{/if}
-        {#each pending.slice(0, 4) as span}<button
-            class="cue-row pending"
-            onclick={() => p.seek(span[0])}
-          >
-            <time>{clock(span[0])}</time>
-            <span>{p.t('transcribing')}</span>
-          </button>{/each}
-        {#if !count && !pending.length}<p class="empty-note">
-          {p.t('waiting')}
-        </p>{/if}
+  {/snippet}
+  {#if !authored && p.cues.length}
+    <div class="list-tools">
+      <button onclick={() => (p.dialog = 'export')}><Icon name="export" size={14} />{p.t('exportSubs')}</button>
+    </div>
+  {/if}
+  <div bind:this={list} role="region" aria-label={p.t('subtitleList')} class="cue-list">
+    {#each Array(Math.ceil(count / groupSize)) as _, group}
+      {@const start = group * groupSize}
+      {@const visible = nearby.has(group) || (!browsing && activeRow >= start && activeRow < start + groupSize)}
+      <div data-group={group} use:observeGroup={group}
+        style:height={visible ? undefined : (heights.get(group) ?? Math.min(count - start, groupSize) * 54) + 'px'}>
+        {#if visible}
+          {#each rows(start) as cue, i (cue.id)}
+            {@const index = start + i}
+            {@const active = authored ? activeAuthored.includes(index) : activeRow === index}
+            {@const text = authored ? [cue.original] : generatedLines(cue, p.settings)}
+            {@const time = authored ? cue.startMs : Math.max(0, cue.startMs + subtitleTracks.delayMs)}
+            <button class="cue-row" class:active data-row={index} aria-current={active}
+              onclick={() => { browsing = false; p.seek(time) }}>
+              <time>{clock(time)}</time>
+              <span>
+                <strong dir="auto" style:white-space={authored ? 'pre-line' : undefined}>
+                  {text[0] ?? p.t('translating')}</strong>
+                {#if text[1]}<span dir="auto">{text[1]}</span>{/if}
+                {#if cue.stale}<small>{p.t('stale')}</small>{/if}
+              </span>
+            </button>
+          {/each}
+        {/if}
       </div>
-    {/if}
+    {/each}
+    {#each pending.slice(0, 4) as span}
+      <button class="cue-row pending" onclick={() => p.seek(span[0])}>
+        <time>{clock(span[0])}</time><span>{p.t('transcribing')}</span>
+      </button>
+    {/each}
+    {#if !count && !pending.length}<p class="empty-note">{p.t('waiting')}</p>{/if}
   </div>
-</div>
+</Disclosure>
 
 <style>
-  .transcript {
-    flex: none;
-    min-width: 0;
-  }
-  .transcript.expanded {
-    display: flex;
-    flex: 1 0 9rem;
-    flex-direction: column;
-    min-height: 0;
-  }
-  .subtitle-list-toggle { flex: none; }
-  #subtitle-list:not([hidden]) {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-height: 0;
-  }
-  .cue-list {
-    min-height: 0;
-    overflow-anchor: none;
-    overscroll-behavior: none contain;
-  }
   .row-count {
-    margin-left: auto;
+    margin-inline-start: auto;
     color: var(--muted);
     font-size: 12px;
     font-variant-numeric: tabular-nums;

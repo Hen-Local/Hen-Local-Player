@@ -20,7 +20,7 @@ npm --prefix app/ui ci
 npm --prefix app/ui run dev
 ```
 
-Open the address printed by Vite and choose **••• → Play Sample**. You can also use **Open File** with a browser-compatible video. Use the desktop app for on-device transcription and translation.
+Open the address printed by Vite and choose **Open File** to play a browser-compatible video or audio file. Use the desktop app for on-device transcription and translation.
 
 ## Generate subtitles from the command line
 
@@ -43,6 +43,8 @@ Run `npm --prefix app/ui run check` for frontend checks. After installing the mo
 The macOS fixture generator needs FFmpeg with VideoToolbox, VP9, Opus and MP3 encoding. Use `HLP_FFMPEG` to select a compatible executable. Windows speech fixtures use Python 3 and an English desktop SAPI voice. [Windows testing](progress/g-windows.md) · [Project test results](PROGRESS.md)
 
 ## Package and release
+
+For a local UI change, run `bash scripts/build_macos_app.sh --app-only` to rebuild `dist/Hen Local Player.app` at the current version. Existing installers and update archives are preserved.
 
 On Apple Silicon, install the packaging tools and build the app and DMG.
 

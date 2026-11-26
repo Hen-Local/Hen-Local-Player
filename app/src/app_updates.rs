@@ -56,6 +56,7 @@ pub struct AppRelease {
     version: Version,
     published_at: String,
     notes: String,
+    newer: bool,
     installable: bool,
 }
 
@@ -110,7 +111,8 @@ impl GitHubRelease {
             _ => None,
         };
         let has = |name: &str| self.assets.iter().any(|a| a.name == name);
-        let installable = version > *current
+        let newer = version.cmp_precedence(current).is_gt();
+        let installable = newer
             && has("latest.json")
             && suffix.is_some_and(|suffix| {
                 let filename = format!("Hen-Local-Player-{version}-{suffix}");
@@ -120,6 +122,7 @@ impl GitHubRelease {
             version,
             published_at: self.published_at.unwrap_or_default(),
             notes: self.body.unwrap_or_default(),
+            newer,
             installable,
         })
     }
@@ -139,7 +142,7 @@ async fn get_release_data(client: &Client, url: &str) -> Result<Response> {
         .get(url)
         .send()
         .await
-        .map_err(reqwest::Error::without_url)?;
+        .context("UPDATE_FEED_UNAVAILABLE")?;
     match response.status() {
         StatusCode::OK => Ok(response),
         StatusCode::FORBIDDEN | StatusCode::TOO_MANY_REQUESTS => bail!("UPDATE_RATE_LIMITED"),
@@ -449,10 +452,13 @@ mod tests {
         let current = Version::new(0, 1, 1);
         assert!(make("v0.2.0-beta.1", false).summary(&current).is_none());
         assert!(make("v0.2.0", true).summary(&current).is_none());
-        assert!(!make("v0.1.0", false).summary(&current).unwrap().installable);
+        let older = make("v0.1.0", false).summary(&current).unwrap();
+        assert!(!older.newer && !older.installable);
+        assert!(!make("v0.1.1", false).summary(&current).unwrap().newer);
         let mut missing = make("v0.2.0", false);
         missing.assets.remove(0);
-        assert!(!missing.summary(&current).unwrap().installable);
+        let missing = missing.summary(&current).unwrap();
+        assert!(missing.newer && !missing.installable);
         assert_eq!(
             make("v0.2.0", false).summary(&current).unwrap().installable,
             platform_key() != "unsupported"

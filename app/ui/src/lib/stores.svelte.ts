@@ -1,6 +1,7 @@
 import { TauriBackend, sortMediaPaths, type Backend, type Events } from './backend'
 import { MockBackend } from './mock'
 import { AppUpdates } from './app-updates.svelte'
+import { sortPlaylist, type PlaylistSort, type QueueItem } from './playlist'
 import { ResumeHistory } from './resume'
 import { subtitleTracks } from './subtitle-tracks.svelte'
 import { defaults } from './defaults'
@@ -8,7 +9,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window'
 import { capMimes } from './format'
 import { lastStartedCue } from './subtitle-tracks'
 import en from './i18n/en'
-import zh from './i18n/zh'
+import type { Messages } from './i18n'
 import type {
   ComponentStatus,
   Cue,
@@ -22,10 +23,10 @@ import type {
 } from './types'
 
 export const mockMode = !('__TAURI_INTERNALS__' in window)
-export const backend: Backend = mockMode ? new MockBackend() : new TauriBackend()
+export const backend: Backend = mockMode ? new MockBackend() : new TauriBackend(() => player.strings)
 export const appUpdates = new AppUpdates(backend)
 type DeleteSubtitleRequest = { kind: 'delete-subtitles'; sessionId: string; audioTrackOrder: number }
-export type Dialog = 'settings' | 'setup' | 'url' | 'export' | 'online-subtitles' | DeleteSubtitleRequest | null
+export type Dialog = 'settings' | 'setup' | 'url' | 'export' | 'open-media' | 'online-subtitles' | DeleteSubtitleRequest | null
 export const playbackSpeedPresets = [0.5, 0.75, 1, 1.25, 1.5, 2, 4]
 export const modes = ['original', 'translation', 'both', 'off'] as const
 export function cueAt(cues: Cue[], ms: number) {
@@ -65,6 +66,7 @@ class PlayerState {
   download = $state<DownloadProgress | null>(null)
   dialog = $state<Dialog>(null)
   ms = $state(0)
+  seekRevision = $state(0)
   duration = $state(0)
   playing = $state(false)
   volume = $state(0.85)
@@ -73,11 +75,19 @@ class PlayerState {
   private requestedFullscreen: boolean | null = null
   private fullscreenRevision = 0
   private fullscreenOperation = Promise.resolve()
+  private windowSizeRequest?: { sessionId: string; width: number; height: number }
+  private windowSizeOperation = Promise.resolve()
   track = $state(0)
   error = $state('')
   notice = $state('')
   video = $state.raw<HTMLVideoElement | null>(null)
-  queue = $state.raw<{ path: string; title: string }[]>([])
+  interfaceCopy = $state.raw<{ locale: string; messages: Messages }>({ locale: 'en', messages: en })
+  locale = $derived(this.interfaceCopy.locale)
+  private originalQueue = $state.raw<QueueItem[]>([])
+  private modifiedTimes = $state.raw(new Map<QueueItem, number | null>())
+  private datesRequestedFor: QueueItem[] | null = null
+  queueSort = $state<PlaylistSort>('original')
+  queue = $derived(sortPlaylist(this.originalQueue, this.queueSort, this.modifiedTimes, this.locale))
   queueFolder = $state('')
   currentPath = $state('')
   queueIndex = $derived(this.queue.findIndex((item) => item.path === this.currentPath))
@@ -89,15 +99,7 @@ class PlayerState {
   private lastSave = 0
   private lastVolume = 0.85
   info = $state({ version: '', logDir: '', cacheBytes: 0 })
-  locale = $derived<'zh' | 'en'>(
-    (this.settings.uiLanguage === 'system'
-      ? navigator.language
-      : this.settings.uiLanguage
-    ).startsWith('zh')
-      ? 'zh'
-      : 'en',
-  )
-  strings = $derived(this.locale === 'zh' ? zh : en)
+  strings = $derived(this.interfaceCopy.messages)
   active = $derived(cueAt(this.cues, this.ms))
   progress = $derived(
     this.status?.uttTotal
@@ -112,7 +114,8 @@ class PlayerState {
   private queued: { sessionId: string; action: () => Promise<void> } | null = null
   t = (key: keyof typeof en) => this.strings[key]
   message(e: unknown) {
-    this.error = e instanceof Error ? e.message : String(e)
+    const text = e instanceof Error ? e.message : String(e)
+    this.error = Object.hasOwn(this.strings, text) ? this.t(text as keyof Messages) : text
   }
   toast(s: string) {
     this.notice = s
@@ -239,6 +242,43 @@ class PlayerState {
       this.installingSubtitleComponent = ''
     }
   }
+  setQueueSort(order: PlaylistSort) {
+    this.queueSort = order
+    void this.loadQueueDates()
+  }
+  private setQueue(items: QueueItem[], folder: string) {
+    this.originalQueue = items
+    this.queueFolder = folder
+    this.datesRequestedFor = null
+    // Keep dates for retained entries. Edits to a long, time-sorted playlist
+    // should neither reshuffle existing files nor stat the entire folder again.
+    const retained = new Map<QueueItem, number | null>()
+    for (const item of items) {
+      const date = this.modifiedTimes.get(item)
+      if (date !== undefined) retained.set(item, date)
+    }
+    this.modifiedTimes = retained
+    void this.loadQueueDates()
+  }
+  private async loadQueueDates() {
+    if (this.queueSort !== 'newest' && this.queueSort !== 'oldest') return
+    const items = this.originalQueue
+    if (!items.length || this.datesRequestedFor === items) return
+    this.datesRequestedFor = items
+    const missing = items.filter(item => !this.modifiedTimes.has(item))
+    if (!missing.length) return
+    try {
+      const dates = await backend.call('playlist_file_times', { paths: missing.map(item => item.path) })
+      if (this.originalQueue !== items || this.disposed) return
+      const times = new Map(this.modifiedTimes)
+      dates.forEach((ms, index) => times.set(missing[index], ms))
+      this.modifiedTimes = times
+    } catch (error) {
+      if (this.originalQueue !== items || this.disposed) return
+      this.datesRequestedFor = null
+      if (this.queueSort === 'newest' || this.queueSort === 'oldest') this.message(error)
+    }
+  }
   private queueItems(paths: string[]) {
     return [...new Set(paths.filter(Boolean))].map((path) => ({
       path,
@@ -252,38 +292,35 @@ class PlayerState {
     return this.fileOperations
   }
   private async loadSiblings(path: string) {
-    const pending = this.queue
+    const pending = this.originalQueue
     try {
       const folder = await backend.call('list_media_siblings', { path })
       if (!folder) return
       // Apply after any in-flight file open has committed or rolled back.
       // Explicit opens and edits own the newer list if a slow drive finishes late.
       await this.fileOperation(async () => {
-        if (this.queue !== pending || this.disposed) return
-        this.queue = this.queueItems(sortMediaPaths(folder.files))
-        this.queueFolder = folder.folder
+        if (this.originalQueue !== pending || this.disposed) return
+        this.setQueue(this.queueItems(sortMediaPaths(folder.files)), folder.folder)
       })
     } catch {
       // The file itself can be readable without permission to list its parent.
     }
   }
-  async openPaths(paths: string[], browseFolder = true) {
+  async openPaths(paths: string[], browseFolder = true, folder = '') {
     const items = this.queueItems(paths)
     if (!items.length) return
     await this.fileOperation(async () => {
       this.remember(true)
-      const previous = this.queue
+      const previous = this.originalQueue
       const previousFolder = this.queueFolder
-      this.queue = items
-      this.queueFolder = ''
+      this.setQueue(items, folder)
       try {
         await backend.call('open_media', { path: items[0].path })
       } catch (error) {
-        this.queue = previous
-        this.queueFolder = previousFolder
+        this.setQueue(previous, previousFolder)
         throw error
       }
-      if (browseFolder && items.length === 1 && this.queue === items) {
+      if (browseFolder && items.length === 1 && this.originalQueue === items) {
         void this.loadSiblings(items[0].path)
       }
     })
@@ -295,6 +332,18 @@ class PlayerState {
   async choose() {
     await this.act(async () => this.openPaths(await backend.openFiles()))
   }
+  async chooseMedia() {
+    if (mockMode || !/Mac/.test(navigator.platform)) {
+      this.dialog = 'open-media'
+      return
+    }
+    await this.act(async () => {
+      const sources = await backend.call('choose_media_sources', { title: this.t('open') + ' / ' + this.t('openFolder') })
+      const only = sources.length === 1 ? sources[0] : null
+      const paths = sources.flatMap(source => typeof source === 'string' ? [source] : sortMediaPaths(source.files))
+      await this.openPaths(paths, typeof only === 'string', only && typeof only !== 'string' ? only.folder : '')
+    })
+  }
   async chooseFolder() {
     await this.act(async () => this.openPaths(await backend.openFolder(), false))
   }
@@ -304,8 +353,7 @@ class PlayerState {
       if (!this.media) return this.openPaths(paths, false)
       const additions = this.queueItems(paths).filter((item) => !this.queue.some((q) => q.path === item.path))
       if (additions.length) {
-        this.queue = [...this.queue, ...additions]
-        this.queueFolder = ''
+        this.setQueue([...this.originalQueue, ...additions], '')
       }
     })
   }
@@ -326,12 +374,10 @@ class PlayerState {
       await this.fileOperation(async () => {
         this.remember(true)
         await backend.call('open_media', { path: replacement.path })
-        this.queue = this.queue.filter((entry) => entry.path !== item.path)
-        this.queueFolder = ''
+        this.setQueue(this.originalQueue.filter((entry) => entry.path !== item.path), '')
       })
     } else {
-      this.queue = this.queue.filter((entry) => entry.path !== item.path)
-      this.queueFolder = ''
+      this.setQueue(this.originalQueue.filter((entry) => entry.path !== item.path), '')
     }
   }
   next() {
@@ -363,8 +409,7 @@ class PlayerState {
       this.video?.pause()
       this.media = null
       this.prep = this.status = this.language = null
-      this.queue = []
-      this.queueFolder = ''
+      this.setQueue([], '')
       this.currentPath = ''
       subtitleTracks.attach('')
       this.switchPosition = null
@@ -446,6 +491,7 @@ class PlayerState {
     if (this.video) {
       this.video.currentTime = Math.min(Math.max(ms, 0), this.duration) / 1000
       this.ms = this.video.currentTime * 1000
+      this.seekRevision++
     }
   }
   jump(dir: number) {
@@ -484,6 +530,23 @@ class PlayerState {
       }
       throw error
     }
+  }
+  syncVideoWindowAspect(element: HTMLVideoElement, force = false) {
+    const sessionId = element.dataset.session
+    if (mockMode || !sessionId || !this.own(sessionId) || element.readyState < 1) return
+    const width = element.videoWidth, height = element.videoHeight
+    const previous = this.windowSizeRequest
+    if (!force && previous?.sessionId === sessionId && previous.width === width && previous.height === height) return
+    const size = { sessionId, width, height }
+    this.windowSizeRequest = size
+    this.windowSizeOperation = this.windowSizeOperation.then(async () => {
+      if (size === this.windowSizeRequest && this.own(sessionId)) await backend.call('set_video_window_aspect', size)
+    }).catch(error => {
+      if (size === this.windowSizeRequest && this.own(sessionId)) {
+        this.windowSizeRequest = undefined
+        this.message(error)
+      }
+    })
   }
   cycle() {
     return subtitleTracks.cycle()
@@ -538,8 +601,7 @@ class PlayerState {
         this.remember(true)
         const path = e.sourcePath
         if (path && !this.queue.some((item) => item.path === path)) {
-          this.queue = [...this.queue, { path, title: e.title }]
-          this.queueFolder = ''
+          this.setQueue([...this.originalQueue, { path, title: e.title }], '')
         }
         this.currentPath = path || ''
         this.playing = false
@@ -619,7 +681,8 @@ class PlayerState {
         if (this.dialog) return
         switch (action) {
           case 'open':
-            void this.choose()
+            if (/Mac/.test(navigator.platform)) void this.chooseMedia()
+            else void this.choose()
             break
           case 'open-folder':
             void this.chooseFolder()
@@ -632,6 +695,9 @@ class PlayerState {
             break
           case 'export':
             if (this.media) this.dialog = 'export'
+            break
+          case 'close-file':
+            if (this.media) void this.close()
             break
           case 'play-pause':
             this.toggle()
@@ -649,6 +715,7 @@ class PlayerState {
             this.findOnlineSubtitles()
             break
           case 'transcript':
+          case 'library':
           case 'playlist':
             window.dispatchEvent(new CustomEvent('player:panel', { detail: action }))
             break
@@ -692,6 +759,7 @@ class PlayerState {
       }
       let resizeTimer = 0
       let resizeRevision = 0
+      let lastNativeFullscreen = false
       const reflectFullscreen = async () => {
         const resize = ++resizeRevision
         const request = this.fullscreenRevision
@@ -702,8 +770,14 @@ class PlayerState {
         // A resize can belong to an earlier transition. Keep the latest
         // requested state until the native window reaches that destination.
         if (this.requestedFullscreen !== null && active !== this.requestedFullscreen) return
+        const leftFullscreen = !active && (lastNativeFullscreen || this.requestedFullscreen === false)
+        lastNativeFullscreen = active
         this.requestedFullscreen = null
         this.fullscreen = active
+        if (leftFullscreen) {
+          if (this.video && this.media) this.syncVideoWindowAspect(this.video, true)
+          else if (!this.media) await backend.call('set_video_window_aspect', { sessionId: null, width: 0, height: 0 })
+        }
       }
       const unlisten = await win.onResized(() => {
         window.clearTimeout(resizeTimer)

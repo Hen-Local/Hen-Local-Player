@@ -1,23 +1,36 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
   import Dialog from './Dialog.svelte'
+  import SelectField from './SelectField.svelte'
+  import Icon from './Icon.svelte'
   import SetupScreen from './SetupScreen.svelte'
   import SoftwareUpdate from './SoftwareUpdate.svelte'
+  import repository from '../../../release-repository.txt?raw'
   import { invoke } from '@tauri-apps/api/core'
   import { player as p, backend, mockMode } from './stores.svelte'
+  import { interfaceLanguages } from './i18n'
+  import { languageName } from './languages'
   import { size } from './format'
   import type { Settings } from './types'
+  let { systemAccentAvailable }: { systemAccentAvailable: boolean } = $props()
   // A release without a creator handle has no funding link or external requests.
   const coffeeHandle = (import.meta.env.VITE_BUY_ME_A_COFFEE_USERNAME ?? '').trim()
   const coffeeUrl = /^[a-z0-9_-]+$/i.test(coffeeHandle) ? `https://buymeacoffee.com/${coffeeHandle}` : ''
   const themes = [
-    {id:'neon-blue', label:'themeBlue', color:'#0003fe'},
-    {id:'neon-orange', label:'themeOrange', color:'#ff5705'},
-    {id:'neon-pink', label:'themePink', color:'#ff0073'},
-    {id:'neon-green', label:'themeGreen', color:'#51f91b'},
+    {id:'neon-blue', label:'themeBlue'},
+    {id:'neon-orange', label:'themeOrange'},
+    {id:'neon-pink', label:'themePink'},
+    {id:'neon-green', label:'themeGreen'},
   ] as const
-  const tabs = ['general', 'processing', 'storage'] as const
-  let tab = $state<(typeof tabs)[number]>('general'),
+  const projectUrl = 'https://github.com/' + repository.trim()
+  const categories = { general: 'gear', processing: 'audio', storage: 'folder', about: 'info' } as const
+  function openLink(event: MouseEvent & { currentTarget: HTMLAnchorElement }) {
+    if (mockMode) return
+    event.preventDefault()
+    const url = event.currentTarget.href
+    void p.act(() => invoke('plugin:opener|open_url', { url }))
+  }
+  let tab = $state<keyof typeof categories>('general'),
     confirm = $state(false),
     updating = $state(false)
   let showingSetup = $state(false)
@@ -32,7 +45,9 @@
   }
   onMount(() => {
     void p.act(async () => { p.components = await backend.call('get_setup_status') })
-    void p.act(async () => { p.info = await backend.call('app_info') })
+  })
+  $effect(() => {
+    if (tab === 'storage') void p.act(async () => { p.info = await backend.call('app_info') })
   })
   async function update() {
     updating = true
@@ -51,75 +66,79 @@
   <SetupScreen back={returnToSettings} />
 {:else}
 <Dialog title={p.t('settings')} icon="settings">
-  <div class="tabs settings-tabs" style:--selected-tab={tabs.indexOf(tab)}>
-    {#each tabs as k, index}<button
-        style:grid-column={index + 1}
-        class:selected={tab === k}
-        aria-pressed={tab === k}
-        onclick={() => (tab = k)}
-      >
-        {p.t(k)}
-      </button>{/each}
-  </div>
+  {#snippet navigation()}
+    <nav class="categories" aria-label={p.t('settings')}>
+      {#each Object.entries(categories) as [key, icon]}
+        {@const category = key as keyof typeof categories}
+        <button aria-current={tab === category ? 'page' : undefined} onclick={() => (tab = category)}>
+          <Icon name={icon} size={16}/><span>{p.t(category)}</span>
+        </button>
+      {/each}
+    </nav>
+  {/snippet}
   {#if tab === 'general'}
     <SoftwareUpdate />
-    <label>
-      {p.t('uiLang')}
-      <select
-        value={p.settings.uiLanguage}
-        onchange={(e) => set('uiLanguage', e.currentTarget.value)}
-      >
-        <option value="system">{p.t('system')}</option>
-        <option value="en">English</option>
-        <option value="zh">中文</option>
-      </select>
-    </label>
-    <fieldset class="theme-picker">
-      <legend>{p.t('accentColor')}</legend>
-      <div>{#each themes as theme}
-        <button aria-pressed={p.settings.accentTheme === theme.id} onclick={() => set('accentTheme', theme.id)}>
-          <i aria-hidden="true" style:background-color={theme.color}></i>{p.t(theme.label)}
+    <div class="group choices">
+      <label class="field-row">
+        <span>{p.t('uiLang')}</span>
+        <SelectField>
+          <select value={p.settings.uiLanguage} onchange={(e) => set('uiLanguage', e.currentTarget.value)}>
+            <option value="system">{p.t('system')}</option>
+            {#each interfaceLanguages as language (language.code)}
+              <option value={language.code} lang={language.code} dir="auto">{languageName(language.code, language.code)}</option>
+            {/each}
+          </select>
+        </SelectField>
+      </label>
+      <label class="field-row">
+        <span>{p.t('accentColor')}</span>
+        <SelectField swatch="var(--accent)">
+          <select value={p.settings.accentTheme === 'system' && !systemAccentAvailable ? 'neon-green' : p.settings.accentTheme}
+            onchange={(e) => set('accentTheme', e.currentTarget.value as Settings['accentTheme'])}>
+            {#if systemAccentAvailable}<option value="system">{p.t('followSystemColor')}</option>{/if}
+            {#each themes as theme}<option value={theme.id}>{p.t(theme.label)}</option>{/each}
+          </select>
+        </SelectField>
+      </label>
+    </div>
+    <div class="group resources">
+      <div class="resource-row">
+        <div class="resource-detail">
+          <strong>{p.t('models')}</strong>
+          {#if p.components.length}
+            <small>{p.components.filter((c) => c.ready).length}/{p.components.length} {p.t('installed')}</small>
+          {/if}
+        </div>
+        <button bind:this={setupButton} onclick={() => (showingSetup = true)}
+          title={p.t('defaultModels') + ' · Qwen3-ASR ' + (p.settings.asrModel.startsWith('sherpa') ? '0.6B' : '1.7B') + ' + Hy-MT2 1.8B'}>{p.t('setup')}</button>
+      </div>
+      <div class="resource-row">
+        <span title={p.t('linkTools')}>yt-dlp</span>
+        <button disabled={updating} onclick={update} title={p.t('linkTools')}>
+          {updating ? p.t('busy') : p.t('updateTool')}
         </button>
-      {/each}</div>
-    </fieldset>
-    <div class="setting-block">
-      <div>
-        <strong>{p.t('models')}</strong>
-        {#if p.components.length}
-          <small>{p.components.filter((c) => c.ready).length}/{p.components.length} {p.t('installed')}</small>
-        {/if}
-        <small>{p.t('defaultModels')} · Qwen3-ASR {p.settings.asrModel.startsWith('sherpa') ? '0.6B' : '1.7B'} + Hy-MT2 1.8B</small>
       </div>
-      <button bind:this={setupButton} onclick={() => (showingSetup = true)}>{p.t('setup')}</button>
+      {#if coffeeUrl}
+        <div class="resource-row">
+          <span>{p.t('supportProject')}</span>
+          <a href={coffeeUrl} target="_blank" rel="noreferrer" onclick={openLink}>{p.t('buyMeACoffee')}</a>
+        </div>
+      {/if}
     </div>
-    <div class="setting-block">
-      <div>
-        <strong>yt-dlp</strong>
-        <small>{p.t('linkTools')}</small>
-      </div>
-      <button disabled={updating} onclick={update}>
-        {updating ? p.t('busy') : p.t('updateTool')}
-      </button>
-    </div>
-    {#if coffeeUrl}
-      <div class="setting-block">
-        <strong>{p.t('supportProject')}</strong>
-        <a href={coffeeUrl} target="_blank" rel="noreferrer" onclick={(event) => {
-          if (mockMode) return
-          event.preventDefault()
-          void p.act(() => invoke('plugin:opener|open_url', { url: coffeeUrl }))
-        }}>{p.t('buyMeACoffee')}</a>
-      </div>
-    {/if}
   {:else if tab === 'processing'}
+    <div class="section-fields">
     <label>
       {p.t('model')}
-      <select value={p.settings.asrModel} onchange={(e) => set('asrModel', e.currentTarget.value)}>
-        {#if p.settings.asrModel.startsWith('sherpa')}<option value="sherpa-qwen3-asr-0.6b">
-            {p.t('winModel')}
-          </option>{:else}<option value="qwen3-asr-1.7b">{p.t('fullModel')}</option>
-          <option value="qwen3-asr-0.6b">{p.t('lightModel')}</option>{/if}
-      </select>
+      <SelectField>
+        <select value={p.settings.asrModel} onchange={(e) => set('asrModel', e.currentTarget.value)}>
+          {#if p.settings.asrModel.startsWith('sherpa')}
+            <option value="sherpa-qwen3-asr-0.6b">{p.t('winModel')}</option>
+          {:else}
+            <option value="qwen3-asr-1.7b">{p.t('fullModel')}</option>
+            <option value="qwen3-asr-0.6b">{p.t('lightModel')}</option>
+          {/if}
+        </select>
+      </SelectField>
     </label>
     <label>
       {p.t('lookahead')}
@@ -145,7 +164,9 @@
         />
         {p.t(label as 'whole')}
       </label>{/each}
-  {:else}
+    </div>
+  {:else if tab === 'storage'}
+    <div class="section-fields">
     <label>
       {p.t('downloadDir')}
       <input
@@ -190,52 +211,80 @@
     {#if confirm}<p class="warn">{p.t('confirmClear')}</p>{/if}
     <button disabled={!p.info.logDir} onclick={() => p.act(() => backend.call('reveal_in_folder', { path: p.info.logDir }))}>
       {p.t('logs')}
-    </button>{/if}
+    </button>
+    </div>
+  {:else}
+    <div class="about-project">
+      <h3>{p.t('app')}</h3>
+      <a href={projectUrl} target="_blank" rel="noopener noreferrer" onclick={openLink}>
+        <Icon name="link" size={15} />{p.t('githubProject')}
+      </a>
+    </div>
+  {/if}
 </Dialog>
 {/if}
 
 <style>
-  .settings-tabs {
-    --tab-gap: 2px;
-    isolation: isolate;
+  .categories {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 12px 9px;
+    background: rgb(0 0 0 / 12%);
+    overflow: auto;
   }
-  .settings-tabs::before {
-    content: '';
-    grid-area: 1 / 1;
-    pointer-events: none;
-    border-radius: 7px;
-    background: linear-gradient(155deg, rgb(255 255 255 / 7%), transparent 68%), var(--surface-selection);
-    box-shadow: 0 1px 4px rgb(0 0 0 / 15%);
-    transform: translateX(calc(var(--selected-tab) * (100% + var(--tab-gap))));
-    transition: transform 200ms cubic-bezier(.2, .8, .2, 1);
+  :global(.app .player-dialog) .categories button {
+    min-height: 36px;
+    justify-content: flex-start;
+    padding: 7px 10px;
+    text-align: start;
+    font-size: 13px;
+    font-weight: 530;
+    background: transparent;
   }
-  .settings-tabs button {
-    grid-row: 1;
-    position: relative;
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .settings-tabs::before { transition: none; }
+  .categories :global(svg) { flex: none; }
+  :global(.app .player-dialog) .categories button[aria-current="page"] {
+    background: var(--surface-selection);
+    font-weight: 650;
   }
   @media (forced-colors: active) {
-    .settings-tabs::before { background: Highlight; forced-color-adjust: none; }
-    .settings-tabs button[aria-pressed="true"] { color: HighlightText; forced-color-adjust: none; }
+    .categories button[aria-current="page"] { outline: 1px solid Highlight; outline-offset: -2px; }
   }
-  .field-hint { margin: -8px 0 16px; }
-  .theme-picker { padding:0; border:0; margin:0 0 16px; min-width:0; }
-  .theme-picker legend { margin-bottom:8px; padding:0; font-size:12px; font-weight:630; }
-  .theme-picker > div { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; }
-  .theme-picker button { gap:5px; padding:6px 2px; font-size:12px; }
-  .theme-picker i {
-    display: block;
-    width: 11px;
-    height: 11px;
-    border-radius: 50%;
-    background-image: linear-gradient(145deg, rgb(255 255 255 / 35%), transparent 65%);
+  .group {
+    display: grid;
+    gap: 12px;
+    padding-block: 18px;
+    border-top: 1px solid var(--hairline);
   }
-  @media (max-width: 399px) {
-    .theme-picker > div { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .group:last-child { padding-bottom: 0; }
+  .field-row, .resource-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 46%);
+    gap: 14px;
+    align-items: center;
+    line-height: 1.35;
+    font-size: 13px;
+    font-weight: 550;
+    overflow-wrap: anywhere;
   }
-  :global(:root[data-accent-theme="neon-orange"]) { --accent:#ff5705; --accent-soft:#fff0e9; --accent-text:#9c3500; }
-  :global(:root[data-accent-theme="neon-pink"]) { --accent:#ff0073; --accent-soft:#ffe8f2; --accent-text:#a8004c; }
-  :global(:root[data-accent-theme="neon-green"]) { --accent:#51f91b; --accent-soft:#ecffe6; --accent-text:#176d09; }
+  .resource-row { grid-template-columns: minmax(0, 1fr) fit-content(49%); }
+  .resource-row button, .resource-row a { font-size: 12px; justify-self: end; }
+  .resource-detail { display: grid; gap: 3px; }
+  .resource-detail strong { font-size: 13px; font-weight: 600; }
+  .resource-detail small { font-size: 12px; font-weight: 400; }
+  .section-fields { display: grid; gap: 14px; }
+  .section-fields > label { display: grid; gap: 6px; font-size: 13px; font-weight: 550; }
+  .section-fields .toggle { display: flex; }
+  .field-hint { margin: -8px 0 4px; }
+  .section-fields > button { justify-self: start; }
+  .about-project h3 { margin: 0 0 12px; }
+  .about-project a { display: inline-flex; align-items: center; gap: 7px; color: var(--glass-accent); text-underline-offset: 3px; }
+  .about-project :global(svg) { flex: none; }
+  @media (max-width: 575px) {
+    .categories { flex-direction: row; gap: 3px; padding: 3px 10px 6px; background: transparent; }
+    :global(.app .player-dialog) .categories button { flex: 1; justify-content: center; padding-inline: 3px; }
+    .categories :global(svg) { display: none; }
+    .group { gap: 10px; padding-block: 12px; }
+  }
 </style>

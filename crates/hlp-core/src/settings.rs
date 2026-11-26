@@ -36,16 +36,19 @@ pub struct Settings {
 }
 impl Default for Settings {
     fn default() -> Self {
+        let (source, target) = crate::lang::default_subtitle_languages(sys_locale::get_locales());
         Self {
             ui_language: "system".into(),
             auto_download_updates: false,
-            accent_theme: "neon-blue".into(),
-            target_language: crate::lang::default_target(
-                &sys_locale::get_locale().unwrap_or_default(),
-            )
-            .0,
-            source_language: "auto".into(),
-            subtitle_mode: "both".into(),
+            accent_theme: if cfg!(target_os = "macos") {
+                "system"
+            } else {
+                "neon-green"
+            }
+            .into(),
+            target_language: target.into(),
+            source_language: source.into(),
+            subtitle_mode: "translation".into(),
             bilingual_order: BilingualOrder::TranslationFirst,
             subtitle_scale: 1.,
             subtitle_background: 0.7,
@@ -76,15 +79,49 @@ mod tests {
     #[test]
     fn partial_preferences_get_defaults() {
         let s: Settings = serde_json::from_str(r#"{"subtitleScale":1.6}"#).unwrap();
+        #[cfg(target_os = "macos")]
+        assert_eq!(s.accent_theme, "system");
+        #[cfg(not(target_os = "macos"))]
+        assert_eq!(s.accent_theme, "neon-green");
         assert_eq!(s.subtitle_scale, 1.6);
         assert_eq!(s.subtitle_bottom_offset, 0.05);
         assert_eq!(s.subtitle_background, 0.7);
         assert_eq!(s.lookahead_seconds, 180);
-        assert_eq!(s.source_language, "auto");
+        let defaults = Settings::default();
+        assert_eq!(s.target_language, defaults.target_language);
+        assert_eq!(s.source_language, defaults.source_language);
+        assert_ne!(s.source_language, s.target_language);
+        assert_eq!(s.subtitle_mode, "translation");
         assert!(!s.auto_download_updates);
         assert_eq!(
             serde_json::to_value(&s).unwrap()["bilingualOrder"],
             "translation-first"
         );
+    }
+
+    #[test]
+    fn saved_subtitle_preferences_survive_new_defaults() {
+        let settings: Settings = serde_json::from_str(
+            r#"{"sourceLanguage":"auto","targetLanguage":"ja","subtitleMode":"both","bilingualOrder":"original-first"}"#,
+        ).unwrap();
+        assert_eq!(settings.source_language, "auto");
+        assert_eq!(settings.target_language, "ja");
+        assert_eq!(settings.subtitle_mode, "both");
+        assert_eq!(settings.bilingual_order, BilingualOrder::OriginalFirst);
+    }
+
+    #[test]
+    fn explicit_accent_survives_default_change() {
+        for theme in [
+            "neon-blue",
+            "neon-orange",
+            "neon-pink",
+            "neon-green",
+            "system",
+        ] {
+            let s: Settings =
+                serde_json::from_value(serde_json::json!({ "accentTheme": theme })).unwrap();
+            assert_eq!(s.accent_theme, theme);
+        }
     }
 }

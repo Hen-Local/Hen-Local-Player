@@ -87,7 +87,7 @@ pub fn lookup(code: &str) -> Option<&'static Language> {
         .iter()
         .find(|lang| lang.code.eq_ignore_ascii_case(code))
 }
-pub fn default_target(locale: &str) -> LangCode {
+fn locale_language(locale: &str) -> Option<&'static Language> {
     let normalized = locale
         .split(['.', '@'])
         .next()
@@ -96,14 +96,52 @@ pub fn default_target(locale: &str) -> LangCode {
         .to_ascii_lowercase();
     let mut subtags = normalized.split('-');
     let base = subtags.next().unwrap_or_default();
-    let code = if base == "zh" && subtags.any(|tag| matches!(tag, "tw" | "hk" | "hant")) {
-        "zh-Hant"
-    } else {
-        lookup(base)
-            .filter(|lang| lang.hy_mt2_target)
-            .map_or("en", |lang| lang.code)
+    let code = match base {
+        "zh" => subtags
+            .find_map(|tag| match tag {
+                "hans" => Some("zh"),
+                "hant" | "tw" | "hk" | "mo" => Some("zh-Hant"),
+                _ => None,
+            })
+            .unwrap_or("zh"),
+        "fil" => "tl",
+        "iw" => "he",
+        "in" => "id",
+        other => other,
     };
-    LangCode(code.to_owned())
+    lookup(code)
+}
+
+pub fn default_target(locale: &str) -> LangCode {
+    LangCode(default_subtitle_languages([locale]).1.into())
+}
+
+/// Spoken input and translation output for a fresh installation, in OS preference order.
+pub fn default_subtitle_languages(
+    locales: impl IntoIterator<Item = impl AsRef<str>>,
+) -> (&'static str, &'static str) {
+    let mut target = None;
+    let mut alternate_spoken = None;
+    for language in locales
+        .into_iter()
+        .filter_map(|l| locale_language(l.as_ref()))
+    {
+        if language.hy_mt2_target {
+            target.get_or_insert(language.code);
+        }
+        if language.code == "zh-Hant" {
+            alternate_spoken.get_or_insert("zh");
+        } else if language.code != "en" && language.qwen3_asr_name.is_some() {
+            alternate_spoken.get_or_insert(language.code);
+        }
+    }
+    let target = target.unwrap_or("en");
+    let source = if target == "en" {
+        alternate_spoken.unwrap_or("auto")
+    } else {
+        "en"
+    };
+    (source, target)
 }
 #[cfg(test)]
 mod tests {
@@ -150,6 +188,25 @@ mod tests {
             ("yue-HK", "yue"),
         ] {
             assert_eq!(default_target(locale).0, code)
+        }
+    }
+
+    #[test]
+    fn fresh_subtitle_languages_follow_preference_order() {
+        for (locales, expected) in [
+            (vec!["zh-Hans-CN", "en-US"], ("en", "zh")),
+            (vec!["zh-TW"], ("en", "zh-Hant")),
+            (vec!["zh-Hans-TW"], ("en", "zh")),
+            (vec!["fil-PH"], ("en", "tl")),
+            (vec!["sv-SE", "de-DE"], ("en", "de")),
+            (vec!["en-US", "en-GB", "fr-CA"], ("fr", "en")),
+            (vec!["en-US", "zh-Hant-TW"], ("zh", "en")),
+            (vec!["en-US", "gu-IN"], ("auto", "en")),
+            (vec!["fi-FI"], ("fi", "en")),
+            (vec!["en-US"], ("auto", "en")),
+            (vec![], ("auto", "en")),
+        ] {
+            assert_eq!(default_subtitle_languages(locales), expected);
         }
     }
 }

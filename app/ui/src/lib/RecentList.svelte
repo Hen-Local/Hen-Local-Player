@@ -3,7 +3,7 @@
   import { clock } from './format'
   import Icon from './Icon.svelte'
 
-  let { samplePath, onselect }: { samplePath: string | null; onselect: () => void } = $props()
+  let { onselect }: { onselect: () => void } = $props()
   async function open(path: string) {
     await p.open(path)
     if (!p.error) onselect()
@@ -16,7 +16,7 @@
       <button class="recent-row" title={file.path} onclick={() => open(file.path)}>
         <span class="file-icon"><Icon name="film" size={18}/></span>
         <span class="recent-content">
-          <strong>{file.path === samplePath ? p.t('demo') : file.title}</strong>
+          <strong>{file.title}</strong>
           <small>{clock(file.durationMs)}</small>
         </span>
         <Icon name="right" size={14}/>

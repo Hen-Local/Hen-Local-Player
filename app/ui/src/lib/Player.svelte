@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, untrack } from 'svelte'
+  import { onMount, untrack, type Snippet } from 'svelte'
   import { backend, mockMode, player as p } from './stores.svelte'
   import AudioLyrics from './AudioLyrics.svelte'
   import SubtitleOverlay from './SubtitleOverlay.svelte'
@@ -8,25 +8,12 @@
   import { inPiP, supportsPiP, togglePiP, updatePiPCaptions } from './picture-in-picture'
   import { subtitleTracks } from './subtitle-tracks.svelte'
   import { activeAuthoredFrame, lastStartedCue } from './subtitle-tracks'
-  type Panel = 'subtitles' | 'playlist' | 'transcript' | 'library'
-  let {
-    onpanel,
-    onmore,
-    keepControls = false,
-    subtitlesOpen = false,
-    playlistOpen = false,
-  }: {
-    onpanel?: (id: Panel) => void
-    onmore?: () => void
-    keepControls?: boolean
-    subtitlesOpen?: boolean
-    playlistOpen?: boolean
-  } = $props()
+  let { panelOpen, children }: { panelOpen: boolean; children: Snippet } = $props()
   let surface: HTMLDivElement, stage: HTMLDivElement
   let pictureBottomGap = $state(0)
   let video = $state<HTMLVideoElement>()
   let box = $state({ width: 0, height: 0, left: 0, top: 0 }),
-    buffered = $state(0),
+    buffered = $state.raw<[number, number][]>([]),
     idle = $state(false),
     pointerAway = $state(false),
     controlsHeight = $state(0),
@@ -41,7 +28,7 @@
     wakeTap = false
   let url = $derived(p.prep?.mediaUrl || p.media?.mediaUrl || null)
   let controlsVisible = $derived(
-    controlsPressed || (!pointerAway && (!idle || !p.playing || keepControls || controlsHeld)),
+    panelOpen || controlsPressed || (!pointerAway && (!idle || !p.playing || controlsHeld)),
   )
   function measure() {
     if (!stage || !surface || !video) return
@@ -51,6 +38,17 @@
     const top = (h - height) / 2
     box = { width, height, left: (w - width) / 2, top }
     pictureBottomGap = surface.clientHeight - stage.offsetTop - top - height
+  }
+  function intrinsicSizeChanged(element: HTMLVideoElement) {
+    if (element !== video || element.dataset.session !== p.media?.sessionId || element.readyState < 1) return
+    audioOnly = !element.videoWidth || !element.videoHeight
+    measure()
+    p.syncVideoWindowAspect(element)
+  }
+  function updateBuffered(element: HTMLVideoElement) {
+    if (element !== video || element.dataset.session !== p.media?.sessionId) return
+    const ranges = element.buffered
+    buffered = Array.from({ length: ranges.length }, (_, i) => [ranges.start(i) * 1000, ranges.end(i) * 1000])
   }
   let videoPageEnd = $state<number | null>(null), audioPageEnd = $state<number | null>(null)
   let advancing = $state(false), clockRevision = $state(0)
@@ -115,7 +113,7 @@
   function activity() {
     idle = false
     clearTimeout(idleTimer)
-    if (p.playing && !controlsHeld && !keepControls)
+    if (p.playing && !controlsHeld && !panelOpen)
       idleTimer = window.setTimeout(() => (idle = true), 2500)
   }
   function wakeControls() {
@@ -151,14 +149,14 @@
     activity()
     sync(true)
   }
-  function loaded() {
-    if (!video) return
-    measure()
-    audioOnly = !video.videoWidth
-    for (const track of Array.from(video.textTracks)) {
+  function loaded(element: HTMLVideoElement) {
+    if (element !== video || element.dataset.session !== p.media?.sessionId) return
+    intrinsicSizeChanged(element)
+    updateBuffered(element)
+    for (const track of Array.from(element.textTracks)) {
       if (track.kind === 'captions' || track.kind === 'subtitles') track.mode = 'disabled'
     }
-    p.restoreVideo(video)
+    p.restoreVideo(element)
     sync(true)
   }
   function reportError() {
@@ -184,7 +182,7 @@
   $effect(() => {
     const id = p.media?.sessionId
     if (id) {
-      buffered = 0
+      buffered = []
       idle = false
       audioOnly = false
     }
@@ -350,8 +348,8 @@
             data-session={p.media.sessionId}
             preload="auto"
             playsinline
-            onloadedmetadata={loaded}
-            onresize={measure}
+            onloadedmetadata={(e) => loaded(e.currentTarget)}
+            onresize={(e) => intrinsicSizeChanged(e.currentTarget)}
             ondurationchange={resync}
             onratechange={resync}
             onplaying={() => { advancing = true; clockRevision++; sync() }}
@@ -362,12 +360,10 @@
               pause()
               p.ended()
             }}
-            onseeked={resync}
+            onseeked={(e) => { updateBuffered(e.currentTarget); resync() }}
             ontimeupdate={() => sync()}
-            onprogress={() => {
-              if (video?.buffered.length)
-                buffered = video.buffered.end(video.buffered.length - 1) * 1000
-            }}
+            onprogress={(e) => updateBuffered(e.currentTarget)}
+            onemptied={(e) => updateBuffered(e.currentTarget)}
             onerror={reportError}
           >
             <track kind="captions" />
@@ -406,16 +402,11 @@
         {pipAvailable}
         {pipActive}
         onpip={togglePictureInPicture}
-        {subtitlesOpen}
-        {playlistOpen}
-        onsettings={() => onpanel?.('subtitles')}
-        onplaylist={() => onpanel?.('playlist')}
-        onmore={() => onmore?.()}
         onhold={(held, pressed) => {
           controlsHeld = held
           controlsPressed = pressed
         }}
-      />
+      >{@render children()}</Controls>
     </div>
   {/if}
 </div>
@@ -430,7 +421,8 @@
     z-index: 5;
     width: 100%;
     box-sizing: border-box;
-    padding: 0 clamp(8px, 2.2vw, 24px) max(clamp(18px, 4.6vh, 38px), env(safe-area-inset-bottom));
+    --transport-inset: clamp(8px, 2.2vw, 24px);
+    padding: 0 var(--transport-inset) max(clamp(18px, 4.6vh, 38px), env(safe-area-inset-bottom));
     container-type: inline-size;
     pointer-events: none;
   }

@@ -1,3 +1,13 @@
+<script module lang="ts">
+  const introducedFiles = new Set<string>()
+
+  function introduce(node: HTMLElement, file: string) {
+    if (!file || introducedFiles.has(file)) return
+    introducedFiles.add(file)
+    node.dataset.firstOffer = ''
+  }
+</script>
+
 <script lang="ts">
   import { player as p, mockMode } from './stores.svelte'
   import Icon from './Icon.svelte'
@@ -8,6 +18,23 @@
   import { subtitleTracks as tracks } from './subtitle-tracks.svelte'
   import { componentNames } from './component-names'
   import { size } from './format'
+
+  let viewport = $state<HTMLDivElement>()
+  let browsing = $state(false)
+
+  function scrollByKey(event: KeyboardEvent) {
+    if (!viewport || event.metaKey || event.ctrlKey || event.altKey ||
+      (event.target instanceof Element && event.target.closest('input, select, textarea'))) return
+    const page = viewport.clientHeight * .9
+    const distance: Record<string, number> = {
+      ArrowUp: -40, ArrowDown: 40, PageUp: -page, PageDown: page,
+      Home: -viewport.scrollHeight, End: viewport.scrollHeight,
+    }
+    if (!(event.key in distance)) return
+    event.preventDefault()
+    browsing = true
+    viewport.scrollTop += distance[event.key]
+  }
 
   let off = $derived(
     tracks.selected === 'off' ||
@@ -20,6 +47,7 @@
       missing.every((id) => ['mt-hy-mt2-1.8b', 'llama-runtime-b11429'].includes(id)),
   )
   let stage = $derived(p.status?.stage ?? 'idle')
+  let fileKey = $derived(p.media?.sourcePath || p.currentPath || p.media?.sessionId || '')
   let browserFile = $derived(mockMode && p.currentPath.startsWith('browser:'))
   let unavailable = $derived(
     browserFile
@@ -37,18 +65,10 @@
       (stage === 'processing' || (stage === 'idle' && !p.subtitleError)),
   )
   let hasLines = $derived(!!(generated ? p.cues.length : tracks.authored?.cues.length))
-  let empty = $derived(!hasLines && !tracks.loading && !tracks.discovering)
   let canCreate = $derived(
-    empty &&
-      !tracks.authored &&
-      !p.transcriptionRequested &&
-      !p.canRegenerate &&
-      (!off ||
-        (!p.cues.length &&
-          !tracks.files.length &&
-          !tracks.embedded.length &&
-          !tracks.sidecars.length)) &&
-      stage !== 'complete',
+    !p.cues.length && !tracks.loading && !tracks.discovering &&
+      !p.transcriptionRequested && !p.startingTranscription && !p.canRegenerate &&
+      !p.subtitleError && !missing.length && (stage === 'idle' || stage === 'needs-setup'),
   )
   let cached = $derived(
     generated && hasLines && !p.transcriptionRequested && p.status?.stage === 'idle' &&
@@ -66,82 +86,94 @@
 </script>
 
 <div class="subtitle-workspace" tabindex="-1">
-  <div class="subtitle-options">
+  <!-- The one scrollable region is focusable so keyboard users can page through the inspector. -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+  <div class="subtitle-options" role="region" aria-label={p.t('subtitles')} tabindex="0"
+    bind:this={viewport} onkeydown={scrollByKey}
+    onwheel={event => { if (event.deltaY) browsing = true }}
+    ontouchmove={() => browsing = true}
+    onpointerdown={() => browsing = true}
+    onfocusin={event => { if (event.target !== viewport) browsing = true }}>
     <SubtitleTracks />
     <SubtitleSettings />
+    {#if showActions || showProgress}
+      <div class="generation-footer">
+        {#if showActions}
+          <div class="generation-actions">
+            {#if off}<p>{p.t('subtitlesOff')}</p>{/if}
+            {#if canCreate}
+              <button
+                class="create-subtitles generate-subtitles"
+                disabled={!!unavailable || p.startingTranscription}
+                onclick={() => p.startTranscription()}
+              >
+                {#if !unavailable}
+                  {#key fileKey}
+                    <span class="reflection" aria-hidden="true" use:introduce={fileKey}></span>
+                  {/key}
+                {/if}
+                <Icon name="cc" size={16} /><span>{p.t('createSubtitles')}</span>
+              </button>
+              {#if unavailable}<p>{unavailable}</p>{/if}
+            {:else if generated}
+              {#if missing.length}
+                <strong>{p.t('neededComponents')}</strong>
+                {#each missing as id}
+                  {@const component = p.components.find((c) => c.id === id)}
+                  {@const state = component?.state}
+                  <div class="missing-component">
+                    <span
+                      >{componentNames[id] || id}{#if component}<small>{size(component.bytesTotal)}</small
+                        >{/if}</span
+                    >
+                    <button
+                      disabled={installing}
+                      aria-label={p.t('downloadOne') + ' · ' + (componentNames[id] || id)}
+                      onclick={() => p.installSubtitleComponent(id)}
+                      >{typeof state === 'object' ? p.t('retry') : p.t('download')}</button
+                    >
+                  </div>
+                  {#if state === 'downloading' || state === 'verifying'}
+                    <small role="status">{p.t(state)} · {size(component?.bytesDone ?? 0)}</small>
+                  {:else if typeof state === 'object'}<small class="form-error" role="alert"
+                      >{state.failed}</small
+                    >{/if}
+                {/each}
+                {#if translationOnly && p.settings.targetLanguage !== 'none'}
+                  <button
+                    disabled={installing || p.startingTranscription}
+                    onclick={() => p.startTranscription({ originalOnly: true })}>{p.t('originalOnly')}</button
+                  >
+                {/if}
+              {:else if retry || cached}
+                {#if stage === 'partial'}
+                  <p role="status">{p.t('untranslatedLines')} · {p.status?.translationFailed}</p>
+                {/if}
+                <button class="create-subtitles" onclick={() => p.startTranscription()}
+                  >{p.t(
+                    stage === 'partial' ? 'retryTranslation' :
+                      cached || stage === 'paused' ? 'continueTranscription' : 'retryTranscription',
+                  )}</button
+                >
+              {/if}
+              {#if p.subtitleError && stage !== 'processing'}<small class="form-error" role="alert">{p.subtitleError}</small>{/if}
+            {/if}
+          </div>
+        {/if}
+        {#if showProgress}
+          <SubtitleProgress {cached} />
+        {/if}
+      </div>
+    {/if}
     {#if !off && (hasLines || (generated && working))}
       {#key (p.media?.sessionId ?? '') + '/' + tracks.selected}
-        <TranscriptPanel />
+        <TranscriptPanel {viewport} bind:browsing />
       {/key}
     {/if}
     {#if generated && stage === 'complete' && !hasLines}
       <p class="empty-note" role="status">{p.t('noSpeech')}</p>
     {/if}
   </div>
-  {#if showActions || showProgress}
-    <div class="generation-footer">
-      {#if showActions}
-        <div class="generation-actions">
-          {#if off}<p>{p.t('subtitlesOff')}</p>{/if}
-          {#if canCreate}
-            <button
-              class="create-subtitles"
-              disabled={!!unavailable || p.startingTranscription}
-              onclick={() => p.startTranscription()}
-            >
-              <Icon name="cc" size={16} />{p.t('createSubtitles')}
-            </button>
-            {#if unavailable}<p>{unavailable}</p>{/if}
-          {:else if generated}
-            {#if missing.length}
-              <strong>{p.t('neededComponents')}</strong>
-              {#each missing as id}
-                {@const component = p.components.find((c) => c.id === id)}
-                {@const state = component?.state}
-                <div class="missing-component">
-                  <span
-                    >{componentNames[id] || id}{#if component}<small>{size(component.bytesTotal)}</small
-                      >{/if}</span
-                  >
-                  <button
-                    disabled={installing}
-                    aria-label={p.t('downloadOne') + ' · ' + (componentNames[id] || id)}
-                    onclick={() => p.installSubtitleComponent(id)}
-                    >{typeof state === 'object' ? p.t('retry') : p.t('download')}</button
-                  >
-                </div>
-                {#if state === 'downloading' || state === 'verifying'}
-                  <small role="status">{p.t(state)} · {size(component?.bytesDone ?? 0)}</small>
-                {:else if typeof state === 'object'}<small class="form-error" role="alert"
-                    >{state.failed}</small
-                  >{/if}
-              {/each}
-              {#if translationOnly && p.settings.targetLanguage !== 'none'}
-                <button
-                  disabled={installing || p.startingTranscription}
-                  onclick={() => p.startTranscription({ originalOnly: true })}>{p.t('originalOnly')}</button
-                >
-              {/if}
-            {:else if retry || cached}
-              {#if stage === 'partial'}
-                <p role="status">{p.t('untranslatedLines')} · {p.status?.translationFailed}</p>
-              {/if}
-              <button class="create-subtitles" onclick={() => p.startTranscription()}
-                >{p.t(
-                  stage === 'partial' ? 'retryTranslation' :
-                    cached || stage === 'paused' ? 'continueTranscription' : 'retryTranscription',
-                )}</button
-              >
-            {/if}
-            {#if p.subtitleError && stage !== 'processing'}<small class="form-error" role="alert">{p.subtitleError}</small>{/if}
-          {/if}
-        </div>
-      {/if}
-      {#if showProgress}
-        <SubtitleProgress {cached} />
-      {/if}
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -163,9 +195,7 @@
   }
   .generation-footer {
     flex: none;
-    max-height: 49%;
-    overflow: hidden auto;
-    overscroll-behavior: contain;
+    margin-top: auto;
   }
   .subtitle-options .empty-note {
     padding-inline: var(--inspector-inset);
@@ -189,6 +219,38 @@
     border: 0;
     color: var(--ink);
     background: var(--surface-selection);
+  }
+  .generation-actions .generate-subtitles {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    min-height: 37px;
+  }
+  .generation-actions .generate-subtitles:enabled {
+    color: var(--accent-on-solid);
+    background: linear-gradient(112deg, color-mix(in srgb, var(--accent) 90%, white), var(--accent));
+    box-shadow: inset 0 1px rgb(255 255 255 / 28%);
+  }
+  .generation-actions .generate-subtitles:enabled:hover {
+    color: var(--accent-on-solid);
+    background: color-mix(in srgb, var(--accent) 92%, white);
+  }
+  @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+    .reflection:global([data-first-offer]) {
+      position: absolute;
+      z-index: -1;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(108deg, transparent 32%, rgb(151 246 255 / 16%) 43%, rgb(255 255 255 / 22%) 49%, rgb(254 187 255 / 16%) 55%, transparent 67%);
+      transform: translateX(-100%);
+      animation: glint 1050ms 140ms ease-in-out;
+    }
+    @keyframes glint {
+      to { transform: translateX(100%); }
+    }
+  }
+  @media (forced-colors: active) {
+    .generation-actions .generate-subtitles:enabled { border: 1px solid ButtonText; }
   }
   .missing-component {
     display: flex;

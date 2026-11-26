@@ -34,18 +34,15 @@ fn read_file(path: &Path) -> Result<SubtitleFile> {
     let extension = path.extension().and_then(|v| v.to_str()).unwrap_or("");
     ensure!(
         extension.eq_ignore_ascii_case("srt") || extension.eq_ignore_ascii_case("vtt"),
-        "Select an SRT or WebVTT subtitle file"
+        "subtitleFileTypes"
     );
     let file = File::open(path)?;
     let metadata = file.metadata()?;
-    ensure!(metadata.is_file(), "Select a subtitle file");
-    ensure!(metadata.len() <= MAX_BYTES, "Subtitle file exceeds 16 MiB");
+    ensure!(metadata.is_file(), "subtitleFileTypes");
+    ensure!(metadata.len() <= MAX_BYTES, "subtitleTooLarge");
     let mut bytes = Vec::new();
     file.take(MAX_BYTES + 1).read_to_end(&mut bytes)?;
-    ensure!(
-        bytes.len() as u64 <= MAX_BYTES,
-        "Subtitle file exceeds 16 MiB"
-    );
+    ensure!(bytes.len() as u64 <= MAX_BYTES, "subtitleTooLarge");
     Ok(SubtitleFile {
         name: path
             .file_name()
@@ -59,10 +56,7 @@ fn read_file(path: &Path) -> Result<SubtitleFile> {
 pub(super) fn decode_subtitle(bytes: Vec<u8>) -> Result<String> {
     if bytes.starts_with(&[0xff, 0xfe]) || bytes.starts_with(&[0xfe, 0xff]) {
         let little_endian = bytes[0] == 0xff;
-        ensure!(
-            bytes.len().is_multiple_of(2),
-            "Invalid UTF-16 subtitle file"
-        );
+        ensure!(bytes.len().is_multiple_of(2), "invalidSubtitleEncoding");
         let units: Vec<_> = bytes[2..]
             .chunks_exact(2)
             .map(|b| {
@@ -73,19 +67,23 @@ pub(super) fn decode_subtitle(bytes: Vec<u8>) -> Result<String> {
                 }
             })
             .collect();
-        String::from_utf16(&units).context("Invalid UTF-16 subtitle file")
+        String::from_utf16(&units).map_err(|_| anyhow::anyhow!("invalidSubtitleEncoding"))
     } else {
-        String::from_utf8(bytes).context("Save subtitles as UTF-8 or UTF-16")
+        String::from_utf8(bytes).map_err(|_| anyhow::anyhow!("invalidSubtitleEncoding"))
     }
 }
 
 #[tauri::command]
-pub async fn choose_subtitle_file(window: WebviewWindow) -> Result<Option<SubtitleFile>, String> {
+pub async fn choose_subtitle_file(
+    window: WebviewWindow,
+    title: String,
+) -> Result<Option<SubtitleFile>, String> {
     tauri::async_runtime::spawn_blocking(move || -> Result<_> {
         let file = window
             .dialog()
             .file()
             .set_parent(&window)
+            .set_title(title)
             .add_filter("SRT / WebVTT", &["srt", "vtt"])
             .blocking_pick_file();
         file.map(|f| read_file(&f.into_path()?)).transpose()
@@ -102,7 +100,7 @@ async fn source_path(state: &Desktop, session_id: &str) -> Result<PathBuf, Strin
         .as_ref()
         .filter(|file| file.session.id == session_id)
         .map(|file| file.path.clone())
-        .ok_or_else(|| "Media has changed".to_owned())
+        .ok_or_else(|| "mediaChanged".to_owned())
 }
 
 async fn tool_output(mut cmd: Command, limit: u64) -> Result<Vec<u8>> {

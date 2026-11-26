@@ -1,12 +1,12 @@
 <script lang="ts">
+  import SelectField from './SelectField.svelte'
   import { player as p } from './stores.svelte'
   import { languages, languageName } from './languages'
-  import Icon from './Icon.svelte'
 </script>
 
 <label class="track-field">
   <span>{p.t('source')}</span>
-  <span class="select-box">
+  <SelectField>
     <select
       aria-label={p.t('source')}
       value={p.settings.sourceLanguage}
@@ -26,12 +26,11 @@
           {languageName(l.code, p.locale, true)}
         </option>{/each}
     </select>
-    <Icon name="down" size={13} />
-  </span>
+  </SelectField>
 </label>
 <label class="track-field">
   <span>{p.t('target')}</span>
-  <span class="select-box">
+  <SelectField>
     <select
       aria-label={p.t('target')}
       value={p.settings.targetLanguage}
@@ -42,7 +41,6 @@
           {languageName(l.code, p.locale, true)}
         </option>{/each}
     </select>
-    <Icon name="down" size={13} />
-  </span>
+  </SelectField>
 </label>
 {#if p.language?.unverifiedTranslation}<span class="warn">{p.t('unverified')}</span>{/if}

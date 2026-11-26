@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>Hen Local Player</title>
+  <defs>
+    <linearGradient id="pearl" gradientUnits="userSpaceOnUse" x1="240" y1="110" x2="770" y2="835">
+      <stop stop-color="white" stop-opacity=".85"/>
+      <stop offset=".29" stop-color="#eef8ff" stop-opacity=".69"/>
+      <stop offset=".49" stop-color="white" stop-opacity=".87"/>
+      <stop offset=".72" stop-color="#f2f8ff" stop-opacity=".63"/>
+      <stop offset="1" stop-color="white" stop-opacity=".82"/>
+    </linearGradient>
+    <filter id="edge" filterUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024" color-interpolation-filters="sRGB">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="3" result="soft"/>
+      <feOffset in="soft" dy="3.3" result="shadowMask"/>
+      <feFlood flood-color="#182639" flood-opacity=".42"/><feComposite in2="shadowMask" operator="in" result="shadow"/>
+      <feOffset in="soft" dx="-2.4" dy="-3.3" result="up"/>
+      <feComposite in="SourceAlpha" in2="up" operator="out" result="lipMask"/>
+      <feFlood flood-color="#36475d" flood-opacity=".55"/><feComposite in2="lipMask" operator="in" result="lip"/>
+      <feOffset in="soft" dx="2.6" dy="4" result="down"/>
+      <feComposite in="SourceAlpha" in2="down" operator="out" result="lightMask"/>
+      <feFlood flood-color="white"/><feComposite in2="lightMask" operator="in" result="rim"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/><feMergeNode in="lip"/><feMergeNode in="rim"/></feMerge>
+    </filter>
+    <mask id="symbol" style="mask-type:alpha">
+      <image width="1024" height="1024" xlink:href="AppIcon.icon/Assets/Hen%20Footprints.png"/>
+      <image width="1024" height="1024" xlink:href="AppIcon.icon/Assets/PlayPause.svg"/>
+    </mask>
+    <mask id="remaining" style="mask-type:alpha">
+      <image width="1024" height="1024" xlink:href="AppIcon.icon/Assets/Remaining.svg"/>
+    </mask>
+    <mask id="elapsed" style="mask-type:alpha">
+      <image width="1024" height="1024" xlink:href="AppIcon.icon/Assets/Elapsed.svg"/>
+    </mask>
+    <mask id="head" style="mask-type:alpha">
+      <image width="1024" height="1024" xlink:href="AppIcon.icon/Assets/Playhead.svg"/>
+    </mask>
+  </defs>
+  <g filter="url(#edge)">
+    <rect width="1024" height="1024" fill="url(#pearl)" mask="url(#symbol)"/>
+    <rect width="1024" height="1024" fill="#f3f8ff" fill-opacity=".34" mask="url(#remaining)"/>
+    <rect width="1024" height="1024" fill="#fcfeff" fill-opacity=".73" mask="url(#elapsed)"/>
+  </g>
+  <g filter="url(#edge)">
+    <rect width="1024" height="1024" fill="white" fill-opacity=".89" mask="url(#head)"/>
+  </g>
+</svg>

@@ -1,14 +1,19 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte'
+  import { MediaQuery } from 'svelte/reactivity'
   import { getCurrentWindow } from '@tauri-apps/api/window'
   import { enableWindowDragging } from './lib/window-drag'
-  import { player as p, mockMode, backend, appUpdates } from './lib/stores.svelte'
+  import { player as p, mockMode, appUpdates, backend } from './lib/stores.svelte'
+  import { observeSystemAccent } from './lib/system-accent'
   import { updateInterval } from './lib/app-updates.svelte'
+  import { applyNativeMenu } from './lib/i18n/native-menu'
+  import { loadMessages, resolveUiLanguage } from './lib/i18n'
   import Icon from './lib/Icon.svelte'
   import Player from './lib/Player.svelte'
   import PlayerSettings from './lib/PlayerSettings.svelte'
-  import { slidePanel } from './lib/panel-transition'
+  import { finishPanelSlide } from './lib/panel-transition'
   import RecentList from './lib/RecentList.svelte'
+  import WelcomeHistory from './lib/WelcomeHistory.svelte'
   import PlaylistPanel from './lib/PlaylistPanel.svelte'
   import OpenUrlDialog from './lib/OpenUrlDialog.svelte'
   import OnlineSubtitleDialog from './lib/OnlineSubtitleDialog.svelte'
@@ -16,7 +21,6 @@
   import Dialog from './lib/Dialog.svelte'
   import SetupScreen from './lib/SetupScreen.svelte'
   import SettingsDialog from './lib/SettingsDialog.svelte'
-  import PlayerMenu from './lib/PlayerMenu.svelte'
   import './styles.css'
   import './lib/player-panels.css'
 
@@ -29,36 +33,39 @@
       document.querySelector<HTMLElement>('#player-settings .subtitle-workspace')?.focus({ preventScroll: true })
     }
   }
+  function preferredLanguages() {
+    return navigator.languages.length ? [...navigator.languages] : [navigator.language]
+  }
+  let systemLanguages = $state.raw(preferredLanguages())
+  $effect(() => {
+    const locale = resolveUiLanguage(p.settings.uiLanguage, systemLanguages)
+    let current = true
+    void loadMessages(locale).then(messages => {
+      if (current) p.interfaceCopy = { locale, messages }
+    }).catch(error => { if (current) p.message(error) })
+    return () => { current = false }
+  })
+
   const mac = /Mac/.test(navigator.platform)
   const nativeMac = !mockMode && mac
+  let initialized = $state(false)
   let shell: HTMLElement
-  let samplePath = $state<string | null>(mockMode ? 'fixture_ja.mp4' : null)
+  let welcomeHistory = $state<ReturnType<typeof WelcomeHistory>>()
   let leftPanel = $state<LeftPanel | null>(null)
   let subtitleOverride = $state<boolean | null>(null)
   let subtitlesOpen = $derived(!!p.media && (subtitleOverride ?? p.settings.showTranscriptPanel))
+  const compactPlayer = new MediaQuery('(max-width: 890px), (max-height: 405px)')
+  let panelOpen = $derived(!!leftPanel || subtitlesOpen)
   let preferenceWrite = Promise.resolve()
   let preferenceRevision = 0
-  let menuOpen = $state(false)
   let lastSide = $state<Side>('right')
   let dismissSide: Side = $derived(leftPanel && (!subtitlesOpen || lastSide === 'left') ? 'left' : 'right')
   let wasPlayingFile = false
 
-  function focusMore() {
-    shell?.querySelector<HTMLButtonElement>('.more-trigger')?.focus({ preventScroll: true })
-  }
   function placeOverlays() {
-    const trigger = shell?.querySelector('.more-trigger')
-    if (!trigger) return
-    const button = trigger.getBoundingClientRect()
+    const bar = shell.querySelector('[data-transport-stack]')?.getBoundingClientRect()
     const host = shell.getBoundingClientRect()
-    shell.style.setProperty('--menu-right', Math.max(8, host.right - button.right) + 'px')
-    shell.style.setProperty('--menu-top', button.bottom - host.top + 6 + 'px')
-    const bar = shell.querySelector('[data-transport]')?.getBoundingClientRect()
     shell.style.setProperty('--bar-clearance', Math.max(8, host.bottom - (bar?.top ?? host.bottom) + 8) + 'px')
-  }
-  function toggleMenu() {
-    placeOverlays()
-    menuOpen = !menuOpen
   }
   function setSubtitlesOpen(showSubtitles: boolean) {
     subtitleOverride = showSubtitles
@@ -71,17 +78,24 @@
     })
   }
   function showPanel(id: Panel, toggle = false) {
-    if (!p.media && id !== 'library') return
-    menuOpen = false
-    const left = id === 'library' || id === 'playlist'
+    if (!p.media) {
+      if (id === 'library') void welcomeHistory?.showAll()
+      return
+    }
+    const left = id === 'playlist' || id === 'library'
     const side = left ? 'left' : 'right'
     if (toggle && (left ? leftPanel === id : subtitlesOpen)) {
       closePanel(side)
       return
     }
     lastSide = side
-    if (left) leftPanel = id
-    else setSubtitlesOpen(true)
+    if (left) {
+      if (compactPlayer.current && subtitlesOpen) setSubtitlesOpen(false)
+      leftPanel = id
+    } else {
+      if (compactPlayer.current) leftPanel = null
+      setSubtitlesOpen(true)
+    }
     void tick().then(() => {
       const selector = id === 'transcript'
         ? '.right-inspector .subtitle-workspace'
@@ -91,43 +105,38 @@
       target?.focus({ preventScroll: true })
     })
   }
+  $effect(() => {
+    if (compactPlayer.current && leftPanel && subtitlesOpen) {
+      if (lastSide === 'right') leftPanel = null
+      else setSubtitlesOpen(false)
+    }
+  })
+  function focusPanelButton(side: Side) {
+    const selector = side === 'right' ? '.settings-trigger' : '.playlist-trigger'
+    shell?.querySelector<HTMLButtonElement>(selector)?.focus({ preventScroll: true })
+  }
+  function dismissPanels() {
+    const restore = dismissSide
+    leftPanel = null
+    if (subtitlesOpen) setSubtitlesOpen(false)
+    focusPanelButton(restore)
+  }
+  function trackPanelInteraction(event: PointerEvent) {
+    if (!leftPanel || !subtitlesOpen) return
+    const panel = event.target instanceof Element ? event.target.closest('.inspector') : null
+    if (panel) lastSide = panel.classList.contains('left-inspector') ? 'left' : 'right'
+  }
   function closePanel(side: Side) {
     if (side === 'left') leftPanel = null
     else setSubtitlesOpen(false)
-    const selector = side === 'right' ? '.settings-trigger' : p.media ? '.playlist-trigger' : '.more-trigger'
-    shell?.querySelector<HTMLButtonElement>(selector)?.focus({ preventScroll: true })
+    focusPanelButton(side)
     lastSide = side === 'left' ? 'right' : 'left'
   }
-  function menuAction(action: string) {
-    // Return focus before a picker, dialog or drawer takes it.
-    menuOpen = false
-    focusMore()
-    switch (action) {
-      case 'open': void p.choose(); break
-      case 'folder': void p.chooseFolder(); break
-      case 'url': p.dialog = 'url'; break
-      case 'settings': p.dialog = 'settings'; break
-      case 'sample': if (samplePath) void p.open(samplePath); break
-      case 'library': showPanel('library', true); break
-      case 'close': void p.close(); break
-    }
-  }
-
   function key(e: KeyboardEvent) {
     if (e.defaultPrevented || e.isComposing || p.dialog) return
-    if (e.key === 'Escape' && menuOpen) {
-      e.preventDefault()
-      menuOpen = false
-      focusMore()
-      return
-    }
     if (e.key === 'Escape' && (leftPanel || subtitlesOpen)) {
       e.preventDefault()
-      const focused = (e.target as Element | null)?.closest?.('.inspector')
-      const side = focused?.classList.contains('left-inspector') ? 'left'
-        : focused?.classList.contains('right-inspector') ? 'right'
-        : dismissSide
-      closePanel(side)
+      closePanel(dismissSide)
       return
     }
     const cmd = e.metaKey || e.ctrlKey,
@@ -135,18 +144,18 @@
     if (cmd && e.shiftKey && !e.altKey && k === 'd') {
       // Some webviews forward the keystroke instead of invoking the native menu.
       e.preventDefault()
-      menuOpen = false
       p.findOnlineSubtitles()
       return
     }
-    if (menuOpen) return
-    if (cmd && ['o', 'l', 'e'].includes(k)) {
+    if (cmd && ['o', 'l', 'e', ',', 'w'].includes(k)) {
       if (!mockMode) return // The desktop menu handles these accelerators.
       e.preventDefault()
       if (k === 'o') {
         if (e.shiftKey) void p.chooseFolder()
-        else void p.choose()
-      } else if (k === 'l') p.dialog = 'url'
+        else void p.chooseMedia()
+      } else if (k === ',') p.dialog = 'settings'
+      else if (k === 'w') { if (p.media) void p.close() }
+      else if (k === 'l') p.dialog = 'url'
       else if (p.media) p.dialog = 'export'
       return
     }
@@ -225,11 +234,11 @@
   }
   onMount(() => {
     document.documentElement.classList.toggle('native-mac', nativeMac)
+    const stopAccent = mac ? observeSystemAccent(backend) : undefined
     const stopDragging = !mockMode && enableWindowDragging(shell,
-      () => !p.fullscreen && !p.dialog && !menuOpen,
+      () => !p.fullscreen && !p.dialog,
       () => void p.act(() => getCurrentWindow().startDragging()))
-    void p.act(() => p.init())
-    if (!mockMode) void p.act(async () => { samplePath = await backend.call('get_sample_media') })
+    void p.act(() => p.init()).then(() => { initialized = true })
     function fromMenu(e: Event) {
       const id = (e as CustomEvent).detail
       if (['library', 'playlist', 'subtitles', 'transcript'].includes(id))
@@ -238,9 +247,13 @@
     window.addEventListener('player:panel', fromMenu)
     return () => {
       if (stopDragging) stopDragging()
+      stopAccent?.()
       window.removeEventListener('player:panel', fromMenu)
       p.dispose()
     }
+  })
+  $effect(() => {
+    if (!mockMode && initialized) void applyNativeMenu(p.strings, nativeMac && p.fullscreen, !!p.media).catch(p.message.bind(p))
   })
   $effect(() => {
     if (!p.settings.autoDownloadUpdates || p.media) return
@@ -257,38 +270,44 @@
     return () => { window.clearTimeout(initial); window.clearInterval(daily) }
   })
   $effect(() => {
-    // Keep the menu and subtitle clearance aligned to the transport after resize.
+    // Keep subtitle clearance aligned to the transport after resize.
     p.media?.sessionId
     const observer = new ResizeObserver(placeOverlays)
     let mounted = true
     void tick().then(() => {
       if (!mounted) return
       observer.observe(shell)
-      const bar = shell.querySelector('[data-transport]')
+      const bar = shell.querySelector('[data-transport-stack]')
       if (bar) observer.observe(bar)
       placeOverlays()
     })
     return () => { mounted = false; observer.disconnect() }
   })
   $effect(() => {
-    document.documentElement.lang = p.locale
+    document.documentElement.lang = p.locale === 'tl' ? 'fil' : p.locale
+    document.documentElement.dir = ['ar', 'fa'].includes(p.locale) ? 'rtl' : 'ltr'
     document.documentElement.dataset.accentTheme = p.settings.accentTheme
     document.title = p.media ? p.media.title + ' · ' + p.t('app') : p.t('app')
     if (!!p.media !== wasPlayingFile) {
       wasPlayingFile = !!p.media
       if (!p.media) leftPanel = null
-      menuOpen = false
     }
-    if (p.dialog) menuOpen = false
   })
 </script>
 
-<svelte:window onkeydown={key} />
+<svelte:window onpointerdowncapture={trackPanelInteraction} onkeydown={key} onlanguagechange={() => systemLanguages = preferredLanguages()} />
 <main bind:this={shell} class="app" class:desktop={!mockMode} class:watching={!!p.media}
-  class:fullscreen={p.fullscreen}>
+  class:fullscreen={p.fullscreen} class:compact-player={compactPlayer.current}
+  class:panel-open={panelOpen} class:left-open={!!leftPanel} class:right-open={subtitlesOpen}>
   {#if p.media}
-    <Player onpanel={(id) => showPanel(id, true)} onmore={toggleMenu} keepControls={menuOpen || !!leftPanel || subtitlesOpen}
-      {subtitlesOpen} playlistOpen={leftPanel === 'playlist'} />
+    <Player {panelOpen}>
+      <button class="float-button panel-toggle playlist-trigger" title={p.t('playlist')} aria-label={p.t('playlist')}
+        aria-expanded={leftPanel === 'playlist'} aria-controls={leftPanel === 'playlist' ? 'playlist-sidebar' : undefined}
+        onclick={() => showPanel('playlist', true)}><Icon name="sidebar" size={15} /><span>{p.t('playlist')}</span></button>
+      <button class="float-button panel-toggle settings-trigger" title={p.t('subtitles')} aria-label={p.t('subtitles')}
+        aria-expanded={subtitlesOpen} aria-controls={subtitlesOpen ? 'player-settings' : undefined}
+        onclick={() => showPanel('subtitles', true)}><Icon name="cc" size={15} /><span>{p.t('subtitles')}</span></button>
+    </Player>
   {:else}
     <section class="idle-stage" aria-label={p.t('player')}>
       <div class="welcome">
@@ -298,59 +317,48 @@
             <h1>{p.t('app')}</h1>
           </div>
           <div class="start-actions">
-            <button class="open-file" onclick={() => p.choose()} title={p.t('open') + (mac ? ' (⌘O)' : ' (Ctrl+O)')}>
-              <Icon name="folder" size={15}/>{p.t('open')}
+            <button class="open-file" onclick={() => p.chooseMedia()} title={p.t('open') + ' / ' + p.t('openFolder') + (mac ? ' (⌘O)' : '')}>
+              <Icon name="folder" size={15}/><span>{p.t('open')} / {p.t('openFolder')}</span>
             </button>
             <button class="open-file open-url" onclick={() => (p.dialog = 'url')} title={p.t('openUrlAction') + (mac ? ' (⌘L)' : ' (Ctrl+L)')}>
               <Icon name="link" size={15}/>{p.t('openUrlAction')}
             </button>
           </div>
         </div>
-        <nav class="welcome-recent" aria-hidden={!p.recent.length} aria-label={p.t('recent')}>
-          {#each p.recent.slice(0, 4) as file (file.path)}
-            <button title={file.path} onclick={() => p.open(file.path)}>
-              <Icon name="film" size={15}/><span>{file.path === samplePath ? p.t('demo') : file.title}</span>
-            </button>
-          {/each}
-        </nav>
+        <WelcomeHistory bind:this={welcomeHistory} />
       </div>
     </section>
   {/if}
 
-  {#if !p.fullscreen}
-    <header class="window-chrome" data-tauri-drag-region>
-      {#if p.media}
-        <span data-tauri-drag-region class="window-title">{p.media.sourcePath === samplePath ? p.t('demo') : p.media.title}</span>
-      {:else}
-        <button class="more-trigger window-more" aria-label={p.t('more')} title={p.t('more')}
-          aria-haspopup="menu" aria-expanded={menuOpen} onclick={toggleMenu}><Icon name="more" size={19}/></button>
-      {/if}
-    </header>
-  {/if}
+  <header class="window-chrome" data-tauri-drag-region>
+    {#if p.media}
+      <span data-tauri-drag-region class="window-title" dir="auto">{p.media.title}</span>
+    {:else}
+      <div class="welcome-tools" dir="ltr">
+        <button class="welcome-settings" aria-label={p.t('settings')} title={p.t('settings')}
+          onclick={() => (p.dialog = 'settings')}><Icon name="gear" size={19}/></button>
+      </div>
+    {/if}
+  </header>
 
   {#if leftPanel}
-    <aside id="playlist-sidebar" class="inspector left-inspector" transition:slidePanel={'left'} onfocusin={() => (lastSide = 'left')} aria-label={p.t(leftPanel === 'library' ? 'recent' : 'playlist')}>
+    <aside id="playlist-sidebar" class="inspector left-inspector" out:finishPanelSlide onfocusin={() => (lastSide = 'left')} aria-label={p.t(leftPanel === 'library' ? 'recent' : 'playlist')}>
       <div class="panel-title">
         <h2>{p.t(leftPanel === 'library' ? 'recent' : 'playlist')}</h2>
         <button class="icon panel-close" title={p.t('close')} aria-label={p.t('close')}
           onclick={() => closePanel('left')}><Icon name="close" size={16}/></button>
       </div>
-      {#if leftPanel === 'playlist'}<PlaylistPanel />
-      {:else}<RecentList {samplePath} onselect={() => closePanel('left')} />{/if}
+      {#if leftPanel === 'playlist'}<PlaylistPanel onselect={() => { if (compactPlayer.current) closePanel('left') }} />
+      {:else}<RecentList onselect={() => closePanel('left')} />{/if}
     </aside>
   {/if}
   {#if p.media}
-    {#if leftPanel || subtitlesOpen}
-      <button class="panel-dismiss-surface" tabindex="-1" aria-label={p.t('close')}
-        aria-controls={dismissSide === 'left' ? 'playlist-sidebar' : 'player-settings'}
-        onclick={() => closePanel(dismissSide)}></button>
+    {#if panelOpen}
+      <button class="panel-dismiss-surface" data-drag-surface tabindex="-1" aria-label={p.t('close')}
+        onclick={dismissPanels}></button>
     {/if}
     <PlayerSettings open={subtitlesOpen} onfocus={() => (lastSide = 'right')}
       onclose={() => closePanel('right')} />
-  {/if}
-  {#if menuOpen}
-    <PlayerMenu hasMedia={!!p.media} canSample={!!samplePath} onaction={menuAction}
-      ondismiss={(restore) => { menuOpen = false; if (restore) focusMore() }} />
   {/if}
 
   {#if (p.error || p.notice) && !p.dialog}<div
@@ -368,8 +376,15 @@
         }}><Icon name="close" size={14} /></button
       >
     </div>{/if}
-  {#if p.dialog === 'url'}<OpenUrlDialog
-    />{:else if p.dialog === 'settings'}<SettingsDialog />
+  {#if p.dialog === 'open-media'}
+    <Dialog title={p.t('open') + ' / ' + p.t('openFolder')} icon="folder">
+      <div class="dialog-actions">
+        <button onclick={() => { p.dialog = null; void p.choose() }}>{p.t('open')}</button>
+        <button onclick={() => { p.dialog = null; void p.chooseFolder() }}>{p.t('openFolder')}</button>
+      </div>
+    </Dialog>
+  {:else if p.dialog === 'url'}<OpenUrlDialog
+    />{:else if p.dialog === 'settings'}<SettingsDialog systemAccentAvailable={mac} />
   {:else if p.dialog === 'online-subtitles'}<OnlineSubtitleDialog />
   {:else if p.dialog === 'setup'}<SetupScreen
     />{:else if p.dialog === 'export'}<ExportMenu />

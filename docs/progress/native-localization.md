@@ -1,0 +1,10 @@
+# Desktop interface languages
+
+The desktop validates interface language preferences against the 30 spoken language codes in `hlp_core::lang` and continues to accept `system`. The native application menu and the file, folder, subtitle import and subtitle export pickers receive their text from the active UI catalog. macOS controls its standard dialog buttons and the entries it adds to system menus.
+
+- `npm --prefix app/ui run check` completed with zero errors and zero warnings.
+- `source scripts/build_env.sh && cargo check --locked --offline -p henlocal-player` passed on Apple Silicon.
+- `source scripts/build_env.sh && cargo test --locked --offline --release -p henlocal-player` passed 12 tests with two pre-existing opt-in tests skipped. The preference test covers System and every language in the canonical inventory, including translation-only and unknown values.
+- `plutil -lint app/Info.plist` passed. The bundle declares 30 language tags, including `fil` for Filipino and `zh-Hans` for Simplified Chinese.
+- The release UI check also verified 320 messages and matching placeholders in each of the 30 catalogs. Finnish and Hungarian were translated in full. Arabic, Persian and Hindi were reviewed across all keys, including the distinctions between transcription, translation, cache storage and playback.
+- On macOS 27.2.1, an accessibility probe launched a copied 0.2.0 bundle with isolated settings and model directories. The menu showed 文件, 播放, 字幕 and the Chinese editing commands. Open File retained its Command-O key equivalent. Closing the last window and choosing 设置… from the app menu reopened the Chinese Settings dialog. Selecting French in that dialog changed both the visible heading and menu bar in the same process and saved `fr` in settings. After closing the window again, the French file menu reopened it and displayed a folder picker with the custom prompt “Ouvrir un dossier”. AppKit supplied the English Open, Cancel and New Folder buttons on this English-language system.

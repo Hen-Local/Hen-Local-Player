@@ -1,0 +1,141 @@
+{
+  "fill": {
+    "automatic-gradient": "extended-srgb:0.9804,0.9882,1.0000,1"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "Hen Footprints.png",
+          "name": "Hen Footprints",
+          "fill-specializations": [
+            {
+              "value": "automatic"
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:0.51,0.66,1.00,1"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "extended-gray:1.0,1.0"
+              }
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.16
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.27
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "PlayPause.svg",
+          "name": "Play/Pause",
+          "fill-specializations": [
+            {
+              "value": "automatic"
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:0.51,0.66,1.00,1"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "extended-gray:1.0,1.0"
+              }
+            }
+          ]
+        },
+        {
+          "image-name": "Playhead.svg",
+          "name": "Playhead",
+          "fill-specializations": [
+            {
+              "value": "automatic"
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:0.51,0.66,1.00,1"
+              }
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "extended-gray:1.0,1.0"
+              }
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.16
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.27
+      }
+    },
+    {
+      "layers": [
+        {
+          "name": "Elapsed",
+          "image-name": "Elapsed.svg",
+          "fill-specializations": [
+            {
+              "value": "automatic"
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "extended-gray:0.92,1.0"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Remaining",
+          "image-name": "Remaining.svg",
+          "fill-specializations": [
+            {
+              "value": "automatic"
+            },
+            {
+              "appearance": "tinted",
+              "value": {
+                "solid": "extended-gray:0.40,1.0"
+              }
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.16
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.27
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}

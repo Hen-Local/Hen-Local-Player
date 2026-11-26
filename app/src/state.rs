@@ -98,7 +98,7 @@ fn validate(s: &Settings) -> Result<()> {
     anyhow::ensure!(
         matches!(
             s.accent_theme.as_str(),
-            "neon-blue" | "neon-orange" | "neon-pink" | "neon-green"
+            "neon-blue" | "neon-orange" | "neon-pink" | "neon-green" | "system"
         ),
         "Unknown accent theme"
     );
@@ -123,8 +123,13 @@ fn validate(s: &Settings) -> Result<()> {
         matches!(
             s.subtitle_mode.as_str(),
             "original" | "translation" | "both" | "off"
-        ) && matches!(s.ui_language.as_str(), "system" | "en" | "zh"),
+        ),
         "Invalid display preference"
+    );
+    anyhow::ensure!(
+        s.ui_language == "system"
+            || lookup(&s.ui_language).is_some_and(|l| l.qwen3_asr_name.is_some()),
+        "Unsupported interface language"
     );
     anyhow::ensure!(
         (0.6..=2.).contains(&s.subtitle_scale)
@@ -220,5 +225,28 @@ impl Desktop {
             setup: Default::default(),
             preview: Default::default(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate;
+    use hlp_core::{lang::languages, settings::Settings};
+
+    #[test]
+    fn interface_language_accepts_system_and_every_spoken_language() {
+        let mut settings = Settings::default();
+        assert!(validate(&settings).is_ok());
+        for lang in languages() {
+            settings.ui_language = lang.code.to_owned();
+            assert_eq!(
+                validate(&settings).is_ok(),
+                lang.qwen3_asr_name.is_some(),
+                "{}",
+                lang.code
+            );
+        }
+        settings.ui_language = "unrecognized".to_owned();
+        assert!(validate(&settings).is_err());
     }
 }

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import SelectField from './SelectField.svelte'
+  import Disclosure from './Disclosure.svelte'
   import { player as p } from './stores.svelte'
   import { displaySourceLanguage, subtitleTracks as tracks } from './subtitle-tracks.svelte'
   import { languageName } from './languages'
@@ -22,15 +24,13 @@
 </script>
 
 {#if tracks.selected === 'generated'}
-  <details class="track-settings">
-    <summary class="settings-disclosure"><Icon name="right" size={14} />{p.t('subtitleLanguages')}</summary>
+  <Disclosure label={p.t('subtitleLanguages')}>
     <div class="expanded-tools">
       <LanguageControls />
       <label class="track-field display-field">
-        <span>{p.t('displayLanguage')}</span>
-        <span class="select-box display-choice">
-          <span class="selected-languages" aria-hidden="true">{displayName}</span>
-          <select aria-label={p.t('displayLanguage')} value={displayMode}
+        <span title={p.t('displayLanguage')}>{p.t('displayLanguage')}</span>
+        <SelectField>
+          <select aria-label={p.t('displayLanguage')} title={displayName} value={displayMode}
             onchange={(e) => p.act(() => tracks.setMode(e.currentTarget.value))}>
             <option value="original">{sourceName}</option>
             {#if twoLanguages}
@@ -38,30 +38,27 @@
               <option value="both">{languagePair}</option>
             {/if}
           </select>
-          <Icon name="down" size={13} />
-        </span>
+        </SelectField>
       </label>
       {#if twoLanguages && displayMode === 'both'}
         <label class="track-field">
           <span>{p.t('order')}</span>
-          <span class="select-box">
+          <SelectField>
             <select aria-label={p.t('order')} value={p.settings.bilingualOrder}
               onchange={(e) => p.act(() => p.update({ bilingualOrder: e.currentTarget.value as 'translation-first' | 'original-first' }))}>
               <option value="translation-first">{targetName} · {p.t('onTop')}</option>
               <option value="original-first">{sourceName} · {p.t('onTop')}</option>
             </select>
-            <Icon name="down" size={13} />
-          </span>
+          </SelectField>
         </label>
       {/if}
       <button class="models-action" onclick={() => (p.dialog = 'setup')}>
         <Icon name="download" size={14} />{p.t('models')}
       </button>
     </div>
-  </details>
+  </Disclosure>
 {/if}
-<details class="track-settings">
-  <summary class="settings-disclosure"><Icon name="right" size={14} />{p.t('subtitleAppearance')}</summary>
+<Disclosure label={p.t('subtitleAppearance')}>
   <div class="expanded-tools">
     <SubtitleAppearance />
     <div class="delay-setting">
@@ -76,4 +73,4 @@
       </div>
     </div>
   </div>
-</details>
+</Disclosure>

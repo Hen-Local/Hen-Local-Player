@@ -35,17 +35,14 @@ export class AppUpdates {
   }
 
   async check() {
-    await this.loadLocal()
     if (this.task !== 'idle') return
     this.task = 'checking'
     this.error = ''
     this.lastCheck = Date.now()
     try {
-      const releases = await this.backend.call('list_app_releases')
+      const [releases] = await Promise.all([this.backend.call('list_app_releases'), this.loadLocal()])
       this.releases = releases
-      if (!releases.some(release => release.version === this.selected)) {
-        this.selected = releases.find(release => release.installable)?.version ?? releases[0]?.version ?? ''
-      }
+      this.selected = releases.find(release => release.installable)?.version ?? releases[0]?.version ?? ''
     } catch (error) {
       this.failed(error)
     } finally {

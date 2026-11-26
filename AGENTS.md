@@ -8,3 +8,4 @@
 6. Verify uncertain upstream details and record findings in docs/ARCHITECTURE.md.
 7. Record acceptance commands and results in docs/PROGRESS.md. Lane agents own their individual docs/progress file.
 8. The ASR worker writes JSON Lines only to stdout. Send diagnostics to stderr.
+9. Keep the current version for local builds. Change the version when the user agrees to a release.

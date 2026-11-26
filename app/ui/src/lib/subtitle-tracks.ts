@@ -108,11 +108,15 @@ export function visibleIndices(timeline: SubtitleTimeline, ms: number): number[]
   return activeAuthoredFrame(timeline, ms).indices
 }
 
-export async function readSubtitleFile(file: File, locale: string): Promise<string> {
+export async function readSubtitleFile(file: File): Promise<string> {
   if (file.size > 16 * 1024 * 1024)
-    throw Error(locale === 'zh' ? '字幕文件超过 16 MiB' : 'Subtitle file exceeds 16 MiB')
+    throw Error('subtitleTooLarge')
   const bytes = new Uint8Array(await file.arrayBuffer())
   const encoding = bytes[0] === 0xff && bytes[1] === 0xfe ? 'utf-16le'
     : bytes[0] === 0xfe && bytes[1] === 0xff ? 'utf-16be' : 'utf-8'
-  return new TextDecoder(encoding, { fatal: true }).decode(bytes)
+  try {
+    return new TextDecoder(encoding, { fatal: true }).decode(bytes)
+  } catch {
+    throw Error('invalidSubtitleEncoding')
+  }
 }

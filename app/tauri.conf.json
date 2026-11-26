@@ -1,6 +1,6 @@
 {
   "productName": "Hen Local Player",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "identifier": "com.henlocal.player",
   "plugins": {
     "updater": {
@@ -37,6 +37,12 @@
     "active": true,
     "macOS": {
       "minimumSystemVersion": "14.0"
+    },
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
+      }
     },
     "icon": [
       "icons/32x32.png",

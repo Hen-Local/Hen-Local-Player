@@ -350,6 +350,7 @@ mod playback_tests {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/fixture_ja.mp4");
         let settings = Settings {
             target_language: "none".into(),
+            source_language: "auto".into(),
             ..Settings::default()
         };
         let engines = SharedEngines::new(&settings).await?;
@@ -474,6 +475,7 @@ mod playback_tests {
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/fixtures/fixture_ja.mp4");
         let mut settings = Settings {
             target_language: "none".into(),
+            source_language: "auto".into(),
             ..Settings::default()
         };
         let grace = Duration::from_secs(1);

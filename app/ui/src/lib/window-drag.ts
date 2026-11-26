@@ -19,8 +19,11 @@ export function enableWindowDragging(shell: HTMLElement, canDrag: () => boolean,
     // Sidebar text may be selected; blank space and the panel heading may move the window.
     if (target.closest('.inspector') && !target.closest('.panel-title')) {
       if (Array.from(target.childNodes).some(node => node.nodeType === Node.TEXT_NODE && node.textContent?.trim())) return
-      if (target instanceof HTMLElement && target.scrollHeight > target.clientHeight &&
-          event.clientX >= target.getBoundingClientRect().right - 16) return
+    }
+    // The transcript scrollbars own their mouse drags, including in the audio canvas.
+    if (target instanceof HTMLElement && target.scrollHeight > target.clientHeight) {
+      const rect = target.getBoundingClientRect()
+      if (event.clientX >= rect.right - 16 || (getComputedStyle(target).direction === 'rtl' && event.clientX <= rect.left + 16)) return
     }
     down = event
   }, options)

@@ -30,6 +30,15 @@ tokio-util.workspace = true
 dirs.workspace = true
 reqwest.workspace = true
 
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = "0.6.2"
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSAppearance", "NSColor", "NSColorSpace", "NSWindow", "block2", "objc2-core-foundation"] }
+objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSGeometry", "NSNotification", "NSOperation", "NSString", "block2"] }
+rfd = { version = "0.17.2", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+
 [dev-dependencies]
 axum.workspace = true
 

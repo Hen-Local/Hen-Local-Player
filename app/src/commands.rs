@@ -3,12 +3,26 @@ use hlp_core::{settings::Settings, types::*};
 use hlp_media::{Downloader, Tools};
 use hlp_pipeline::store;
 use serde_json::{json, Value};
-use std::path::PathBuf;
-use tauri::{AppHandle, State};
+use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Manager, State};
 
 type Reply<T> = Result<T, String>;
 fn err(e: impl std::fmt::Display) -> String {
     format!("{e:#}")
+}
+
+#[tauri::command]
+pub fn system_accent_color(_window: tauri::WebviewWindow) -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::{NSAppearanceCustomization, NSWindow};
+        // Both the synchronous command and the observer run on the main thread.
+        // Tauri owns the NSWindow throughout this call.
+        let window = unsafe { _window.ns_window().ok()?.cast::<NSWindow>().as_ref()? };
+        crate::system_accent::current(&window.effectiveAppearance())
+    }
+    #[cfg(not(target_os = "macos"))]
+    None
 }
 
 #[tauri::command]
@@ -40,12 +54,34 @@ pub async fn open_media(app: AppHandle, state: State<'_, Desktop>, path: PathBuf
         .map_err(err)
 }
 #[tauri::command]
-pub async fn close_media(state: State<'_, Desktop>) -> Reply<()> {
+pub async fn close_media(window: tauri::WebviewWindow, state: State<'_, Desktop>) -> Reply<()> {
     let mut p = state.player.lock().await;
+    let restored = crate::video_window::set(window, None);
     if let Some(file) = p.active.take() {
         file.session.shutdown().await.map_err(err)?;
     }
-    Ok(())
+    restored.map_err(err)
+}
+
+#[tauri::command]
+pub async fn set_video_window_aspect(
+    window: tauri::WebviewWindow,
+    state: State<'_, Desktop>,
+    session_id: Option<String>,
+    width: u32,
+    height: u32,
+) -> Reply<()> {
+    let player = state.player.lock().await;
+    if player.active.as_ref().map(|file| &file.session.id) != session_id.as_ref() {
+        return Ok(());
+    }
+    let ratio = match (width, height) {
+        (0, 0) => None,
+        (0, _) | (_, 0) => return Err("Invalid video dimensions".into()),
+        _ if session_id.is_some() => Some(width as f64 / height as f64),
+        _ => return Ok(()),
+    };
+    crate::video_window::set(window, ratio).map_err(err)
 }
 
 #[tauri::command]
@@ -239,10 +275,26 @@ pub async fn suggest_export_paths(
     };
     Ok(f.path.with_extension(format!("{lang}.{ext}")))
 }
-#[tauri::command]
-pub async fn list_recent() -> Reply<Vec<RecentItem>> {
-    Ok(store::list_recent(&store::data_root()))
+fn is_retired_sample(path: &Path, bundled_sample: Option<&Path>) -> bool {
+    // Older versions stored the bundle's absolute path. It may have since moved
+    // from a mounted installer, another Applications folder, or a build tree.
+    Some(path) == bundled_sample
+        || path.ends_with("Hen Local Player.app/Contents/Resources/demo/demo.mp4")
+        || path.ends_with("Hen-Local-Player/app/ui/public/demo/demo.mp4")
 }
+
+#[tauri::command]
+pub async fn list_recent(app: AppHandle) -> Reply<Vec<RecentItem>> {
+    let bundled_sample = app
+        .path()
+        .resource_dir()
+        .ok()
+        .map(|dir| dir.join("demo/demo.mp4"));
+    let mut recent = store::list_recent(&store::data_root());
+    recent.retain(|item| !is_retired_sample(Path::new(&item.path), bundled_sample.as_deref()));
+    Ok(recent)
+}
+
 #[tauri::command]
 pub async fn get_setup_status() -> Reply<Vec<ComponentStatus>> {
     tokio::task::spawn_blocking(hlp_models::status)
@@ -307,7 +359,12 @@ pub async fn app_info() -> Reply<Value> {
 }
 #[tauri::command]
 pub async fn reveal_in_folder(path: PathBuf) -> Reply<()> {
-    tauri_plugin_opener::reveal_item_in_dir(path).map_err(err)
+    tauri_plugin_opener::reveal_item_in_dir(path).map_err(|error| match &error {
+        tauri_plugin_opener::Error::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
+            "fileNoLongerHere".to_owned()
+        }
+        _ => err(error),
+    })
 }
 #[tauri::command]
 pub async fn probe_url(app: AppHandle, state: State<'_, Desktop>, url: String) -> Reply<UrlInfo> {
@@ -377,4 +434,29 @@ pub async fn update_ytdlp(app: AppHandle, state: State<'_, Desktop>) -> Reply<()
     hlp_models::update_ytdlp(|e| emit(&app, "setup://progress", e), job.cancel.clone())
         .await
         .map_err(err)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn retired_sample_filter_preserves_user_media_with_the_same_name() {
+        let installed = Path::new("/opt/player/demo/demo.mp4");
+        for retired in [
+            installed,
+            Path::new("/Volumes/Old/Hen Local Player.app/Contents/Resources/demo/demo.mp4"),
+            Path::new("/work/Hen-Local-Player/app/ui/public/demo/demo.mp4"),
+        ] {
+            assert!(is_retired_sample(retired, Some(installed)));
+        }
+        for own in [
+            "/Movies/demo.mp4",
+            "/Movies/demo/demo.mp4",
+            "/Movies/fixture_ja.mp4",
+            "/Other.app/Contents/Resources/demo/demo.mp4",
+        ] {
+            assert!(!is_retired_sample(Path::new(own), Some(installed)));
+        }
+    }
 }

@@ -1,4 +1,4 @@
-/* Shared only by the player’s on-demand surfaces. The accent follows Hen’s four themes. */
+/* Player panels and dialogs inherit the active accent. */
 :where(.app) :is(.inspector, .player-dialog) {
   color-scheme: dark;
   --ink: #f2f3f6;
@@ -10,7 +10,7 @@
   --control-fill: rgb(245 246 251 / 9%);
   --panel-surface: #202228;
   --panel-field: #31343b;
-  --accent-text: color-mix(in srgb, var(--accent) 44%, white);
+  --accent-text: var(--glass-accent);
   --accent-soft: color-mix(in srgb, var(--accent) 16%, var(--panel-surface));
   color: var(--ink);
   background: var(--panel-surface);
@@ -53,12 +53,12 @@
   color: #f3c88b;
 }
 
-.app :is(.inspector, .player-dialog) :is(input, select, progress) {
-  accent-color: var(--accent-text);
+.app :is(.inspector, .player-dialog) :is(input, select) {
+  accent-color: var(--indicator-accent);
 }
 
-.app .inspector :is(.select-box select, .delay-stepper input),
-.app .player-dialog .dialog-body :is(select, input:not([type='range'], [type='checkbox'])) {
+.app .inspector .delay-stepper input,
+.app .player-dialog .dialog-body input:not([type='range'], [type='checkbox']) {
   min-width: 0;
   min-height: 34px;
   border: 0;
@@ -66,6 +66,12 @@
   background: rgb(20 21 26 / 65%);
   color: var(--ink);
   line-height: 1.3;
+}
+
+.app .player-dialog .dialog-body input:not([type='range'], [type='checkbox']) {
+  height: var(--field-height, 36px);
+  border-radius: 8px;
+  background: var(--control-fill);
 }
 
 .app :is(.inspector, .player-dialog) :is(option, optgroup) {
@@ -78,7 +84,7 @@
   opacity: 1;
 }
 
-.app :is(.inspector, .player-dialog) :is(button, input, select):focus-visible {
+.app :is(.inspector, .player-dialog) :is(button, input):focus-visible {
   outline: 2px solid var(--glass-focus);
   outline-offset: 2px;
 }
@@ -97,6 +103,12 @@
     -webkit-backdrop-filter: var(--glass-backdrop);
     backdrop-filter: var(--glass-backdrop);
     box-shadow: 0 8px 28px rgb(0 0 0 / 32%);
+  }
+  .app .inspector {
+    --ink: #fafbfd;
+    --sub: #e6ebf0;
+    --control-fill: rgb(10 18 26 / 19%);
+    text-shadow: 0 1px 2px rgb(4 9 16 / 50%);
   }
   .app .player-dialog {
     border-radius: 16px;
@@ -160,8 +172,17 @@
 .app .inspector .queue-row.current {
   background: var(--surface-selection);
 }
+.app .left-inspector .queue-row:not(.current):is(:hover, :has(:focus-visible)) {
+  background: var(--list-hover);
+}
+.app .left-inspector .queue-file {
+  border-radius: var(--list-radius);
+}
+.app .left-inspector .queue-file:hover:not(:disabled) {
+  background: transparent;
+}
 
-.app .inspector :is(.cue-row.active time, .current .queue-number) {
+.app .inspector .cue-row.active time {
   color: var(--accent-text);
 }
 
@@ -169,136 +190,120 @@
   padding-inline: var(--inspector-inset);
 }
 .app .right-inspector {
+  --field-height: 28px;
   container: subtitles / inline-size;
   font-size: 13px;
   line-height: 1.4;
 }
+.app .right-inspector .subtitle-options > .disclosure {
+  --section-indent: 25px;
+  margin: 4px 8px 0;
+  border-radius: 11px;
+  background: rgb(10 15 22 / 17%);
+}
+.app .right-inspector .subtitle-options > .disclosure:last-child {
+  margin-block-end: 8px;
+}
+.app .right-inspector .disclosure > .disclosure-trigger {
+  margin: 0;
+  max-width: none;
+  min-height: 34px;
+  padding-inline: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -.012em;
+  border-radius: inherit;
+}
+.app .right-inspector .disclosure > .disclosure-trigger[aria-expanded='true'] {
+  background: rgb(255 255 255 / 8%);
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+}
+.app .right-inspector .disclosure > .disclosure-trigger:hover:not(:disabled) {
+  background: var(--hover);
+}
+.app .right-inspector .disclosure-body .cue-list {
+  margin-inline: 6px;
+  margin-block-end: 6px;
+  border-radius: 7px;
+}
 .app .right-inspector :is(button, select, input) {
   font-size: 13px;
+}
+.app .right-inspector .track-field select {
+  font-size: 12px;
+  font-weight: 400;
 }
 .app .right-inspector :is(.track-field > span:first-child, .delay-setting > label, .slider-setting > span) {
   color: var(--sub);
   font-size: 12px;
-  font-weight: 520;
+  font-weight: 400;
 }
 .app .right-inspector .track-picker,
 .app .right-inspector .coverage-summary {
   flex: none;
   width: 100%;
-  padding: 12px var(--inspector-inset);
+  padding: 9px var(--inspector-inset);
   border-bottom: 1px solid var(--hairline);
   background: transparent;
 }
 .app .right-inspector .read-status {
   padding: 0 var(--inspector-inset) 8px;
 }
-.app .right-inspector .track-settings {
-  min-width: 0;
-  flex: none;
-}
-.app .right-inspector :is(.settings-disclosure, .subtitle-list-toggle) {
-  display: flex;
-  width: 100%;
-  min-height: 41px;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 7px;
-  padding: 8px var(--inspector-inset);
-  border: 0;
-  border-radius: 0;
-  color: var(--ink);
-  background: transparent;
-  font-size: 13px;
-  font-weight: 600;
-  list-style: none;
-  cursor: pointer;
-}
-.settings-disclosure::-webkit-details-marker { display: none; }
-.track-settings[open] > .settings-disclosure svg { transform: rotate(90deg); }
-.app .right-inspector .settings-disclosure:hover { background: var(--hover); }
-.app .right-inspector :is(.settings-disclosure, .subtitle-list-toggle):focus-visible {
-  outline: 2px solid var(--glass-focus);
-  outline-offset: -3px;
-}
 .app .right-inspector .expanded-tools {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 14px;
-  padding: 14px var(--inspector-inset);
-  border-bottom: 1px solid var(--hairline);
+  gap: 5px;
+  padding: 7px 10px 9px;
+  padding-inline-start: var(--section-indent);
 }
 .app .right-inspector .track-field {
   display: grid;
-  gap: 5px;
+  gap: 4px;
   min-width: 0;
 }
-.app .inspector .select-box select {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 100%;
-  min-width: 0;
-  height: 32px;
-  min-height: 32px;
-  padding: 4px 27px 4px 9px;
-  border-radius: 7px;
-  background: rgb(19 21 26 / 67%);
-  color: var(--ink);
-  font: inherit;
-  font-weight: 500;
-  text-overflow: ellipsis;
-}
-.app .inspector .select-box { min-width: 0; }
 .app .right-inspector .track-sources {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
-  margin-block-start: 8px;
+  margin-block-start: 5px;
 }
 .app .right-inspector :is(.track-sources, .list-tools) button,
 .app .right-inspector .models-action {
-  min-height: 31px;
-  padding: 4px 6px;
+  min-height: 27px;
+  padding: 3px 6px;
   gap: 5px;
   font-size: 12px;
-  font-weight: 540;
+  font-weight: 450;
 }
 .app .right-inspector .models-action { justify-self: start; }
 .app .right-inspector .expanded-tools .track-field,
 .app .right-inspector .delay-setting {
   display: grid;
-  grid-template-columns: minmax(70px, .67fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, .65fr) minmax(0, 1fr);
   align-items: center;
   gap: 8px;
 }
-.app .right-inspector .expanded-tools .display-field { grid-template-columns: minmax(0, 1fr); gap: 4px; }
-/* Keep the native picker and allow its selected language pair to wrap in narrow drawers. */
-.app .right-inspector .display-choice { display: grid; }
-.app .right-inspector .display-choice select {
-  position: absolute;
-  inset: 0;
-  height: 100%;
-  color: transparent;
+.app .right-inspector .display-field > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.app .right-inspector .selected-languages {
-  z-index: 1;
-  min-height: 32px;
-  padding: 7px 27px 7px 10px;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 18px;
-  overflow-wrap: anywhere;
-  pointer-events: none;
+.app .right-inspector .expanded-tools select {
+  padding-inline: 8px 25px;
 }
-.app .right-inspector .display-choice svg { z-index: 1; }
+.app .right-inspector .expanded-tools .select-field-control svg { inset-inline-end: 6px; }
 .app .right-inspector .delay-stepper {
   display: grid;
-  grid-template-columns: 29px minmax(0, 1fr) 29px;
+  grid-template-columns: var(--field-height) minmax(0, 1fr) var(--field-height);
   gap: 3px;
 }
 .app .right-inspector .delay-stepper :is(input, button) {
-  min-height: 31px;
+  min-height: var(--field-height);
   padding: 3px;
   text-align: center;
+  font-size: 12px;
+  font-weight: 400;
 }
 .app .right-inspector .delay-stepper input {
   appearance: textfield;
@@ -313,8 +318,24 @@
   padding: 6px var(--inspector-inset);
   border-bottom: 1px solid var(--hairline);
 }
+@container subtitles (max-width: 324px) {
+  .app .right-inspector .subtitle-options > .disclosure {
+    --section-indent: 12px;
+    margin-inline: 6px;
+  }
+  .app .right-inspector .expanded-tools { padding-inline-end: 6px; }
+  .app .right-inspector .expanded-tools .track-field {
+    grid-template-columns: minmax(0, .82fr) minmax(0, 1fr);
+    gap: 4px;
+  }
+  .app .right-inspector .expanded-tools .track-field > span:first-child { font-size: 11.5px; }
+  .app .right-inspector .expanded-tools select {
+    padding-inline: 5px 18px;
+    font-size: 12px;
+  }
+  .app .right-inspector .expanded-tools .select-field-control svg { inset-inline-end: 2px; }
+}
 @container subtitles (max-width: 270px) {
-  .app .right-inspector .expanded-tools .track-field,
   .app .right-inspector .delay-setting { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
 @container subtitles (max-width: 220px) {
@@ -340,7 +361,10 @@
   font-size: 13px;
   font-weight: 600;
 }
-.app .right-inspector .status-line svg { color: var(--accent-text); }
+.app .right-inspector .status-line svg {
+  color: var(--indicator-accent);
+  filter: var(--indicator-shadow);
+}
 .app .right-inspector .progress-value {
   margin-inline-start: auto;
   font-variant-numeric: tabular-nums;
@@ -351,7 +375,6 @@
   height: 5px;
   margin: 8px 0 0;
   border: none;
-  accent-color: var(--accent-text);
 }
 .app .right-inspector .progress-stages {
   display: flex;
@@ -365,9 +388,9 @@
 }
 .app .right-inspector .progress-stages dd { margin: 0; color: var(--ink); }
 .app .right-inspector .coverage-summary small { margin-top: 6px; }
-.app .inspector .drawer-footer,
-.app .inspector .panel-footer {
+.app .inspector :is(.drawer-footer, .panel-footer, .regenerate-footer, .generation-footer) {
   border-color: var(--hairline);
+  background: linear-gradient(to bottom, transparent, rgb(5 12 20 / 18%));
 }
 
 .app .inspector .inspector-body {
@@ -405,6 +428,10 @@
   color: white;
   background: transparent;
 }
+.app .left-inspector .repeat-mode[aria-pressed='true'] svg {
+  color: var(--indicator-accent);
+  filter: var(--indicator-shadow);
+}
 
 /* Modal dialogs */
 .app .player-dialog {
@@ -424,8 +451,9 @@
 .app .player-dialog .heading-icon,
 .app .player-dialog .component-icon.good,
 .app .player-dialog .url-card svg {
-  color: var(--accent-text);
+  color: var(--indicator-accent);
   background: transparent;
+  filter: var(--indicator-shadow);
 }
 
 .app .player-dialog .heading-icon {
@@ -470,32 +498,32 @@
 }
 
 .app .player-dialog button.primary {
-  color: #11131a;
-  background: var(--accent-text);
+  color: var(--accent-on-solid);
+  background: var(--accent);
 }
 
 .app .player-dialog button.primary:hover:not(:disabled) {
-  color: #11131a;
-  background: color-mix(in srgb, var(--accent-text) 84%, white);
+  color: var(--accent-on-solid);
+  background: color-mix(in srgb, var(--accent) 92%, white);
 }
 
 .subtitle-appearance {
   display: grid;
-  gap: 14px;
+  gap: 7px;
 }
 
 .subtitle-appearance .slider-setting {
   display: grid;
-  gap: 6px;
+  gap: 2px;
   margin: 0;
   color: var(--sub);
   font-size: 12px;
-  font-weight: 620;
+  font-weight: 400;
 }
 
 .subtitle-appearance .slider-setting b {
   color: var(--muted);
-  font-weight: 500;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
 }
 
@@ -513,7 +541,8 @@
 .subtitle-appearance input[type='range']::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 2px;
-  background: linear-gradient(to right, var(--accent-text) var(--range-fill), var(--line) var(--range-fill));
+  background: linear-gradient(to right, var(--indicator-accent) var(--range-fill), var(--line) var(--range-fill));
+  box-shadow: 0 0 0 1px var(--indicator-edge);
 }
 .subtitle-appearance input[type='range']::-webkit-slider-thumb {
   appearance: none;
@@ -531,7 +560,8 @@
 }
 .subtitle-appearance input[type='range']::-moz-range-progress {
   height: 4px;
-  background: var(--accent-text);
+  background: var(--indicator-accent);
+  box-shadow: 0 0 0 1px var(--indicator-edge);
 }
 .subtitle-appearance input[type='range']::-moz-range-thumb {
   width: 14px;
@@ -612,19 +642,33 @@
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
-  .app :is(.inspector, .player-dialog) :is(select, input:not([type='checkbox'], [type='range'])) {
+  .app :is(.inspector, .player-dialog) :is(.select-field-control, input:not([type='checkbox'], [type='range'])) {
     outline: 1px solid var(--sub);
     outline-offset: -1px;
   }
-  .app :is(.inspector, .player-dialog) :is(select, input):focus-visible {
+  .app :is(.inspector, .player-dialog) :is(.select-field-control:focus-within, input:focus-visible) {
     outline: 2px solid var(--glass-focus);
     outline-offset: 2px;
   }
 }
 
 @media (forced-colors: active) {
+  .app {
+    --indicator-accent: Highlight;
+    --indicator-shadow: none;
+    --indicator-edge: transparent;
+  }
+  .app :is(.welcome-recent svg, .current .queue-kind, .heading-icon, .component-icon.good, .url-card svg, .repeat-mode[aria-pressed='true'] svg) {
+    forced-color-adjust: none;
+    color: Highlight;
+  }
+  .app .subtitle-appearance input[type='range'] {
+    forced-color-adjust: none;
+    --line: GrayText;
+    --ink: CanvasText;
+  }
   .app :is(.inspector, .player-dialog)::after { content: none; }
-  .app :is(.inspector, .player-dialog) :is(select, input:not([type='checkbox'], [type='range'])) {
+  .app :is(.inspector, .player-dialog) :is(.select-field-control, input:not([type='checkbox'], [type='range'])) {
     border: 1px solid ButtonText;
   }
   .app :is(button, select, input, summary):focus-visible { outline-color: Highlight; }
